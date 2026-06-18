@@ -13,11 +13,14 @@ use uuid::Uuid;
 use walkdir::WalkDir;
 
 const META_DIR: &str = ".rgit";
-const FORMAT_VERSION: u32 = 1;
+const FORMAT_VERSION: u32 = 2;
+const PUBLIC_DOMAIN: &str = "public";
+const ADMIN_DOMAIN: &str = "admin";
+const DEFAULT_LINE: &str = "main";
 
 #[derive(Parser)]
 #[command(name = "rgit")]
-#[command(about = "A jj-inspired source control prototype.")]
+#[command(about = "A permission-aware, jj-inspired source control prototype.")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -28,17 +31,39 @@ enum Command {
     /// Initialize source control in the current directory.
     Init,
     /// Show changed files since the current change's latest snapshot.
-    Status,
+    Status {
+        /// Actor whose permissioned view should be used.
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
     /// Capture the current files as a snapshot on the current change.
     Snapshot {
         /// Human note for why this snapshot exists.
         #[arg(short, long, default_value = "manual snapshot")]
         message: String,
+        /// Domains allowed to see this snapshot's metadata.
+        #[arg(long = "domain")]
+        domains: Vec<String>,
     },
     /// Work with logical changes.
     Change {
         #[command(subcommand)]
         command: ChangeCommand,
+    },
+    /// Manage permission actors.
+    Actor {
+        #[command(subcommand)]
+        command: ActorCommand,
+    },
+    /// Manage path-level access policies.
+    Access {
+        #[command(subcommand)]
+        command: AccessCommand,
+    },
+    /// Work with shared lines such as main.
+    Line {
+        #[command(subcommand)]
+        command: LineCommand,
     },
     /// Inspect the current workspace.
     Workspace {
@@ -58,9 +83,67 @@ enum ChangeCommand {
     New {
         /// Short, human-readable name for the change.
         name: String,
+        /// Domains allowed to see this change.
+        #[arg(long = "domain")]
+        domains: Vec<String>,
     },
-    /// List known changes.
+    /// List changes visible to an actor.
+    List {
+        /// Actor whose permissioned view should be used.
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ActorCommand {
+    /// Create or replace an actor with domain grants.
+    Set {
+        name: String,
+        /// Domain grant for this actor.
+        #[arg(long = "domain")]
+        domains: Vec<String>,
+    },
+    /// List actors.
     List,
+}
+
+#[derive(Subcommand)]
+enum AccessCommand {
+    /// Assign domains to a path prefix for future snapshots.
+    Path {
+        path: String,
+        /// Domains allowed to see matching file entries.
+        #[arg(long = "domain")]
+        domains: Vec<String>,
+    },
+    /// List path policies.
+    List,
+}
+
+#[derive(Subcommand)]
+enum LineCommand {
+    /// List lines visible to an actor.
+    List {
+        /// Actor whose permissioned view should be used.
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
+    /// Integrate the current change's latest snapshot into a line.
+    Integrate {
+        /// Line to update.
+        #[arg(default_value = DEFAULT_LINE)]
+        line: String,
+    },
+    /// Show the files visible on a line to an actor.
+    View {
+        /// Line to view.
+        #[arg(default_value = DEFAULT_LINE)]
+        line: String,
+        /// Actor whose permissioned view should be used.
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -71,8 +154,26 @@ enum WorkspaceCommand {
 
 #[derive(Subcommand)]
 enum OpCommand {
-    /// Show repository operations.
-    Log,
+    /// Show repository operations visible to an actor.
+    Log {
+        /// Actor whose permissioned view should be used.
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct AccessPolicy {
+    domains: Vec<String>,
+    redaction: Redaction,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum Redaction {
+    Omit,
+    Placeholder,
+    MetadataOnly,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -80,6 +181,18 @@ struct RepoConfig {
     format_version: u32,
     repo_id: String,
     created_at: u64,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Actor {
+    name: String,
+    domains: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct PathPolicy {
+    prefix: String,
+    policy: AccessPolicy,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -92,6 +205,7 @@ struct Change {
     id: String,
     name: String,
     current_snapshot: Option<String>,
+    policy: AccessPolicy,
     created_at: u64,
 }
 
@@ -103,6 +217,7 @@ struct Snapshot {
     message: String,
     manifest_hash: String,
     files: Vec<FileEntry>,
+    policy: AccessPolicy,
     created_at: u64,
 }
 
@@ -111,13 +226,24 @@ struct FileEntry {
     path: String,
     hash: String,
     bytes: u64,
+    policy: AccessPolicy,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Line {
+    name: String,
+    head_snapshot: Option<String>,
+    policy: AccessPolicy,
+    created_at: u64,
 }
 
 #[derive(Serialize, Deserialize)]
 struct Operation {
     id: String,
     kind: OperationKind,
-    message: String,
+    policy: AccessPolicy,
+    private_message: String,
+    public_message: Option<String>,
     created_at: u64,
 }
 
@@ -125,10 +251,21 @@ struct Operation {
 #[serde(rename_all = "snake_case")]
 enum OperationKind {
     InitRepo,
+    SetActor {
+        actor: String,
+    },
+    SetPathPolicy {
+        prefix: String,
+    },
     CreateChange {
         change_id: String,
     },
     CreateSnapshot {
+        change_id: String,
+        snapshot_id: String,
+    },
+    IntegrateLine {
+        line: String,
         change_id: String,
         snapshot_id: String,
     },
@@ -139,24 +276,55 @@ struct Repo {
     meta: PathBuf,
 }
 
+struct FileDiff {
+    added: Vec<String>,
+    modified: Vec<String>,
+    deleted: Vec<String>,
+    hidden: usize,
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
         Command::Init => init_repo(),
-        Command::Status => {
+        Command::Status { as_actor } => {
             let repo = Repo::discover()?;
-            status(&repo)
+            status(&repo, &as_actor)
         }
-        Command::Snapshot { message } => {
+        Command::Snapshot { message, domains } => {
             let repo = Repo::discover()?;
-            create_snapshot(&repo, &message)
+            create_snapshot(&repo, &message, policy_from_domains(domains))
         }
         Command::Change { command } => {
             let repo = Repo::discover()?;
             match command {
-                ChangeCommand::New { name } => create_change(&repo, &name),
-                ChangeCommand::List => list_changes(&repo),
+                ChangeCommand::New { name, domains } => {
+                    create_change(&repo, &name, policy_from_domains(domains))
+                }
+                ChangeCommand::List { as_actor } => list_changes(&repo, &as_actor),
+            }
+        }
+        Command::Actor { command } => {
+            let repo = Repo::discover()?;
+            match command {
+                ActorCommand::Set { name, domains } => set_actor(&repo, &name, domains),
+                ActorCommand::List => list_actors(&repo),
+            }
+        }
+        Command::Access { command } => {
+            let repo = Repo::discover()?;
+            match command {
+                AccessCommand::Path { path, domains } => set_path_policy(&repo, &path, domains),
+                AccessCommand::List => list_path_policies(&repo),
+            }
+        }
+        Command::Line { command } => {
+            let repo = Repo::discover()?;
+            match command {
+                LineCommand::List { as_actor } => list_lines(&repo, &as_actor),
+                LineCommand::Integrate { line } => integrate_line(&repo, &line),
+                LineCommand::View { line, as_actor } => view_line(&repo, &line, &as_actor),
             }
         }
         Command::Workspace { command } => {
@@ -168,7 +336,7 @@ fn main() -> Result<()> {
         Command::Op { command } => {
             let repo = Repo::discover()?;
             match command {
-                OpCommand::Log => op_log(&repo),
+                OpCommand::Log { as_actor } => op_log(&repo, &as_actor),
             }
         }
     }
@@ -197,6 +365,26 @@ impl Repo {
     }
 }
 
+impl FileDiff {
+    fn print(&self) {
+        print_paths("added", &self.added);
+        print_paths("modified", &self.modified);
+        print_paths("deleted", &self.deleted);
+
+        if self.hidden > 0 {
+            println!("hidden: {} restricted file(s)", self.hidden);
+        }
+
+        if self.added.is_empty()
+            && self.modified.is_empty()
+            && self.deleted.is_empty()
+            && self.hidden == 0
+        {
+            println!("clean");
+        }
+    }
+}
+
 fn init_repo() -> Result<()> {
     let root = std::env::current_dir().context("failed to read current directory")?;
     let meta = root.join(META_DIR);
@@ -206,7 +394,14 @@ fn init_repo() -> Result<()> {
     }
 
     fs::create_dir(&meta).context("failed to create .rgit directory")?;
-    for dir in ["blobs", "changes", "operations", "snapshots"] {
+    for dir in [
+        "actors",
+        "blobs",
+        "changes",
+        "lines",
+        "operations",
+        "snapshots",
+    ] {
         fs::create_dir_all(meta.join(dir)).with_context(|| format!("failed to create {dir}"))?;
     }
 
@@ -219,25 +414,126 @@ fn init_repo() -> Result<()> {
     let workspace = Workspace {
         current_change: None,
     };
+    let public_actor = Actor {
+        name: PUBLIC_DOMAIN.to_string(),
+        domains: vec![PUBLIC_DOMAIN.to_string()],
+    };
+    let admin_actor = Actor {
+        name: ADMIN_DOMAIN.to_string(),
+        domains: vec![PUBLIC_DOMAIN.to_string(), ADMIN_DOMAIN.to_string()],
+    };
+    let main_line = Line {
+        name: DEFAULT_LINE.to_string(),
+        head_snapshot: None,
+        policy: public_policy(),
+        created_at: now()?,
+    };
 
     write_json(&repo.path(&["repo.json"]), &config)?;
     write_json(&repo.path(&["workspace.json"]), &workspace)?;
+    write_json(
+        &repo.path(&["path-policies.json"]),
+        &Vec::<PathPolicy>::new(),
+    )?;
+    write_json(&actor_path(&repo, PUBLIC_DOMAIN), &public_actor)?;
+    write_json(&actor_path(&repo, ADMIN_DOMAIN), &admin_actor)?;
+    write_json(&line_path(&repo, DEFAULT_LINE), &main_line)?;
     record_operation(
         &repo,
         OperationKind::InitRepo,
+        public_policy(),
         "initialized repository".to_string(),
+        None,
     )?;
 
     println!("initialized rgit repository");
-    println!("next: rgit change new <name>");
+    println!("default line: {DEFAULT_LINE}");
+    println!("default actors: public, admin");
     Ok(())
 }
 
-fn create_change(repo: &Repo, name: &str) -> Result<()> {
+fn set_actor(repo: &Repo, name: &str, domains: Vec<String>) -> Result<()> {
+    let actor = Actor {
+        name: name.to_string(),
+        domains: normalize_domains(domains),
+    };
+
+    write_json(&actor_path(repo, name), &actor)?;
+    record_operation(
+        repo,
+        OperationKind::SetActor {
+            actor: actor.name.clone(),
+        },
+        admin_policy(),
+        format!("set actor `{}`", actor.name),
+        None,
+    )?;
+
+    println!("actor: {}", actor.name);
+    println!("domains: {}", actor.domains.join(", "));
+    Ok(())
+}
+
+fn list_actors(repo: &Repo) -> Result<()> {
+    let mut actors = read_dir_json::<Actor>(&repo.path(&["actors"]))?;
+    actors.sort_by(|a, b| a.name.cmp(&b.name));
+
+    for actor in actors {
+        println!("{} domains:{}", actor.name, actor.domains.join(","));
+    }
+
+    Ok(())
+}
+
+fn set_path_policy(repo: &Repo, prefix: &str, domains: Vec<String>) -> Result<()> {
+    let mut policies = read_path_policies(repo)?;
+    let normalized_prefix = normalize_path(prefix);
+    let policy = AccessPolicy {
+        domains: normalize_domains(domains),
+        redaction: Redaction::Placeholder,
+    };
+
+    policies.retain(|item| item.prefix != normalized_prefix);
+    policies.push(PathPolicy {
+        prefix: normalized_prefix.clone(),
+        policy: policy.clone(),
+    });
+    policies.sort_by(|a, b| a.prefix.cmp(&b.prefix));
+
+    write_json(&repo.path(&["path-policies.json"]), &policies)?;
+    record_operation(
+        repo,
+        OperationKind::SetPathPolicy {
+            prefix: normalized_prefix.clone(),
+        },
+        admin_policy(),
+        format!("set path policy `{normalized_prefix}`"),
+        None,
+    )?;
+
+    println!("path: {normalized_prefix}");
+    println!("domains: {}", policy.domains.join(", "));
+    Ok(())
+}
+
+fn list_path_policies(repo: &Repo) -> Result<()> {
+    for policy in read_path_policies(repo)? {
+        println!(
+            "{} domains:{}",
+            policy.prefix,
+            policy.policy.domains.join(",")
+        );
+    }
+
+    Ok(())
+}
+
+fn create_change(repo: &Repo, name: &str, policy: AccessPolicy) -> Result<()> {
     let change = Change {
         id: format!("chg_{}", short_id()),
         name: name.to_string(),
         current_snapshot: None,
+        policy: policy.clone(),
         created_at: now()?,
     };
     let workspace = Workspace {
@@ -251,7 +547,9 @@ fn create_change(repo: &Repo, name: &str) -> Result<()> {
         OperationKind::CreateChange {
             change_id: change.id.clone(),
         },
+        policy,
         format!("created change `{}`", change.name),
+        None,
     )?;
 
     println!("created change {}", change.id);
@@ -259,34 +557,45 @@ fn create_change(repo: &Repo, name: &str) -> Result<()> {
     Ok(())
 }
 
-fn list_changes(repo: &Repo) -> Result<()> {
+fn list_changes(repo: &Repo, actor_name: &str) -> Result<()> {
+    let actor = read_actor(repo, actor_name)?;
     let workspace = read_workspace(repo)?;
     let mut changes = read_dir_json::<Change>(&repo.path(&["changes"]))?;
     changes.sort_by(|a, b| a.created_at.cmp(&b.created_at));
 
     for change in changes {
+        if !can_access(&actor, &change.policy) {
+            continue;
+        }
+
         let marker = if workspace.current_change.as_deref() == Some(change.id.as_str()) {
             "*"
         } else {
             " "
         };
         println!(
-            "{marker} {} {} snapshot:{}",
+            "{marker} {} {} snapshot:{} domains:{}",
             change.id,
             change.name,
-            change.current_snapshot.as_deref().unwrap_or("none")
+            change.current_snapshot.as_deref().unwrap_or("none"),
+            change.policy.domains.join(",")
         );
     }
 
     Ok(())
 }
 
-fn create_snapshot(repo: &Repo, message: &str) -> Result<()> {
+fn create_snapshot(repo: &Repo, message: &str, requested_policy: AccessPolicy) -> Result<()> {
     let workspace = read_workspace(repo)?;
     let change_id = workspace.current_change.as_deref().ok_or_else(|| {
         anyhow!("workspace has no current change; run `rgit change new <name>` first")
     })?;
     let mut change = read_change(repo, change_id)?;
+    let snapshot_policy = if requested_policy.domains == [PUBLIC_DOMAIN] {
+        change.policy.clone()
+    } else {
+        requested_policy
+    };
     let files = scan_working_tree(repo, true)?;
     let manifest_hash = manifest_hash(&files)?;
     let snapshot = Snapshot {
@@ -296,6 +605,7 @@ fn create_snapshot(repo: &Repo, message: &str) -> Result<()> {
         message: message.to_string(),
         manifest_hash,
         files,
+        policy: snapshot_policy.clone(),
         created_at: now()?,
     };
 
@@ -309,7 +619,9 @@ fn create_snapshot(repo: &Repo, message: &str) -> Result<()> {
             change_id: change.id.clone(),
             snapshot_id: snapshot.id.clone(),
         },
+        snapshot_policy,
         format!("created snapshot for `{}`", change.name),
+        None,
     )?;
 
     println!("created snapshot {}", snapshot.id);
@@ -317,7 +629,8 @@ fn create_snapshot(repo: &Repo, message: &str) -> Result<()> {
     Ok(())
 }
 
-fn status(repo: &Repo) -> Result<()> {
+fn status(repo: &Repo, actor_name: &str) -> Result<()> {
+    let actor = read_actor(repo, actor_name)?;
     let workspace = read_workspace(repo)?;
     let Some(change_id) = workspace.current_change else {
         println!("workspace has no current change");
@@ -326,19 +639,117 @@ fn status(repo: &Repo) -> Result<()> {
     };
 
     let change = read_change(repo, &change_id)?;
-    let current = scan_working_tree(repo, false)?;
+    if !can_access(&actor, &change.policy) {
+        println!("change is hidden from actor `{}`", actor.name);
+        return Ok(());
+    }
+
+    let current = visible_files(scan_working_tree(repo, false)?, &actor);
     let previous = match &change.current_snapshot {
         Some(snapshot_id) => read_snapshot(repo, snapshot_id)?.files,
         None => Vec::new(),
     };
-    let diff = diff_files(previous, current);
+    let (previous_visible, previous_hidden) = visible_files_with_hidden(previous, &actor);
+    let diff = diff_files(previous_visible, current, previous_hidden);
 
+    println!("actor: {}", actor.name);
     println!("change: {} ({})", change.name, change.id);
     println!(
         "snapshot: {}",
         change.current_snapshot.as_deref().unwrap_or("none")
     );
     diff.print();
+
+    Ok(())
+}
+
+fn list_lines(repo: &Repo, actor_name: &str) -> Result<()> {
+    let actor = read_actor(repo, actor_name)?;
+    let mut lines = read_dir_json::<Line>(&repo.path(&["lines"]))?;
+    lines.sort_by(|a, b| a.name.cmp(&b.name));
+
+    for line in lines {
+        if !can_access(&actor, &line.policy) {
+            continue;
+        }
+
+        println!(
+            "{} head:{} domains:{}",
+            line.name,
+            line.head_snapshot.as_deref().unwrap_or("none"),
+            line.policy.domains.join(",")
+        );
+    }
+
+    Ok(())
+}
+
+fn integrate_line(repo: &Repo, line_name: &str) -> Result<()> {
+    let workspace = read_workspace(repo)?;
+    let change_id = workspace.current_change.as_deref().ok_or_else(|| {
+        anyhow!("workspace has no current change; run `rgit change new <name>` first")
+    })?;
+    let change = read_change(repo, change_id)?;
+    let snapshot_id = change
+        .current_snapshot
+        .as_deref()
+        .ok_or_else(|| anyhow!("change has no snapshot; run `rgit snapshot` first"))?;
+    let snapshot = read_snapshot(repo, snapshot_id)?;
+    let mut line = read_line(repo, line_name)?;
+
+    line.head_snapshot = Some(snapshot.id.clone());
+    write_json(&line_path(repo, &line.name), &line)?;
+    record_operation(
+        repo,
+        OperationKind::IntegrateLine {
+            line: line.name.clone(),
+            change_id: change.id.clone(),
+            snapshot_id: snapshot.id.clone(),
+        },
+        change.policy.clone(),
+        format!(
+            "integrated change `{}` ({}) into `{}`",
+            change.name, change.id, line.name
+        ),
+        Some(format!("integrated restricted change into `{}`", line.name)),
+    )?;
+
+    println!("integrated {} into {}", change.id, line.name);
+    println!("line head: {}", snapshot.id);
+    Ok(())
+}
+
+fn view_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> {
+    let actor = read_actor(repo, actor_name)?;
+    let line = read_line(repo, line_name)?;
+
+    if !can_access(&actor, &line.policy) {
+        println!("line `{line_name}` is hidden from actor `{}`", actor.name);
+        return Ok(());
+    }
+
+    let Some(snapshot_id) = line.head_snapshot.as_deref() else {
+        println!("line `{line_name}` has no head snapshot");
+        return Ok(());
+    };
+    let snapshot = read_snapshot(repo, snapshot_id)?;
+    let (visible, hidden) = visible_files_with_hidden(snapshot.files, &actor);
+
+    println!("actor: {}", actor.name);
+    println!("line: {}", line.name);
+    if can_access(&actor, &snapshot.policy) {
+        println!("snapshot: {}", snapshot.id);
+    } else {
+        println!("snapshot: restricted");
+    }
+
+    for file in visible {
+        println!("{} {} bytes", file.path, file.bytes);
+    }
+
+    if hidden > 0 {
+        println!("hidden: {hidden} restricted file(s)");
+    }
 
     Ok(())
 }
@@ -350,6 +761,7 @@ fn workspace_info(repo: &Repo) -> Result<()> {
         Some(change_id) => {
             let change = read_change(repo, &change_id)?;
             println!("current change: {} ({})", change.name, change.id);
+            println!("domains: {}", change.policy.domains.join(","));
             println!(
                 "current snapshot: {}",
                 change.current_snapshot.as_deref().unwrap_or("none")
@@ -363,33 +775,51 @@ fn workspace_info(repo: &Repo) -> Result<()> {
     Ok(())
 }
 
-fn op_log(repo: &Repo) -> Result<()> {
+fn op_log(repo: &Repo, actor_name: &str) -> Result<()> {
+    let actor = read_actor(repo, actor_name)?;
     let mut operations = read_dir_json::<Operation>(&repo.path(&["operations"]))?;
     operations.sort_by(|a, b| a.created_at.cmp(&b.created_at).then(a.id.cmp(&b.id)));
 
     for operation in operations {
-        println!(
-            "{} {} {}",
-            operation.id,
-            operation_kind(&operation.kind),
-            operation.message
-        );
+        if can_access(&actor, &operation.policy) {
+            println!(
+                "{} {} {}",
+                operation.id,
+                operation_kind(&operation.kind),
+                operation.private_message
+            );
+        } else if let Some(public_message) = operation.public_message {
+            println!(
+                "{} {} {}",
+                operation.id,
+                operation_kind(&operation.kind),
+                public_message
+            );
+        }
     }
 
     Ok(())
 }
 
-fn record_operation(repo: &Repo, kind: OperationKind, message: String) -> Result<()> {
+fn record_operation(
+    repo: &Repo,
+    kind: OperationKind,
+    policy: AccessPolicy,
+    private_message: String,
+    public_message: Option<String>,
+) -> Result<()> {
     let operation = Operation {
         id: format!("op_{}", short_id()),
         kind,
-        message,
+        policy,
+        private_message,
+        public_message,
         created_at: now()?,
     };
     write_json(&operation_path(repo, &operation.id), &operation)
 }
 
-fn diff_files(previous: Vec<FileEntry>, current: Vec<FileEntry>) -> FileDiff {
+fn diff_files(previous: Vec<FileEntry>, current: Vec<FileEntry>, hidden: usize) -> FileDiff {
     let previous_map = manifest_map(previous);
     let current_map = manifest_map(current);
     let previous_paths = previous_map.keys().cloned().collect::<BTreeSet<_>>();
@@ -416,29 +846,16 @@ fn diff_files(previous: Vec<FileEntry>, current: Vec<FileEntry>) -> FileDiff {
         added,
         modified,
         deleted,
-    }
-}
-
-struct FileDiff {
-    added: Vec<String>,
-    modified: Vec<String>,
-    deleted: Vec<String>,
-}
-
-impl FileDiff {
-    fn print(&self) {
-        print_paths("added", &self.added);
-        print_paths("modified", &self.modified);
-        print_paths("deleted", &self.deleted);
-
-        if self.added.is_empty() && self.modified.is_empty() && self.deleted.is_empty() {
-            println!("clean");
-        }
+        hidden,
     }
 }
 
 fn read_workspace(repo: &Repo) -> Result<Workspace> {
     read_json(&repo.path(&["workspace.json"]))
+}
+
+fn read_actor(repo: &Repo, name: &str) -> Result<Actor> {
+    read_json(&actor_path(repo, name)).with_context(|| format!("actor `{name}` not found"))
 }
 
 fn read_change(repo: &Repo, id: &str) -> Result<Change> {
@@ -449,8 +866,24 @@ fn read_snapshot(repo: &Repo, id: &str) -> Result<Snapshot> {
     read_json(&snapshot_path(repo, id)).with_context(|| format!("snapshot `{id}` not found"))
 }
 
+fn read_line(repo: &Repo, name: &str) -> Result<Line> {
+    read_json(&line_path(repo, name)).with_context(|| format!("line `{name}` not found"))
+}
+
+fn read_path_policies(repo: &Repo) -> Result<Vec<PathPolicy>> {
+    read_json(&repo.path(&["path-policies.json"]))
+}
+
+fn actor_path(repo: &Repo, name: &str) -> PathBuf {
+    repo.path(&["actors", &format!("{}.json", file_name(name))])
+}
+
 fn change_path(repo: &Repo, id: &str) -> PathBuf {
     repo.path(&["changes", &format!("{id}.json")])
+}
+
+fn line_path(repo: &Repo, name: &str) -> PathBuf {
+    repo.path(&["lines", &format!("{}.json", file_name(name))])
 }
 
 fn snapshot_path(repo: &Repo, id: &str) -> PathBuf {
@@ -462,6 +895,7 @@ fn operation_path(repo: &Repo, id: &str) -> PathBuf {
 }
 
 fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
+    let path_policies = read_path_policies(repo)?;
     let mut files = Vec::new();
 
     for entry in WalkDir::new(&repo.root)
@@ -476,11 +910,12 @@ fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
         let path = entry.path();
         let bytes = fs::read(path).with_context(|| format!("failed to read {}", path.display()))?;
         let hash = hash_bytes(&bytes);
-        let relative_path = path
-            .strip_prefix(&repo.root)
-            .context("failed to compute relative path")?
-            .to_string_lossy()
-            .replace('\\', "/");
+        let relative_path = normalize_path(
+            &path
+                .strip_prefix(&repo.root)
+                .context("failed to compute relative path")?
+                .to_string_lossy(),
+        );
 
         if store_blobs {
             let blob_path = repo.path(&["blobs", &hash]);
@@ -491,6 +926,7 @@ fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
         }
 
         files.push(FileEntry {
+            policy: policy_for_path(&relative_path, &path_policies),
             path: relative_path,
             hash,
             bytes: bytes.len() as u64,
@@ -504,6 +940,86 @@ fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
 fn should_scan(path: &Path) -> bool {
     let name = path.file_name().and_then(|name| name.to_str());
     !matches!(name, Some(".git" | META_DIR | "target"))
+}
+
+fn visible_files(files: Vec<FileEntry>, actor: &Actor) -> Vec<FileEntry> {
+    visible_files_with_hidden(files, actor).0
+}
+
+fn visible_files_with_hidden(files: Vec<FileEntry>, actor: &Actor) -> (Vec<FileEntry>, usize) {
+    let mut hidden = 0;
+    let mut visible = Vec::new();
+
+    for file in files {
+        if can_access(actor, &file.policy) {
+            visible.push(file);
+        } else {
+            hidden += 1;
+        }
+    }
+
+    (visible, hidden)
+}
+
+fn policy_for_path(path: &str, policies: &[PathPolicy]) -> AccessPolicy {
+    policies
+        .iter()
+        .filter(|policy| path == policy.prefix || path.starts_with(&format!("{}/", policy.prefix)))
+        .max_by_key(|policy| policy.prefix.len())
+        .map(|policy| policy.policy.clone())
+        .unwrap_or_else(public_policy)
+}
+
+fn can_access(actor: &Actor, policy: &AccessPolicy) -> bool {
+    if actor.domains.iter().any(|domain| domain == ADMIN_DOMAIN) {
+        return true;
+    }
+
+    policy.domains.iter().any(|domain| {
+        actor
+            .domains
+            .iter()
+            .any(|actor_domain| actor_domain == domain)
+    })
+}
+
+fn public_policy() -> AccessPolicy {
+    AccessPolicy {
+        domains: vec![PUBLIC_DOMAIN.to_string()],
+        redaction: Redaction::Omit,
+    }
+}
+
+fn admin_policy() -> AccessPolicy {
+    AccessPolicy {
+        domains: vec![ADMIN_DOMAIN.to_string()],
+        redaction: Redaction::Placeholder,
+    }
+}
+
+fn policy_from_domains(domains: Vec<String>) -> AccessPolicy {
+    AccessPolicy {
+        domains: normalize_domains(domains),
+        redaction: Redaction::Omit,
+    }
+}
+
+fn normalize_domains(domains: Vec<String>) -> Vec<String> {
+    let mut normalized = domains
+        .into_iter()
+        .filter(|domain| !domain.trim().is_empty())
+        .map(|domain| domain.trim().to_string())
+        .collect::<BTreeSet<_>>();
+
+    if normalized.is_empty() {
+        normalized.insert(PUBLIC_DOMAIN.to_string());
+    }
+
+    normalized.into_iter().collect()
+}
+
+fn normalize_path(path: &str) -> String {
+    path.trim().trim_start_matches("./").replace('\\', "/")
 }
 
 fn manifest_hash(files: &[FileEntry]) -> Result<String> {
@@ -570,9 +1086,16 @@ fn hash_bytes(bytes: &[u8]) -> String {
 fn operation_kind(kind: &OperationKind) -> &'static str {
     match kind {
         OperationKind::InitRepo => "init_repo",
+        OperationKind::SetActor { .. } => "set_actor",
+        OperationKind::SetPathPolicy { .. } => "set_path_policy",
         OperationKind::CreateChange { .. } => "create_change",
         OperationKind::CreateSnapshot { .. } => "create_snapshot",
+        OperationKind::IntegrateLine { .. } => "integrate_line",
     }
+}
+
+fn file_name(name: &str) -> String {
+    name.replace('/', "__")
 }
 
 fn short_id() -> String {

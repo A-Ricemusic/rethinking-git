@@ -264,29 +264,31 @@ The server can enforce policy, but encryption should limit damage if server stor
 
 ## Prototype Direction
 
-The next prototype should not implement real cryptography yet.
+The current prototype does not implement real cryptography yet.
 
-First, add policy metadata and filtered views.
+It implements policy metadata and filtered views.
 
-Suggested first fields:
+Implemented first fields:
 
 ```text
-visibility: public | restricted
 domains: [team/security, tool/ci-release]
 redaction: omit | placeholder | metadata_only
 ```
 
-Suggested commands:
+Implemented command shape:
 
 ```text
 rgit actor set alice --domain public
-rgit actor set sec-eng --domain public --domain team/security
-rgit snapshot --domain public
-rgit snapshot --domain team/security
-rgit status --as alice
-rgit status --as sec-eng
+rgit actor set bob --domain public --domain team/security
+rgit access path .env --domain admin
+rgit access path security --domain team/security
+rgit change new fix-token-replay --domain team/security
+rgit snapshot --message "fix token replay"
+rgit line integrate main
+rgit line view main --as alice
+rgit line view main --as bob
 rgit op log --as alice
-rgit op log --as sec-eng
+rgit op log --as bob
 ```
 
 That would prove the product idea:
