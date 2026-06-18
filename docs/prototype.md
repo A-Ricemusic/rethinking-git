@@ -13,7 +13,7 @@ There are no branches, tags, remotes, permissions, or hosting yet.
 
 ## Install Rust
 
-This machine does not currently have `cargo` or `rustc` available.
+If `cargo` or `rustc` are not available, install Rust.
 
 Install Rust with:
 

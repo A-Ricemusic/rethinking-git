@@ -227,6 +227,8 @@ JJ does not solve repo-wide file permissions.
 
 Our system should allow a workspace instance to materialize only the files and protected material that identity can access.
 
+See [access-control.md](/Users/pelicannurse/Documents/Apps/rethinking-git/docs/access-control.md) for the first design pass.
+
 ### 2. Environment profiles
 
 JJ does not solve the "new worktree is not runnable" problem by itself.

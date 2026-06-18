@@ -14,4 +14,5 @@ Later versions can add protected `lines`, typed `markers`, permissioned material
 Start here:
 
 - [docs/jj-primitives.md](/Users/pelicannurse/Documents/Apps/rethinking-git/docs/jj-primitives.md)
+- [docs/access-control.md](/Users/pelicannurse/Documents/Apps/rethinking-git/docs/access-control.md)
 - [docs/prototype.md](/Users/pelicannurse/Documents/Apps/rethinking-git/docs/prototype.md)
