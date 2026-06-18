@@ -45,6 +45,11 @@ enum Command {
         #[arg(long = "domain")]
         domains: Vec<String>,
     },
+    /// Inspect snapshots.
+    SnapshotInfo {
+        #[command(subcommand)]
+        command: SnapshotCommand,
+    },
     /// Work with logical changes.
     Change {
         #[command(subcommand)]
@@ -89,6 +94,30 @@ enum ChangeCommand {
     },
     /// List changes visible to an actor.
     List {
+        /// Actor whose permissioned view should be used.
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
+    /// Show one change if the actor can see it.
+    Show {
+        change_id: String,
+        /// Actor whose permissioned view should be used.
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum SnapshotCommand {
+    /// List snapshots visible to an actor.
+    List {
+        /// Actor whose permissioned view should be used.
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
+    /// Show files in one snapshot as an actor.
+    Show {
+        snapshot_id: String,
         /// Actor whose permissioned view should be used.
         #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
         as_actor: String,
@@ -138,6 +167,15 @@ enum LineCommand {
     /// Show the files visible on a line to an actor.
     View {
         /// Line to view.
+        #[arg(default_value = DEFAULT_LINE)]
+        line: String,
+        /// Actor whose permissioned view should be used.
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
+    /// Show visible line integration history.
+    History {
+        /// Line to inspect.
         #[arg(default_value = DEFAULT_LINE)]
         line: String,
         /// Actor whose permissioned view should be used.
@@ -296,6 +334,16 @@ fn main() -> Result<()> {
             let repo = Repo::discover()?;
             create_snapshot(&repo, &message, policy_from_domains(domains))
         }
+        Command::SnapshotInfo { command } => {
+            let repo = Repo::discover()?;
+            match command {
+                SnapshotCommand::List { as_actor } => list_snapshots(&repo, &as_actor),
+                SnapshotCommand::Show {
+                    snapshot_id,
+                    as_actor,
+                } => show_snapshot(&repo, &snapshot_id, &as_actor),
+            }
+        }
         Command::Change { command } => {
             let repo = Repo::discover()?;
             match command {
@@ -303,6 +351,10 @@ fn main() -> Result<()> {
                     create_change(&repo, &name, policy_from_domains(domains))
                 }
                 ChangeCommand::List { as_actor } => list_changes(&repo, &as_actor),
+                ChangeCommand::Show {
+                    change_id,
+                    as_actor,
+                } => show_change(&repo, &change_id, &as_actor),
             }
         }
         Command::Actor { command } => {
@@ -325,6 +377,7 @@ fn main() -> Result<()> {
                 LineCommand::List { as_actor } => list_lines(&repo, &as_actor),
                 LineCommand::Integrate { line } => integrate_line(&repo, &line),
                 LineCommand::View { line, as_actor } => view_line(&repo, &line, &as_actor),
+                LineCommand::History { line, as_actor } => line_history(&repo, &line, &as_actor),
             }
         }
         Command::Workspace { command } => {
@@ -585,6 +638,30 @@ fn list_changes(repo: &Repo, actor_name: &str) -> Result<()> {
     Ok(())
 }
 
+fn show_change(repo: &Repo, change_id: &str, actor_name: &str) -> Result<()> {
+    let actor = read_actor(repo, actor_name)?;
+    let change = read_change(repo, change_id)?;
+
+    if !can_access(&actor, &change.policy) {
+        println!("change `{change_id}` is hidden from actor `{}`", actor.name);
+        return Ok(());
+    }
+
+    println!("change: {} ({})", change.name, change.id);
+    println!("domains: {}", change.policy.domains.join(","));
+    println!(
+        "current snapshot: {}",
+        change.current_snapshot.as_deref().unwrap_or("none")
+    );
+
+    if let Some(snapshot_id) = change.current_snapshot.as_deref() {
+        let snapshot = read_snapshot(repo, snapshot_id)?;
+        print_snapshot_summary(&snapshot, &actor);
+    }
+
+    Ok(())
+}
+
 fn create_snapshot(repo: &Repo, message: &str, requested_policy: AccessPolicy) -> Result<()> {
     let workspace = read_workspace(repo)?;
     let change_id = workspace.current_change.as_deref().ok_or_else(|| {
@@ -626,6 +703,57 @@ fn create_snapshot(repo: &Repo, message: &str, requested_policy: AccessPolicy) -
 
     println!("created snapshot {}", snapshot.id);
     println!("change: {}", change.name);
+    Ok(())
+}
+
+fn list_snapshots(repo: &Repo, actor_name: &str) -> Result<()> {
+    let actor = read_actor(repo, actor_name)?;
+    let mut snapshots = read_dir_json::<Snapshot>(&repo.path(&["snapshots"]))?;
+    snapshots.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+
+    for snapshot in snapshots {
+        if !can_access(&actor, &snapshot.policy) {
+            continue;
+        }
+
+        let (visible, hidden) = visible_files_with_hidden(snapshot.files, &actor);
+        println!(
+            "{} change:{} files:{} hidden:{} domains:{} message:{}",
+            snapshot.id,
+            snapshot.change_id,
+            visible.len(),
+            hidden,
+            snapshot.policy.domains.join(","),
+            snapshot.message
+        );
+    }
+
+    Ok(())
+}
+
+fn show_snapshot(repo: &Repo, snapshot_id: &str, actor_name: &str) -> Result<()> {
+    let actor = read_actor(repo, actor_name)?;
+    let snapshot = read_snapshot(repo, snapshot_id)?;
+
+    if !can_access(&actor, &snapshot.policy) {
+        println!(
+            "snapshot `{snapshot_id}` is hidden from actor `{}`",
+            actor.name
+        );
+        return Ok(());
+    }
+
+    print_snapshot_summary(&snapshot, &actor);
+    let (visible, hidden) = visible_files_with_hidden(snapshot.files, &actor);
+
+    for file in visible {
+        println!("{} {} bytes", file.path, file.bytes);
+    }
+
+    if hidden > 0 {
+        println!("hidden: {hidden} restricted file(s)");
+    }
+
     Ok(())
 }
 
@@ -754,6 +882,72 @@ fn view_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> {
     Ok(())
 }
 
+fn line_history(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> {
+    let actor = read_actor(repo, actor_name)?;
+    let line = read_line(repo, line_name)?;
+
+    if !can_access(&actor, &line.policy) {
+        println!("line `{line_name}` is hidden from actor `{}`", actor.name);
+        return Ok(());
+    }
+
+    let mut operations = read_dir_json::<Operation>(&repo.path(&["operations"]))?;
+    operations.sort_by(|a, b| a.created_at.cmp(&b.created_at).then(a.id.cmp(&b.id)));
+
+    for operation in operations {
+        let OperationKind::IntegrateLine { line, .. } = &operation.kind else {
+            continue;
+        };
+
+        if line != line_name {
+            continue;
+        }
+
+        if can_access(&actor, &operation.policy) {
+            println!(
+                "{} {}",
+                operation.id,
+                integration_history_message(repo, &operation)?
+            );
+        } else if let Some(public_message) = operation.public_message {
+            println!("{} {}", operation.id, public_message);
+        }
+    }
+
+    Ok(())
+}
+
+fn integration_history_message(repo: &Repo, operation: &Operation) -> Result<String> {
+    let OperationKind::IntegrateLine {
+        line,
+        change_id,
+        snapshot_id,
+    } = &operation.kind
+    else {
+        return Ok(operation.private_message.clone());
+    };
+    let change = read_change(repo, change_id)?;
+
+    Ok(format!(
+        "integrated {} ({}) snapshot:{} into {}",
+        change.name, change.id, snapshot_id, line
+    ))
+}
+
+fn print_snapshot_summary(snapshot: &Snapshot, actor: &Actor) {
+    let (_, hidden) = visible_files_with_hidden(snapshot.files.clone(), actor);
+
+    println!("snapshot: {}", snapshot.id);
+    println!("change: {}", snapshot.change_id);
+    println!(
+        "parent: {}",
+        snapshot.parent_snapshot.as_deref().unwrap_or("none")
+    );
+    println!("domains: {}", snapshot.policy.domains.join(","));
+    println!("message: {}", snapshot.message);
+    println!("hidden files: {hidden}");
+}
+
 fn workspace_info(repo: &Repo) -> Result<()> {
     let workspace = read_workspace(repo)?;
 
@@ -781,19 +975,12 @@ fn op_log(repo: &Repo, actor_name: &str) -> Result<()> {
     operations.sort_by(|a, b| a.created_at.cmp(&b.created_at).then(a.id.cmp(&b.id)));
 
     for operation in operations {
-        if can_access(&actor, &operation.policy) {
+        if let Some(message) = operation_visible_message(&operation, &actor) {
             println!(
                 "{} {} {}",
                 operation.id,
                 operation_kind(&operation.kind),
-                operation.private_message
-            );
-        } else if let Some(public_message) = operation.public_message {
-            println!(
-                "{} {} {}",
-                operation.id,
-                operation_kind(&operation.kind),
-                public_message
+                message
             );
         }
     }
@@ -817,6 +1004,14 @@ fn record_operation(
         created_at: now()?,
     };
     write_json(&operation_path(repo, &operation.id), &operation)
+}
+
+fn operation_visible_message<'a>(operation: &'a Operation, actor: &Actor) -> Option<&'a str> {
+    if can_access(actor, &operation.policy) {
+        Some(operation.private_message.as_str())
+    } else {
+        operation.public_message.as_deref()
+    }
 }
 
 fn diff_files(previous: Vec<FileEntry>, current: Vec<FileEntry>, hidden: usize) -> FileDiff {
@@ -1136,6 +1331,21 @@ mod tests {
         }
     }
 
+    fn operation(
+        domains: &[&str],
+        private_message: &str,
+        public_message: Option<&str>,
+    ) -> Operation {
+        Operation {
+            id: "op_test".to_string(),
+            kind: OperationKind::InitRepo,
+            policy: policy(domains),
+            private_message: private_message.to_string(),
+            public_message: public_message.map(str::to_string),
+            created_at: 0,
+        }
+    }
+
     #[test]
     fn normalize_domains_defaults_to_public() {
         assert_eq!(
@@ -1289,6 +1499,44 @@ mod tests {
         assert_eq!(diff.modified, vec!["modified.ts"]);
         assert_eq!(diff.deleted, vec!["deleted.ts"]);
         assert_eq!(diff.hidden, 2);
+    }
+
+    #[test]
+    fn operation_visible_message_returns_private_message_for_authorized_actor() {
+        let bob = actor("bob", &[PUBLIC_DOMAIN, "team/security"]);
+        let operation = operation(
+            &["team/security"],
+            "created change `fix-token-replay`",
+            Some("integrated restricted change into `main`"),
+        );
+
+        assert_eq!(
+            operation_visible_message(&operation, &bob),
+            Some("created change `fix-token-replay`")
+        );
+    }
+
+    #[test]
+    fn operation_visible_message_returns_public_message_for_redacted_actor() {
+        let alice = actor("alice", &[PUBLIC_DOMAIN]);
+        let operation = operation(
+            &["team/security"],
+            "created change `fix-token-replay`",
+            Some("integrated restricted change into `main`"),
+        );
+
+        assert_eq!(
+            operation_visible_message(&operation, &alice),
+            Some("integrated restricted change into `main`")
+        );
+    }
+
+    #[test]
+    fn operation_visible_message_hides_operation_without_public_redaction() {
+        let alice = actor("alice", &[PUBLIC_DOMAIN]);
+        let operation = operation(&[ADMIN_DOMAIN], "set actor `bob`", None);
+
+        assert_eq!(operation_visible_message(&operation, &alice), None);
     }
 
     #[test]

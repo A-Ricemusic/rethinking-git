@@ -89,6 +89,24 @@ List changes:
 cargo run -- change list
 ```
 
+Show a change:
+
+```sh
+cargo run -- change show chg_example
+```
+
+List snapshots:
+
+```sh
+cargo run -- snapshot-info list
+```
+
+Show a snapshot:
+
+```sh
+cargo run -- snapshot-info show snap_example
+```
+
 Show the operation log:
 
 ```sh
@@ -153,6 +171,7 @@ Bob can see the security material:
 ```sh
 cargo run -- line view main --as bob
 cargo run -- change list --as bob
+cargo run -- snapshot-info list --as bob
 cargo run -- op log --as bob
 ```
 
@@ -160,6 +179,14 @@ Admin can see everything, including `.env`:
 
 ```sh
 cargo run -- line view main --as admin
+```
+
+Show line history with actor-specific redaction:
+
+```sh
+cargo run -- line history main --as alice
+cargo run -- line history main --as bob
+cargo run -- line history main --as admin
 ```
 
 ## Storage
