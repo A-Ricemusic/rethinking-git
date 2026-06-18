@@ -71,6 +71,12 @@ Check what has changed since the latest snapshot:
 cargo run -- status
 ```
 
+Show the workspace diff:
+
+```sh
+cargo run -- diff workspace
+```
+
 Create a snapshot:
 
 ```sh
@@ -188,6 +194,16 @@ cargo run -- line history main --as alice
 cargo run -- line history main --as bob
 cargo run -- line history main --as admin
 ```
+
+Show actor-filtered diffs:
+
+```sh
+cargo run -- diff workspace --as alice
+cargo run -- diff snapshot snap_old snap_new --as bob
+cargo run -- diff line main --as admin
+```
+
+Diffs currently show file-level added, modified, deleted, and hidden restricted counts. They do not show line-level text patches yet.
 
 ## Storage
 

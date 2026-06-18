@@ -70,6 +70,11 @@ enum Command {
         #[command(subcommand)]
         command: LineCommand,
     },
+    /// Compare permissioned file states.
+    Diff {
+        #[command(subcommand)]
+        command: DiffCommand,
+    },
     /// Inspect the current workspace.
     Workspace {
         #[command(subcommand)]
@@ -176,6 +181,33 @@ enum LineCommand {
     /// Show visible line integration history.
     History {
         /// Line to inspect.
+        #[arg(default_value = DEFAULT_LINE)]
+        line: String,
+        /// Actor whose permissioned view should be used.
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum DiffCommand {
+    /// Diff the current workspace against the current change snapshot.
+    Workspace {
+        /// Actor whose permissioned view should be used.
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
+    /// Diff two snapshots.
+    Snapshot {
+        old_snapshot: String,
+        new_snapshot: String,
+        /// Actor whose permissioned view should be used.
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
+    /// Diff a line's parent snapshot against its head snapshot.
+    Line {
+        /// Line to diff.
         #[arg(default_value = DEFAULT_LINE)]
         line: String,
         /// Actor whose permissioned view should be used.
@@ -321,6 +353,11 @@ struct FileDiff {
     hidden: usize,
 }
 
+struct DiffInput {
+    visible: Vec<FileEntry>,
+    hidden_by_path: BTreeMap<String, String>,
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -378,6 +415,18 @@ fn main() -> Result<()> {
                 LineCommand::Integrate { line } => integrate_line(&repo, &line),
                 LineCommand::View { line, as_actor } => view_line(&repo, &line, &as_actor),
                 LineCommand::History { line, as_actor } => line_history(&repo, &line, &as_actor),
+            }
+        }
+        Command::Diff { command } => {
+            let repo = Repo::discover()?;
+            match command {
+                DiffCommand::Workspace { as_actor } => diff_workspace(&repo, &as_actor),
+                DiffCommand::Snapshot {
+                    old_snapshot,
+                    new_snapshot,
+                    as_actor,
+                } => diff_snapshots(&repo, &old_snapshot, &new_snapshot, &as_actor),
+                DiffCommand::Line { line, as_actor } => diff_line(&repo, &line, &as_actor),
             }
         }
         Command::Workspace { command } => {
@@ -791,6 +840,95 @@ fn status(repo: &Repo, actor_name: &str) -> Result<()> {
     Ok(())
 }
 
+fn diff_workspace(repo: &Repo, actor_name: &str) -> Result<()> {
+    let actor = read_actor(repo, actor_name)?;
+    let workspace = read_workspace(repo)?;
+    let Some(change_id) = workspace.current_change else {
+        println!("workspace has no current change");
+        println!("next: rgit change new <name>");
+        return Ok(());
+    };
+    let change = read_change(repo, &change_id)?;
+
+    if !can_access(&actor, &change.policy) {
+        println!("change is hidden from actor `{}`", actor.name);
+        return Ok(());
+    }
+
+    let previous = match &change.current_snapshot {
+        Some(snapshot_id) => read_snapshot(repo, snapshot_id)?.files,
+        None => Vec::new(),
+    };
+    let current = scan_working_tree(repo, false)?;
+    let diff = permissioned_diff(previous, current, &actor);
+
+    println!("actor: {}", actor.name);
+    println!("diff: workspace");
+    println!(
+        "base snapshot: {}",
+        change.current_snapshot.as_deref().unwrap_or("none")
+    );
+    diff.print();
+    Ok(())
+}
+
+fn diff_snapshots(
+    repo: &Repo,
+    old_snapshot: &str,
+    new_snapshot: &str,
+    actor_name: &str,
+) -> Result<()> {
+    let actor = read_actor(repo, actor_name)?;
+    let old = read_snapshot(repo, old_snapshot)?;
+    let new = read_snapshot(repo, new_snapshot)?;
+
+    if !can_access(&actor, &old.policy) || !can_access(&actor, &new.policy) {
+        println!(
+            "one or more snapshots are hidden from actor `{}`",
+            actor.name
+        );
+        return Ok(());
+    }
+
+    let diff = permissioned_diff(old.files, new.files, &actor);
+
+    println!("actor: {}", actor.name);
+    println!("diff: {old_snapshot} -> {new_snapshot}");
+    diff.print();
+    Ok(())
+}
+
+fn diff_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> {
+    let actor = read_actor(repo, actor_name)?;
+    let line = read_line(repo, line_name)?;
+
+    if !can_access(&actor, &line.policy) {
+        println!("line `{line_name}` is hidden from actor `{}`", actor.name);
+        return Ok(());
+    }
+
+    let Some(head_snapshot_id) = line.head_snapshot.as_deref() else {
+        println!("line `{line_name}` has no head snapshot");
+        return Ok(());
+    };
+    let head = read_snapshot(repo, head_snapshot_id)?;
+    let parent_files = match head.parent_snapshot.as_deref() {
+        Some(parent_id) => read_snapshot(repo, parent_id)?.files,
+        None => Vec::new(),
+    };
+    let diff = permissioned_diff(parent_files, head.files, &actor);
+
+    println!("actor: {}", actor.name);
+    println!("diff: line {line_name}");
+    println!("head snapshot: {head_snapshot_id}");
+    println!(
+        "parent snapshot: {}",
+        head.parent_snapshot.as_deref().unwrap_or("none")
+    );
+    diff.print();
+    Ok(())
+}
+
 fn list_lines(repo: &Repo, actor_name: &str) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
     let mut lines = read_dir_json::<Line>(&repo.path(&["lines"]))?;
@@ -1043,6 +1181,49 @@ fn diff_files(previous: Vec<FileEntry>, current: Vec<FileEntry>, hidden: usize) 
         deleted,
         hidden,
     }
+}
+
+fn permissioned_diff(previous: Vec<FileEntry>, current: Vec<FileEntry>, actor: &Actor) -> FileDiff {
+    let previous = diff_input(previous, actor);
+    let current = diff_input(current, actor);
+    let hidden = hidden_changed_paths(&previous.hidden_by_path, &current.hidden_by_path);
+
+    diff_files(previous.visible, current.visible, hidden)
+}
+
+fn diff_input(files: Vec<FileEntry>, actor: &Actor) -> DiffInput {
+    let mut visible = Vec::new();
+    let mut hidden_by_path = BTreeMap::new();
+
+    for file in files {
+        if can_access(actor, &file.policy) {
+            visible.push(file);
+        } else {
+            hidden_by_path.insert(file.path, file.hash);
+        }
+    }
+
+    DiffInput {
+        visible,
+        hidden_by_path,
+    }
+}
+
+fn hidden_changed_paths(
+    previous: &BTreeMap<String, String>,
+    current: &BTreeMap<String, String>,
+) -> usize {
+    let previous_paths = previous.keys().cloned().collect::<BTreeSet<_>>();
+    let current_paths = current.keys().cloned().collect::<BTreeSet<_>>();
+    let all_paths = previous_paths
+        .union(&current_paths)
+        .cloned()
+        .collect::<Vec<_>>();
+
+    all_paths
+        .into_iter()
+        .filter(|path| previous.get(path) != current.get(path))
+        .count()
 }
 
 fn read_workspace(repo: &Repo) -> Result<Workspace> {
@@ -1499,6 +1680,64 @@ mod tests {
         assert_eq!(diff.modified, vec!["modified.ts"]);
         assert_eq!(diff.deleted, vec!["deleted.ts"]);
         assert_eq!(diff.hidden, 2);
+    }
+
+    #[test]
+    fn permissioned_diff_hides_restricted_path_names_but_counts_changes() {
+        let alice = actor("alice", &[PUBLIC_DOMAIN]);
+        let previous = vec![
+            file("src/app.ts", "old", &[PUBLIC_DOMAIN]),
+            file("security/repro.test.ts", "old-secret", &["team/security"]),
+        ];
+        let current = vec![
+            file("src/app.ts", "new", &[PUBLIC_DOMAIN]),
+            file("security/repro.test.ts", "new-secret", &["team/security"]),
+            file(".env", "env", &[ADMIN_DOMAIN]),
+        ];
+
+        let diff = permissioned_diff(previous, current, &alice);
+
+        assert_eq!(diff.added, Vec::<String>::new());
+        assert_eq!(diff.modified, vec!["src/app.ts"]);
+        assert_eq!(diff.deleted, Vec::<String>::new());
+        assert_eq!(diff.hidden, 2);
+    }
+
+    #[test]
+    fn permissioned_diff_shows_security_file_to_security_actor_but_hides_admin_file() {
+        let bob = actor("bob", &[PUBLIC_DOMAIN, "team/security"]);
+        let previous = vec![
+            file("src/app.ts", "old", &[PUBLIC_DOMAIN]),
+            file("security/repro.test.ts", "old-secret", &["team/security"]),
+        ];
+        let current = vec![
+            file("src/app.ts", "new", &[PUBLIC_DOMAIN]),
+            file("security/repro.test.ts", "new-secret", &["team/security"]),
+            file(".env", "env", &[ADMIN_DOMAIN]),
+        ];
+
+        let diff = permissioned_diff(previous, current, &bob);
+
+        assert_eq!(diff.added, Vec::<String>::new());
+        assert_eq!(diff.modified, vec!["security/repro.test.ts", "src/app.ts"]);
+        assert_eq!(diff.deleted, Vec::<String>::new());
+        assert_eq!(diff.hidden, 1);
+    }
+
+    #[test]
+    fn hidden_changed_paths_counts_added_deleted_and_modified_hidden_files() {
+        let previous = BTreeMap::from([
+            ("deleted.secret".to_string(), "old".to_string()),
+            ("modified.secret".to_string(), "old".to_string()),
+            ("same.secret".to_string(), "same".to_string()),
+        ]);
+        let current = BTreeMap::from([
+            ("added.secret".to_string(), "new".to_string()),
+            ("modified.secret".to_string(), "new".to_string()),
+            ("same.secret".to_string(), "same".to_string()),
+        ]);
+
+        assert_eq!(hidden_changed_paths(&previous, &current), 3);
     }
 
     #[test]
