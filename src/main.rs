@@ -939,7 +939,7 @@ fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
 
 fn should_scan(path: &Path) -> bool {
     let name = path.file_name().and_then(|name| name.to_str());
-    !matches!(name, Some(".git" | META_DIR | "target"))
+    !matches!(name, Some(".git" | META_DIR | "target" | "node_modules"))
 }
 
 fn visible_files(files: Vec<FileEntry>, actor: &Actor) -> Vec<FileEntry> {
