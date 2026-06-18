@@ -162,13 +162,13 @@ enum OpCommand {
     },
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct AccessPolicy {
     domains: Vec<String>,
     redaction: Redaction,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum Redaction {
     Omit,
@@ -183,13 +183,13 @@ struct RepoConfig {
     created_at: u64,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct Actor {
     name: String,
     domains: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct PathPolicy {
     prefix: String,
     policy: AccessPolicy,
@@ -221,7 +221,7 @@ struct Snapshot {
     created_at: u64,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct FileEntry {
     path: String,
     hash: String,
@@ -1107,4 +1107,196 @@ fn now() -> Result<u64> {
         .duration_since(UNIX_EPOCH)
         .context("system clock is before unix epoch")?
         .as_millis() as u64)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn actor(name: &str, domains: &[&str]) -> Actor {
+        Actor {
+            name: name.to_string(),
+            domains: domains.iter().map(|domain| domain.to_string()).collect(),
+        }
+    }
+
+    fn policy(domains: &[&str]) -> AccessPolicy {
+        AccessPolicy {
+            domains: domains.iter().map(|domain| domain.to_string()).collect(),
+            redaction: Redaction::Omit,
+        }
+    }
+
+    fn file(path: &str, hash: &str, domains: &[&str]) -> FileEntry {
+        FileEntry {
+            path: path.to_string(),
+            hash: hash.to_string(),
+            bytes: 1,
+            policy: policy(domains),
+        }
+    }
+
+    #[test]
+    fn normalize_domains_defaults_to_public() {
+        assert_eq!(
+            normalize_domains(Vec::new()),
+            vec![PUBLIC_DOMAIN.to_string()]
+        );
+        assert_eq!(
+            normalize_domains(vec!["".to_string(), "  ".to_string()]),
+            vec![PUBLIC_DOMAIN.to_string()]
+        );
+    }
+
+    #[test]
+    fn normalize_domains_trims_sorts_and_deduplicates() {
+        assert_eq!(
+            normalize_domains(vec![
+                " team/security ".to_string(),
+                "public".to_string(),
+                "team/security".to_string(),
+            ]),
+            vec!["public".to_string(), "team/security".to_string()]
+        );
+    }
+
+    #[test]
+    fn can_access_allows_domain_intersection() {
+        let bob = actor("bob", &[PUBLIC_DOMAIN, "team/security"]);
+
+        assert!(can_access(&bob, &policy(&[PUBLIC_DOMAIN])));
+        assert!(can_access(&bob, &policy(&["team/security"])));
+        assert!(!can_access(&bob, &policy(&[ADMIN_DOMAIN])));
+    }
+
+    #[test]
+    fn admin_domain_can_access_everything() {
+        let admin = actor("admin", &[PUBLIC_DOMAIN, ADMIN_DOMAIN]);
+
+        assert!(can_access(&admin, &policy(&[PUBLIC_DOMAIN])));
+        assert!(can_access(&admin, &policy(&["team/security"])));
+        assert!(can_access(&admin, &policy(&["customer/acme"])));
+    }
+
+    #[test]
+    fn policy_for_path_uses_public_when_no_policy_matches() {
+        let policies = vec![PathPolicy {
+            prefix: "security".to_string(),
+            policy: policy(&["team/security"]),
+        }];
+
+        assert_eq!(policy_for_path("src/app.ts", &policies), public_policy());
+    }
+
+    #[test]
+    fn policy_for_path_matches_exact_path_and_descendants() {
+        let policies = vec![PathPolicy {
+            prefix: "security".to_string(),
+            policy: policy(&["team/security"]),
+        }];
+
+        assert_eq!(
+            policy_for_path("security", &policies),
+            policy(&["team/security"])
+        );
+        assert_eq!(
+            policy_for_path("security/repro.test.ts", &policies),
+            policy(&["team/security"])
+        );
+        assert_eq!(
+            policy_for_path("security-notes.md", &policies),
+            public_policy()
+        );
+    }
+
+    #[test]
+    fn policy_for_path_prefers_longest_matching_prefix() {
+        let policies = vec![
+            PathPolicy {
+                prefix: "security".to_string(),
+                policy: policy(&["team/security"]),
+            },
+            PathPolicy {
+                prefix: "security/prod".to_string(),
+                policy: policy(&[ADMIN_DOMAIN]),
+            },
+        ];
+
+        assert_eq!(
+            policy_for_path("security/prod/secrets.env", &policies),
+            policy(&[ADMIN_DOMAIN])
+        );
+    }
+
+    #[test]
+    fn visible_files_filters_restricted_entries_and_counts_hidden() {
+        let alice = actor("alice", &[PUBLIC_DOMAIN]);
+        let files = vec![
+            file("src/app.ts", "a", &[PUBLIC_DOMAIN]),
+            file("security/repro.test.ts", "b", &["team/security"]),
+            file(".env", "c", &[ADMIN_DOMAIN]),
+        ];
+
+        let (visible, hidden) = visible_files_with_hidden(files, &alice);
+
+        assert_eq!(hidden, 2);
+        assert_eq!(
+            visible
+                .into_iter()
+                .map(|entry| entry.path)
+                .collect::<Vec<_>>(),
+            vec!["src/app.ts"]
+        );
+    }
+
+    #[test]
+    fn visible_files_allows_security_actor_but_not_admin_only_file() {
+        let bob = actor("bob", &[PUBLIC_DOMAIN, "team/security"]);
+        let files = vec![
+            file("src/app.ts", "a", &[PUBLIC_DOMAIN]),
+            file("security/repro.test.ts", "b", &["team/security"]),
+            file(".env", "c", &[ADMIN_DOMAIN]),
+        ];
+
+        let (visible, hidden) = visible_files_with_hidden(files, &bob);
+
+        assert_eq!(hidden, 1);
+        assert_eq!(
+            visible
+                .into_iter()
+                .map(|entry| entry.path)
+                .collect::<Vec<_>>(),
+            vec!["src/app.ts", "security/repro.test.ts"]
+        );
+    }
+
+    #[test]
+    fn diff_files_tracks_added_modified_deleted_and_hidden_count() {
+        let previous = vec![
+            file("deleted.ts", "a", &[PUBLIC_DOMAIN]),
+            file("modified.ts", "before", &[PUBLIC_DOMAIN]),
+            file("same.ts", "same", &[PUBLIC_DOMAIN]),
+        ];
+        let current = vec![
+            file("added.ts", "b", &[PUBLIC_DOMAIN]),
+            file("modified.ts", "after", &[PUBLIC_DOMAIN]),
+            file("same.ts", "same", &[PUBLIC_DOMAIN]),
+        ];
+
+        let diff = diff_files(previous, current, 2);
+
+        assert_eq!(diff.added, vec!["added.ts"]);
+        assert_eq!(diff.modified, vec!["modified.ts"]);
+        assert_eq!(diff.deleted, vec!["deleted.ts"]);
+        assert_eq!(diff.hidden, 2);
+    }
+
+    #[test]
+    fn should_scan_ignores_source_control_and_dependency_directories() {
+        assert!(!should_scan(Path::new(".git")));
+        assert!(!should_scan(Path::new(".rgit")));
+        assert!(!should_scan(Path::new("target")));
+        assert!(!should_scan(Path::new("node_modules")));
+        assert!(should_scan(Path::new("src")));
+    }
 }
