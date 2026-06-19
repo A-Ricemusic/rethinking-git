@@ -161,7 +161,7 @@ Snapshot and integrate into `main`:
 
 ```sh
 cargo run -- snapshot --message "fix token replay"
-cargo run -- line integrate main
+cargo run -- line integrate main --as bob
 ```
 
 Alice can see the shared line but not restricted files:
@@ -204,6 +204,37 @@ cargo run -- diff line main --as admin
 ```
 
 Diffs currently show file-level added, modified, deleted, and hidden restricted counts. They do not show line-level text patches yet.
+
+## Merge And Conflict Flow
+
+Preview whether the current change can integrate into `main`:
+
+```sh
+cargo run -- merge preview --into main --as alice
+cargo run -- merge preview --into main --as bob
+```
+
+Integrate still uses the line command:
+
+```sh
+cargo run -- line integrate main --as bob
+```
+
+If the target line changed since the change started, integration runs a three-snapshot merge:
+
+```text
+base snapshot + current line snapshot + incoming change snapshot
+```
+
+If the same path changed on both sides, integration stores a conflict and refuses to update the line:
+
+```sh
+cargo run -- conflict list --as alice
+cargo run -- conflict list --as bob
+cargo run -- conflict show conf_example --as bob
+```
+
+Conflict output is permission-aware. Actors only see conflicts where they can access the line, change, and every file side involved in the conflict.
 
 ## Storage
 

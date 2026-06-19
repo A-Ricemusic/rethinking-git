@@ -75,6 +75,16 @@ enum Command {
         #[command(subcommand)]
         command: DiffCommand,
     },
+    /// Preview merges without changing a line.
+    Merge {
+        #[command(subcommand)]
+        command: MergeCommand,
+    },
+    /// Inspect merge conflicts.
+    Conflict {
+        #[command(subcommand)]
+        command: ConflictCommand,
+    },
     /// Inspect the current workspace.
     Workspace {
         #[command(subcommand)]
@@ -93,6 +103,9 @@ enum ChangeCommand {
     New {
         /// Short, human-readable name for the change.
         name: String,
+        /// Line this change is intended to integrate into.
+        #[arg(long = "target", default_value = DEFAULT_LINE)]
+        target: String,
         /// Domains allowed to see this change.
         #[arg(long = "domain")]
         domains: Vec<String>,
@@ -168,6 +181,9 @@ enum LineCommand {
         /// Line to update.
         #[arg(default_value = DEFAULT_LINE)]
         line: String,
+        /// Actor performing the integration.
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
     },
     /// Show the files visible on a line to an actor.
     View {
@@ -210,6 +226,38 @@ enum DiffCommand {
         /// Line to diff.
         #[arg(default_value = DEFAULT_LINE)]
         line: String,
+        /// Actor whose permissioned view should be used.
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum MergeCommand {
+    /// Preview integrating the current or selected change into a line.
+    Preview {
+        /// Change to preview. Defaults to the current workspace change.
+        change_id: Option<String>,
+        /// Target line.
+        #[arg(long = "into", default_value = DEFAULT_LINE)]
+        line: String,
+        /// Actor whose permissioned view should be used.
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConflictCommand {
+    /// List unresolved conflicts visible to an actor.
+    List {
+        /// Actor whose permissioned view should be used.
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
+    /// Show one conflict if visible to an actor.
+    Show {
+        conflict_id: String,
         /// Actor whose permissioned view should be used.
         #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
         as_actor: String,
@@ -274,12 +322,16 @@ struct Workspace {
 struct Change {
     id: String,
     name: String,
+    #[serde(default)]
+    base_snapshot: Option<String>,
+    #[serde(default = "default_line_name")]
+    target_line: String,
     current_snapshot: Option<String>,
     policy: AccessPolicy,
     created_at: u64,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct Snapshot {
     id: String,
     change_id: String,
@@ -304,6 +356,46 @@ struct Line {
     name: String,
     head_snapshot: Option<String>,
     policy: AccessPolicy,
+    created_at: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum ConflictStatus {
+    Unresolved,
+    Resolved,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum ConflictKind {
+    BothModified,
+    DeleteModify,
+    AddAdd,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct Conflict {
+    id: String,
+    line: String,
+    change_id: String,
+    base_snapshot: Option<String>,
+    line_snapshot: Option<String>,
+    incoming_snapshot: String,
+    path: String,
+    kind: ConflictKind,
+    policy: AccessPolicy,
+    #[serde(default = "public_policy")]
+    line_policy: AccessPolicy,
+    #[serde(default = "public_policy")]
+    change_policy: AccessPolicy,
+    #[serde(default = "public_policy")]
+    file_policy: AccessPolicy,
+    #[serde(default)]
+    file_policies: Vec<AccessPolicy>,
+    #[serde(default = "public_policy")]
+    source_policy: AccessPolicy,
+    status: ConflictStatus,
     created_at: u64,
 }
 
@@ -339,6 +431,10 @@ enum OperationKind {
         change_id: String,
         snapshot_id: String,
     },
+    CreateConflict {
+        conflict_id: String,
+        change_id: String,
+    },
 }
 
 struct Repo {
@@ -356,6 +452,19 @@ struct FileDiff {
 struct DiffInput {
     visible: Vec<FileEntry>,
     hidden_by_path: BTreeMap<String, String>,
+}
+
+struct MergePlan {
+    merged_files: Vec<FileEntry>,
+    conflicts: Vec<PendingConflict>,
+}
+
+#[derive(Clone)]
+struct PendingConflict {
+    path: String,
+    kind: ConflictKind,
+    policy: AccessPolicy,
+    file_policies: Vec<AccessPolicy>,
 }
 
 fn main() -> Result<()> {
@@ -384,9 +493,11 @@ fn main() -> Result<()> {
         Command::Change { command } => {
             let repo = Repo::discover()?;
             match command {
-                ChangeCommand::New { name, domains } => {
-                    create_change(&repo, &name, policy_from_domains(domains))
-                }
+                ChangeCommand::New {
+                    name,
+                    target,
+                    domains,
+                } => create_change(&repo, &name, &target, policy_from_domains(domains)),
                 ChangeCommand::List { as_actor } => list_changes(&repo, &as_actor),
                 ChangeCommand::Show {
                     change_id,
@@ -412,7 +523,9 @@ fn main() -> Result<()> {
             let repo = Repo::discover()?;
             match command {
                 LineCommand::List { as_actor } => list_lines(&repo, &as_actor),
-                LineCommand::Integrate { line } => integrate_line(&repo, &line),
+                LineCommand::Integrate { line, as_actor } => {
+                    integrate_line(&repo, &line, &as_actor)
+                }
                 LineCommand::View { line, as_actor } => view_line(&repo, &line, &as_actor),
                 LineCommand::History { line, as_actor } => line_history(&repo, &line, &as_actor),
             }
@@ -427,6 +540,26 @@ fn main() -> Result<()> {
                     as_actor,
                 } => diff_snapshots(&repo, &old_snapshot, &new_snapshot, &as_actor),
                 DiffCommand::Line { line, as_actor } => diff_line(&repo, &line, &as_actor),
+            }
+        }
+        Command::Merge { command } => {
+            let repo = Repo::discover()?;
+            match command {
+                MergeCommand::Preview {
+                    change_id,
+                    line,
+                    as_actor,
+                } => merge_preview(&repo, change_id.as_deref(), &line, &as_actor),
+            }
+        }
+        Command::Conflict { command } => {
+            let repo = Repo::discover()?;
+            match command {
+                ConflictCommand::List { as_actor } => list_conflicts(&repo, &as_actor),
+                ConflictCommand::Show {
+                    conflict_id,
+                    as_actor,
+                } => show_conflict(&repo, &conflict_id, &as_actor),
             }
         }
         Command::Workspace { command } => {
@@ -500,6 +633,7 @@ fn init_repo() -> Result<()> {
         "actors",
         "blobs",
         "changes",
+        "conflicts",
         "lines",
         "operations",
         "snapshots",
@@ -630,10 +764,16 @@ fn list_path_policies(repo: &Repo) -> Result<()> {
     Ok(())
 }
 
-fn create_change(repo: &Repo, name: &str, policy: AccessPolicy) -> Result<()> {
+fn create_change(repo: &Repo, name: &str, target_line: &str, policy: AccessPolicy) -> Result<()> {
+    let target = read_line(repo, target_line)?;
+    let base_snapshot = read_line(repo, target_line)
+        .ok()
+        .and_then(|line| line.head_snapshot);
     let change = Change {
         id: format!("chg_{}", short_id()),
         name: name.to_string(),
+        base_snapshot,
+        target_line: target.name,
         current_snapshot: None,
         policy: policy.clone(),
         created_at: now()?,
@@ -656,6 +796,7 @@ fn create_change(repo: &Repo, name: &str, policy: AccessPolicy) -> Result<()> {
 
     println!("created change {}", change.id);
     println!("workspace now points at `{}`", change.name);
+    println!("target line: {}", change.target_line);
     Ok(())
 }
 
@@ -697,6 +838,7 @@ fn show_change(repo: &Repo, change_id: &str, actor_name: &str) -> Result<()> {
     }
 
     println!("change: {} ({})", change.name, change.id);
+    println!("target line: {}", change.target_line);
     println!("domains: {}", change.policy.domains.join(","));
     println!(
         "current snapshot: {}",
@@ -929,6 +1071,153 @@ fn diff_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> {
     Ok(())
 }
 
+fn merge_preview(
+    repo: &Repo,
+    change_id: Option<&str>,
+    line_name: &str,
+    actor_name: &str,
+) -> Result<()> {
+    let actor = read_actor(repo, actor_name)?;
+    let change_id = match change_id {
+        Some(change_id) => change_id.to_string(),
+        None => read_workspace(repo)?
+            .current_change
+            .ok_or_else(|| anyhow!("workspace has no current change"))?,
+    };
+    let change = read_change(repo, &change_id)?;
+    let incoming_snapshot_id = change
+        .current_snapshot
+        .as_deref()
+        .ok_or_else(|| anyhow!("change has no snapshot; run `rgit snapshot` first"))?;
+    let incoming = read_snapshot(repo, incoming_snapshot_id)?;
+    let line = read_line(repo, line_name)?;
+
+    if !can_access(&actor, &line.policy) {
+        println!("line `{line_name}` is hidden from actor `{}`", actor.name);
+        return Ok(());
+    }
+
+    if !can_access(&actor, &change.policy) {
+        println!("change `{change_id}` is hidden from actor `{}`", actor.name);
+        return Ok(());
+    }
+
+    if change.target_line != line.name {
+        println!(
+            "change `{}` targets `{}`, not `{}`",
+            change.id, change.target_line, line.name
+        );
+        return Ok(());
+    }
+
+    let base_snapshot = read_optional_snapshot(repo, change.base_snapshot.as_deref())?;
+    let line_snapshot = read_optional_snapshot(repo, line.head_snapshot.as_deref())?;
+    let base_files = optional_snapshot_files(&base_snapshot);
+    let line_files = optional_snapshot_files(&line_snapshot);
+    let incoming_files = incoming.files.clone();
+
+    if !can_access_merge_sources(
+        &actor,
+        [&base_snapshot, &line_snapshot, &Some(incoming.clone())],
+        [&base_files, &line_files, &incoming_files],
+    ) {
+        println!("merge preview unavailable for actor `{}`", actor.name);
+        return Ok(());
+    }
+
+    let plan = plan_merge(base_files, line_files, incoming_files);
+
+    println!("actor: {}", actor.name);
+    println!("merge preview: {} -> {}", change.name, line.name);
+    println!(
+        "base snapshot: {}",
+        change.base_snapshot.as_deref().unwrap_or("none")
+    );
+    println!(
+        "line head: {}",
+        line.head_snapshot.as_deref().unwrap_or("none")
+    );
+    println!("incoming snapshot: {incoming_snapshot_id}");
+
+    if plan.conflicts.is_empty() {
+        println!("result: clean");
+        println!("merged files: {}", plan.merged_files.len());
+    } else {
+        println!("result: conflicts");
+        for conflict in plan.conflicts {
+            if can_access_pending_conflict(&actor, &conflict) {
+                println!("{} {}", conflict_kind(&conflict.kind), conflict.path);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn list_conflicts(repo: &Repo, actor_name: &str) -> Result<()> {
+    let actor = read_actor(repo, actor_name)?;
+    let mut conflicts = read_dir_json::<Conflict>(&repo.path(&["conflicts"]))?;
+    conflicts.sort_by(|a, b| a.created_at.cmp(&b.created_at).then(a.id.cmp(&b.id)));
+
+    for conflict in conflicts {
+        if conflict.status != ConflictStatus::Unresolved {
+            continue;
+        }
+
+        if can_access_conflict(&actor, &conflict) {
+            print_conflict_for_actor(&conflict, &actor);
+        }
+    }
+
+    Ok(())
+}
+
+fn show_conflict(repo: &Repo, conflict_id: &str, actor_name: &str) -> Result<()> {
+    let actor = read_actor(repo, actor_name)?;
+    let Ok(conflict) = read_conflict(repo, conflict_id) else {
+        println!("conflict is restricted or not found");
+        return Ok(());
+    };
+
+    if can_access_conflict(&actor, &conflict) {
+        println!("conflict: {}", conflict.id);
+        println!("line: {}", conflict.line);
+        println!("change: {}", conflict.change_id);
+        println!("status: {}", conflict_status(&conflict.status));
+        println!("path: {}", conflict.path);
+        println!("kind: {}", conflict_kind(&conflict.kind));
+        println!(
+            "base snapshot: {}",
+            conflict.base_snapshot.as_deref().unwrap_or("none")
+        );
+        println!(
+            "line snapshot: {}",
+            conflict.line_snapshot.as_deref().unwrap_or("none")
+        );
+        println!("incoming snapshot: {}", conflict.incoming_snapshot);
+        println!("domains: {}", conflict.policy.domains.join(","));
+    } else {
+        println!("conflict is restricted or not found");
+    }
+
+    Ok(())
+}
+
+fn print_conflict_for_actor(conflict: &Conflict, actor: &Actor) {
+    if can_access_conflict(actor, conflict) {
+        println!(
+            "{} {} {} line:{} change:{}",
+            conflict.id,
+            conflict_kind(&conflict.kind),
+            conflict.path,
+            conflict.line,
+            conflict.change_id
+        );
+    } else {
+        println!("restricted_conflict requires authorized resolver");
+    }
+}
+
 fn list_lines(repo: &Repo, actor_name: &str) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
     let mut lines = read_dir_json::<Line>(&repo.path(&["lines"]))?;
@@ -950,38 +1239,123 @@ fn list_lines(repo: &Repo, actor_name: &str) -> Result<()> {
     Ok(())
 }
 
-fn integrate_line(repo: &Repo, line_name: &str) -> Result<()> {
+fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> {
+    let actor = read_actor(repo, actor_name)?;
     let workspace = read_workspace(repo)?;
     let change_id = workspace.current_change.as_deref().ok_or_else(|| {
         anyhow!("workspace has no current change; run `rgit change new <name>` first")
     })?;
     let change = read_change(repo, change_id)?;
-    let snapshot_id = change
+    let incoming_snapshot_id = change
         .current_snapshot
         .as_deref()
         .ok_or_else(|| anyhow!("change has no snapshot; run `rgit snapshot` first"))?;
-    let snapshot = read_snapshot(repo, snapshot_id)?;
+    let incoming = read_snapshot(repo, incoming_snapshot_id)?;
     let mut line = read_line(repo, line_name)?;
 
-    line.head_snapshot = Some(snapshot.id.clone());
+    if !can_access(&actor, &line.policy) {
+        println!("line `{line_name}` is hidden from actor `{}`", actor.name);
+        return Ok(());
+    }
+
+    if !can_access(&actor, &change.policy) {
+        println!(
+            "change `{}` is hidden from actor `{}`",
+            change.id, actor.name
+        );
+        return Ok(());
+    }
+
+    if change.target_line != line.name {
+        println!(
+            "change `{}` targets `{}`, not `{}`",
+            change.id, change.target_line, line.name
+        );
+        return Ok(());
+    }
+
+    let base_snapshot = read_optional_snapshot(repo, change.base_snapshot.as_deref())?;
+    let line_snapshot = read_optional_snapshot(repo, line.head_snapshot.as_deref())?;
+    let source_policy = merge_source_policy(
+        &line.policy,
+        &change.policy,
+        &incoming,
+        &base_snapshot,
+        &line_snapshot,
+    );
+    let base_files = optional_snapshot_files(&base_snapshot);
+    let line_files = optional_snapshot_files(&line_snapshot);
+    let incoming_files = incoming.files.clone();
+
+    if !can_access_merge_sources(
+        &actor,
+        [&base_snapshot, &line_snapshot, &Some(incoming.clone())],
+        [&base_files, &line_files, &incoming_files],
+    ) {
+        println!("integration unavailable for actor `{}`", actor.name);
+        return Ok(());
+    }
+
+    let plan = plan_merge(base_files, line_files, incoming_files);
+
+    if !plan.conflicts.is_empty() {
+        let conflicts = store_conflicts(
+            repo,
+            &line,
+            &change,
+            &incoming,
+            source_policy,
+            plan.conflicts,
+        )?;
+        println!("integration blocked");
+        for conflict in conflicts {
+            if can_access_conflict(&actor, &conflict) {
+                print_conflict_for_actor(&conflict, &actor);
+            }
+        }
+        return Ok(());
+    }
+
+    let integrated_policy = source_policy;
+    let public_integration_message = if integrated_policy.domains == [PUBLIC_DOMAIN] {
+        Some(format!("integrated change into `{}`", line.name))
+    } else {
+        None
+    };
+    let integrated_snapshot = Snapshot {
+        id: format!("snap_{}", short_id()),
+        change_id: change.id.clone(),
+        parent_snapshot: line.head_snapshot.clone(),
+        message: format!("merge {} into {}", change.name, line.name),
+        manifest_hash: manifest_hash(&plan.merged_files)?,
+        files: plan.merged_files,
+        policy: integrated_policy.clone(),
+        created_at: now()?,
+    };
+    write_json(
+        &snapshot_path(repo, &integrated_snapshot.id),
+        &integrated_snapshot,
+    )?;
+
+    line.head_snapshot = Some(integrated_snapshot.id.clone());
     write_json(&line_path(repo, &line.name), &line)?;
     record_operation(
         repo,
         OperationKind::IntegrateLine {
             line: line.name.clone(),
             change_id: change.id.clone(),
-            snapshot_id: snapshot.id.clone(),
+            snapshot_id: integrated_snapshot.id.clone(),
         },
-        change.policy.clone(),
+        integrated_policy,
         format!(
             "integrated change `{}` ({}) into `{}`",
             change.name, change.id, line.name
         ),
-        Some(format!("integrated restricted change into `{}`", line.name)),
+        public_integration_message,
     )?;
 
     println!("integrated {} into {}", change.id, line.name);
-    println!("line head: {}", snapshot.id);
+    println!("line head: {}", integrated_snapshot.id);
     Ok(())
 }
 
@@ -1042,13 +1416,9 @@ fn line_history(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> {
         }
 
         if can_access(&actor, &operation.policy) {
-            println!(
-                "{} {}",
-                operation.id,
-                integration_history_message(repo, &operation)?
-            );
+            println!("{}", integration_history_message(repo, &operation)?);
         } else if let Some(public_message) = operation.public_message {
-            println!("{} {}", operation.id, public_message);
+            println!("{}", public_message);
         }
     }
 
@@ -1113,13 +1483,15 @@ fn op_log(repo: &Repo, actor_name: &str) -> Result<()> {
     operations.sort_by(|a, b| a.created_at.cmp(&b.created_at).then(a.id.cmp(&b.id)));
 
     for operation in operations {
-        if let Some(message) = operation_visible_message(&operation, &actor) {
+        if can_access(&actor, &operation.policy) {
             println!(
                 "{} {} {}",
                 operation.id,
                 operation_kind(&operation.kind),
-                message
+                operation.private_message
             );
+        } else if let Some(public_message) = operation.public_message {
+            println!("{}", public_message);
         }
     }
 
@@ -1144,6 +1516,7 @@ fn record_operation(
     write_json(&operation_path(repo, &operation.id), &operation)
 }
 
+#[cfg(test)]
 fn operation_visible_message<'a>(operation: &'a Operation, actor: &Actor) -> Option<&'a str> {
     if can_access(actor, &operation.policy) {
         Some(operation.private_message.as_str())
@@ -1226,6 +1599,249 @@ fn hidden_changed_paths(
         .count()
 }
 
+fn plan_merge(base: Vec<FileEntry>, line: Vec<FileEntry>, incoming: Vec<FileEntry>) -> MergePlan {
+    let base = manifest_map(base);
+    let line = manifest_map(line);
+    let incoming = manifest_map(incoming);
+    let base_paths = base.keys().cloned().collect::<BTreeSet<_>>();
+    let line_paths = line.keys().cloned().collect::<BTreeSet<_>>();
+    let incoming_paths = incoming.keys().cloned().collect::<BTreeSet<_>>();
+    let all_paths = base_paths
+        .union(&line_paths)
+        .cloned()
+        .collect::<BTreeSet<_>>()
+        .union(&incoming_paths)
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let mut merged_files = Vec::new();
+    let mut conflicts = Vec::new();
+
+    for path in all_paths {
+        let base_entry = base.get(&path);
+        let line_entry = line.get(&path);
+        let incoming_entry = incoming.get(&path);
+
+        if same_file(line_entry, incoming_entry) {
+            if let Some(file) = line_entry {
+                merged_files.push(file.clone());
+            }
+            continue;
+        }
+
+        let line_changed = !same_file(base_entry, line_entry);
+        let incoming_changed = !same_file(base_entry, incoming_entry);
+
+        match (line_changed, incoming_changed) {
+            (false, true) => {
+                if let Some(file) = incoming_entry {
+                    merged_files.push(file.clone());
+                }
+            }
+            (true, false) => {
+                if let Some(file) = line_entry {
+                    merged_files.push(file.clone());
+                }
+            }
+            (false, false) => {
+                if let Some(file) = base_entry {
+                    merged_files.push(file.clone());
+                }
+            }
+            (true, true) => {
+                conflicts.push(PendingConflict {
+                    path: path.clone(),
+                    kind: conflict_kind_for_entries(base_entry, line_entry, incoming_entry),
+                    policy: combined_policy(line_entry, incoming_entry, base_entry),
+                    file_policies: present_file_policies(line_entry, incoming_entry, base_entry),
+                });
+            }
+        }
+    }
+
+    merged_files.sort_by(|a, b| a.path.cmp(&b.path));
+
+    MergePlan {
+        merged_files,
+        conflicts,
+    }
+}
+
+fn same_file(left: Option<&FileEntry>, right: Option<&FileEntry>) -> bool {
+    match (left, right) {
+        (None, None) => true,
+        (Some(left), Some(right)) => left.hash == right.hash,
+        _ => false,
+    }
+}
+
+fn conflict_kind_for_entries(
+    base: Option<&FileEntry>,
+    line: Option<&FileEntry>,
+    incoming: Option<&FileEntry>,
+) -> ConflictKind {
+    match (base, line, incoming) {
+        (None, Some(_), Some(_)) => ConflictKind::AddAdd,
+        (Some(_), None, Some(_)) | (Some(_), Some(_), None) => ConflictKind::DeleteModify,
+        _ => ConflictKind::BothModified,
+    }
+}
+
+fn combined_policy(
+    primary: Option<&FileEntry>,
+    secondary: Option<&FileEntry>,
+    fallback: Option<&FileEntry>,
+) -> AccessPolicy {
+    let mut domains = BTreeSet::new();
+
+    for entry in [primary, secondary, fallback].into_iter().flatten() {
+        for domain in &entry.policy.domains {
+            domains.insert(domain.clone());
+        }
+    }
+
+    if domains.is_empty() {
+        return public_policy();
+    }
+
+    AccessPolicy {
+        domains: domains.into_iter().collect(),
+        redaction: Redaction::Placeholder,
+    }
+}
+
+fn present_file_policies(
+    primary: Option<&FileEntry>,
+    secondary: Option<&FileEntry>,
+    fallback: Option<&FileEntry>,
+) -> Vec<AccessPolicy> {
+    let mut policies = Vec::new();
+
+    for policy in [primary, secondary, fallback]
+        .into_iter()
+        .flatten()
+        .map(|entry| entry.policy.clone())
+    {
+        if !policies.contains(&policy) {
+            policies.push(policy);
+        }
+    }
+
+    policies
+}
+
+fn read_optional_snapshot(repo: &Repo, snapshot_id: Option<&str>) -> Result<Option<Snapshot>> {
+    snapshot_id.map(|id| read_snapshot(repo, id)).transpose()
+}
+
+fn optional_snapshot_files(snapshot: &Option<Snapshot>) -> Vec<FileEntry> {
+    snapshot
+        .as_ref()
+        .map(|snapshot| snapshot.files.clone())
+        .unwrap_or_default()
+}
+
+fn store_conflicts(
+    repo: &Repo,
+    line: &Line,
+    change: &Change,
+    incoming: &Snapshot,
+    source_policy: AccessPolicy,
+    conflicts: Vec<PendingConflict>,
+) -> Result<Vec<Conflict>> {
+    let mut stored = Vec::new();
+
+    for pending in conflicts {
+        if let Some(existing) =
+            find_existing_unresolved_conflict(repo, line, change, incoming, &pending.path)?
+        {
+            let refreshed =
+                refresh_conflict(existing, change, incoming, source_policy.clone(), pending);
+            write_json(&conflict_path(repo, &refreshed.id), &refreshed)?;
+            stored.push(refreshed);
+            continue;
+        }
+
+        let policy = combined_access_policy([
+            pending.policy.clone(),
+            change.policy.clone(),
+            line.policy.clone(),
+        ]);
+        let conflict = Conflict {
+            id: format!("conf_{}", short_id()),
+            line: line.name.clone(),
+            change_id: change.id.clone(),
+            base_snapshot: change.base_snapshot.clone(),
+            line_snapshot: line.head_snapshot.clone(),
+            incoming_snapshot: incoming.id.clone(),
+            path: pending.path,
+            kind: pending.kind,
+            policy,
+            line_policy: line.policy.clone(),
+            change_policy: change.policy.clone(),
+            file_policy: pending.policy,
+            file_policies: pending.file_policies,
+            source_policy: source_policy.clone(),
+            status: ConflictStatus::Unresolved,
+            created_at: now()?,
+        };
+        write_json(&conflict_path(repo, &conflict.id), &conflict)?;
+        record_operation(
+            repo,
+            OperationKind::CreateConflict {
+                conflict_id: conflict.id.clone(),
+                change_id: change.id.clone(),
+            },
+            admin_policy(),
+            format!("created merge conflict `{}`", conflict.id),
+            None,
+        )?;
+        stored.push(conflict);
+    }
+
+    Ok(stored)
+}
+
+fn refresh_conflict(
+    mut conflict: Conflict,
+    change: &Change,
+    incoming: &Snapshot,
+    source_policy: AccessPolicy,
+    pending: PendingConflict,
+) -> Conflict {
+    conflict.incoming_snapshot = incoming.id.clone();
+    conflict.kind = pending.kind;
+    conflict.policy = combined_access_policy([
+        pending.policy.clone(),
+        change.policy.clone(),
+        conflict.line_policy.clone(),
+    ]);
+    conflict.change_policy = change.policy.clone();
+    conflict.file_policy = pending.policy;
+    conflict.file_policies = pending.file_policies;
+    conflict.source_policy = source_policy;
+    conflict
+}
+
+fn find_existing_unresolved_conflict(
+    repo: &Repo,
+    line: &Line,
+    change: &Change,
+    _incoming: &Snapshot,
+    path: &str,
+) -> Result<Option<Conflict>> {
+    let conflicts = read_dir_json::<Conflict>(&repo.path(&["conflicts"]))?;
+
+    Ok(conflicts.into_iter().find(|conflict| {
+        conflict.status == ConflictStatus::Unresolved
+            && conflict.line == line.name
+            && conflict.change_id == change.id
+            && conflict.base_snapshot == change.base_snapshot
+            && conflict.line_snapshot == line.head_snapshot
+            && conflict.path == path
+    }))
+}
+
 fn read_workspace(repo: &Repo) -> Result<Workspace> {
     read_json(&repo.path(&["workspace.json"]))
 }
@@ -1246,6 +1862,10 @@ fn read_line(repo: &Repo, name: &str) -> Result<Line> {
     read_json(&line_path(repo, name)).with_context(|| format!("line `{name}` not found"))
 }
 
+fn read_conflict(repo: &Repo, id: &str) -> Result<Conflict> {
+    read_json(&conflict_path(repo, id)).with_context(|| format!("conflict `{id}` not found"))
+}
+
 fn read_path_policies(repo: &Repo) -> Result<Vec<PathPolicy>> {
     read_json(&repo.path(&["path-policies.json"]))
 }
@@ -1256,6 +1876,10 @@ fn actor_path(repo: &Repo, name: &str) -> PathBuf {
 
 fn change_path(repo: &Repo, id: &str) -> PathBuf {
     repo.path(&["changes", &format!("{id}.json")])
+}
+
+fn conflict_path(repo: &Repo, id: &str) -> PathBuf {
+    repo.path(&["conflicts", &format!("{id}.json")])
 }
 
 fn line_path(repo: &Repo, name: &str) -> PathBuf {
@@ -1359,6 +1983,70 @@ fn can_access(actor: &Actor, policy: &AccessPolicy) -> bool {
     })
 }
 
+fn can_access_conflict(actor: &Actor, conflict: &Conflict) -> bool {
+    let file_policies = if conflict.file_policies.is_empty() {
+        vec![conflict.file_policy.clone()]
+    } else {
+        conflict.file_policies.clone()
+    };
+
+    can_access(actor, &conflict.line_policy)
+        && can_access(actor, &conflict.change_policy)
+        && can_access(actor, &conflict.source_policy)
+        && file_policies
+            .iter()
+            .all(|file_policy| can_access(actor, file_policy))
+}
+
+fn can_access_pending_conflict(actor: &Actor, conflict: &PendingConflict) -> bool {
+    conflict
+        .file_policies
+        .iter()
+        .all(|file_policy| can_access(actor, file_policy))
+}
+
+fn can_access_merge_inputs<const N: usize>(actor: &Actor, file_sets: [&[FileEntry]; N]) -> bool {
+    file_sets
+        .iter()
+        .flat_map(|files| files.iter())
+        .all(|file| can_access(actor, &file.policy))
+}
+
+fn can_access_merge_sources<const S: usize, const F: usize>(
+    actor: &Actor,
+    snapshots: [&Option<Snapshot>; S],
+    file_sets: [&[FileEntry]; F],
+) -> bool {
+    snapshots.iter().all(|snapshot| {
+        snapshot
+            .as_ref()
+            .map(|snapshot| can_access(actor, &snapshot.policy))
+            .unwrap_or(true)
+    }) && can_access_merge_inputs(actor, file_sets)
+}
+
+fn merge_source_policy(
+    line_policy: &AccessPolicy,
+    change_policy: &AccessPolicy,
+    incoming: &Snapshot,
+    base_snapshot: &Option<Snapshot>,
+    line_snapshot: &Option<Snapshot>,
+) -> AccessPolicy {
+    integration_metadata_policy([
+        line_policy,
+        change_policy,
+        &incoming.policy,
+        base_snapshot
+            .as_ref()
+            .map(|snapshot| &snapshot.policy)
+            .unwrap_or(line_policy),
+        line_snapshot
+            .as_ref()
+            .map(|snapshot| &snapshot.policy)
+            .unwrap_or(line_policy),
+    ])
+}
+
 fn public_policy() -> AccessPolicy {
     AccessPolicy {
         domains: vec![PUBLIC_DOMAIN.to_string()],
@@ -1373,11 +2061,45 @@ fn admin_policy() -> AccessPolicy {
     }
 }
 
+fn combined_access_policy<const N: usize>(policies: [AccessPolicy; N]) -> AccessPolicy {
+    let mut domains = BTreeSet::new();
+
+    for policy in policies {
+        for domain in policy.domains {
+            domains.insert(domain);
+        }
+    }
+
+    if domains.is_empty() {
+        return public_policy();
+    }
+
+    AccessPolicy {
+        domains: domains.into_iter().collect(),
+        redaction: Redaction::Placeholder,
+    }
+}
+
 fn policy_from_domains(domains: Vec<String>) -> AccessPolicy {
     AccessPolicy {
         domains: normalize_domains(domains),
         redaction: Redaction::Omit,
     }
+}
+
+fn integration_metadata_policy<const N: usize>(policies: [&AccessPolicy; N]) -> AccessPolicy {
+    if policies
+        .iter()
+        .all(|policy| policy.domains == [PUBLIC_DOMAIN])
+    {
+        public_policy()
+    } else {
+        admin_policy()
+    }
+}
+
+fn default_line_name() -> String {
+    DEFAULT_LINE.to_string()
 }
 
 fn normalize_domains(domains: Vec<String>) -> Vec<String> {
@@ -1467,6 +2189,22 @@ fn operation_kind(kind: &OperationKind) -> &'static str {
         OperationKind::CreateChange { .. } => "create_change",
         OperationKind::CreateSnapshot { .. } => "create_snapshot",
         OperationKind::IntegrateLine { .. } => "integrate_line",
+        OperationKind::CreateConflict { .. } => "create_conflict",
+    }
+}
+
+fn conflict_kind(kind: &ConflictKind) -> &'static str {
+    match kind {
+        ConflictKind::BothModified => "both_modified",
+        ConflictKind::DeleteModify => "delete_modify",
+        ConflictKind::AddAdd => "add_add",
+    }
+}
+
+fn conflict_status(status: &ConflictStatus) -> &'static str {
+    match status {
+        ConflictStatus::Unresolved => "unresolved",
+        ConflictStatus::Resolved => "resolved",
     }
 }
 
@@ -1738,6 +2476,226 @@ mod tests {
         ]);
 
         assert_eq!(hidden_changed_paths(&previous, &current), 3);
+    }
+
+    #[test]
+    fn plan_merge_combines_non_overlapping_changes() {
+        let base = vec![file("app.ts", "base", &[PUBLIC_DOMAIN])];
+        let line = vec![
+            file("app.ts", "base", &[PUBLIC_DOMAIN]),
+            file("line.ts", "line", &[PUBLIC_DOMAIN]),
+        ];
+        let incoming = vec![
+            file("app.ts", "incoming", &[PUBLIC_DOMAIN]),
+            file("feature.ts", "feature", &[PUBLIC_DOMAIN]),
+        ];
+
+        let plan = plan_merge(base, line, incoming);
+
+        assert!(plan.conflicts.is_empty());
+        assert_eq!(
+            plan.merged_files
+                .into_iter()
+                .map(|entry| (entry.path, entry.hash))
+                .collect::<Vec<_>>(),
+            vec![
+                ("app.ts".to_string(), "incoming".to_string()),
+                ("feature.ts".to_string(), "feature".to_string()),
+                ("line.ts".to_string(), "line".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn plan_merge_detects_both_modified_conflict() {
+        let base = vec![file("app.ts", "base", &[PUBLIC_DOMAIN])];
+        let line = vec![file("app.ts", "line", &[PUBLIC_DOMAIN])];
+        let incoming = vec![file("app.ts", "incoming", &[PUBLIC_DOMAIN])];
+
+        let plan = plan_merge(base, line, incoming);
+
+        assert!(plan.merged_files.is_empty());
+        assert_eq!(plan.conflicts.len(), 1);
+        assert_eq!(plan.conflicts[0].path, "app.ts");
+        assert_eq!(plan.conflicts[0].kind, ConflictKind::BothModified);
+    }
+
+    #[test]
+    fn plan_merge_detects_delete_modify_conflict() {
+        let base = vec![file("app.ts", "base", &[PUBLIC_DOMAIN])];
+        let line = Vec::new();
+        let incoming = vec![file("app.ts", "incoming", &[PUBLIC_DOMAIN])];
+
+        let plan = plan_merge(base, line, incoming);
+
+        assert_eq!(plan.conflicts.len(), 1);
+        assert_eq!(plan.conflicts[0].kind, ConflictKind::DeleteModify);
+    }
+
+    #[test]
+    fn plan_merge_detects_add_add_conflict() {
+        let base = Vec::new();
+        let line = vec![file("app.ts", "line", &[PUBLIC_DOMAIN])];
+        let incoming = vec![file("app.ts", "incoming", &[PUBLIC_DOMAIN])];
+
+        let plan = plan_merge(base, line, incoming);
+
+        assert_eq!(plan.conflicts.len(), 1);
+        assert_eq!(plan.conflicts[0].kind, ConflictKind::AddAdd);
+    }
+
+    #[test]
+    fn plan_merge_conflict_policy_combines_domains() {
+        let base = vec![file("security/repro.ts", "base", &["team/security"])];
+        let line = vec![file("security/repro.ts", "line", &["team/security"])];
+        let incoming = vec![file("security/repro.ts", "incoming", &[ADMIN_DOMAIN])];
+
+        let plan = plan_merge(base, line, incoming);
+
+        assert_eq!(
+            plan.conflicts[0].policy.domains,
+            vec![ADMIN_DOMAIN.to_string(), "team/security".to_string()]
+        );
+    }
+
+    #[test]
+    fn present_file_policies_deduplicates_equivalent_policies() {
+        let base = file("app.ts", "base", &[PUBLIC_DOMAIN]);
+        let line = file("app.ts", "line", &[PUBLIC_DOMAIN]);
+        let incoming = file("app.ts", "incoming", &["team/security"]);
+
+        assert_eq!(
+            present_file_policies(Some(&base), Some(&line), Some(&incoming)),
+            vec![policy(&[PUBLIC_DOMAIN]), policy(&["team/security"])]
+        );
+    }
+
+    #[test]
+    fn combined_access_policy_includes_file_change_and_line_domains() {
+        let combined = combined_access_policy([
+            policy(&[PUBLIC_DOMAIN]),
+            policy(&["team/security"]),
+            policy(&["release/private"]),
+        ]);
+
+        assert_eq!(
+            combined.domains,
+            vec![
+                "public".to_string(),
+                "release/private".to_string(),
+                "team/security".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn integration_metadata_policy_is_public_only_when_line_and_change_are_public() {
+        assert_eq!(
+            integration_metadata_policy([&policy(&[PUBLIC_DOMAIN]), &policy(&[PUBLIC_DOMAIN])]),
+            public_policy()
+        );
+        assert_eq!(
+            integration_metadata_policy([&policy(&["team/security"]), &policy(&[PUBLIC_DOMAIN])]),
+            admin_policy()
+        );
+        assert_eq!(
+            integration_metadata_policy([&policy(&[PUBLIC_DOMAIN]), &policy(&["team/security"])]),
+            admin_policy()
+        );
+        assert_eq!(
+            integration_metadata_policy([
+                &policy(&[PUBLIC_DOMAIN]),
+                &policy(&[PUBLIC_DOMAIN]),
+                &policy(&["team/security"]),
+            ]),
+            admin_policy()
+        );
+    }
+
+    #[test]
+    fn can_access_conflict_requires_line_change_and_file_access() {
+        let alice = actor("alice", &[PUBLIC_DOMAIN]);
+        let bob = actor("bob", &[PUBLIC_DOMAIN, "team/security"]);
+        let conflict = Conflict {
+            id: "conf_test".to_string(),
+            line: DEFAULT_LINE.to_string(),
+            change_id: "chg_test".to_string(),
+            base_snapshot: None,
+            line_snapshot: None,
+            incoming_snapshot: "snap_test".to_string(),
+            path: "src/app.ts".to_string(),
+            kind: ConflictKind::BothModified,
+            policy: combined_access_policy([policy(&[PUBLIC_DOMAIN]), policy(&["team/security"])]),
+            line_policy: policy(&[PUBLIC_DOMAIN]),
+            change_policy: policy(&["team/security"]),
+            file_policy: policy(&[PUBLIC_DOMAIN]),
+            file_policies: vec![policy(&[PUBLIC_DOMAIN])],
+            source_policy: policy(&[PUBLIC_DOMAIN]),
+            status: ConflictStatus::Unresolved,
+            created_at: 0,
+        };
+
+        assert!(!can_access_conflict(&alice, &conflict));
+        assert!(can_access_conflict(&bob, &conflict));
+    }
+
+    #[test]
+    fn can_access_conflict_requires_every_file_side() {
+        let alice = actor("alice", &[PUBLIC_DOMAIN]);
+        let bob = actor("bob", &[PUBLIC_DOMAIN, "team/security"]);
+        let conflict = Conflict {
+            id: "conf_test".to_string(),
+            line: DEFAULT_LINE.to_string(),
+            change_id: "chg_test".to_string(),
+            base_snapshot: None,
+            line_snapshot: None,
+            incoming_snapshot: "snap_test".to_string(),
+            path: "src/app.ts".to_string(),
+            kind: ConflictKind::BothModified,
+            policy: combined_access_policy([policy(&[PUBLIC_DOMAIN]), policy(&["team/security"])]),
+            line_policy: policy(&[PUBLIC_DOMAIN]),
+            change_policy: policy(&[PUBLIC_DOMAIN]),
+            file_policy: policy(&[PUBLIC_DOMAIN]),
+            file_policies: vec![policy(&[PUBLIC_DOMAIN]), policy(&["team/security"])],
+            source_policy: policy(&[PUBLIC_DOMAIN]),
+            status: ConflictStatus::Unresolved,
+            created_at: 0,
+        };
+
+        assert!(!can_access_conflict(&alice, &conflict));
+        assert!(can_access_conflict(&bob, &conflict));
+    }
+
+    #[test]
+    fn pending_conflict_requires_every_file_side() {
+        let alice = actor("alice", &[PUBLIC_DOMAIN]);
+        let bob = actor("bob", &[PUBLIC_DOMAIN, "team/security"]);
+        let plan = plan_merge(
+            vec![file("app.ts", "base", &[PUBLIC_DOMAIN])],
+            vec![file("app.ts", "line", &[PUBLIC_DOMAIN])],
+            vec![file("app.ts", "incoming", &["team/security"])],
+        );
+
+        assert_eq!(plan.conflicts.len(), 1);
+        assert!(!can_access_pending_conflict(&alice, &plan.conflicts[0]));
+        assert!(can_access_pending_conflict(&bob, &plan.conflicts[0]));
+    }
+
+    #[test]
+    fn merge_inputs_require_access_to_every_source_file() {
+        let alice = actor("alice", &[PUBLIC_DOMAIN]);
+        let bob = actor("bob", &[PUBLIC_DOMAIN, "team/security"]);
+        let public_files = vec![file("app.ts", "base", &[PUBLIC_DOMAIN])];
+        let restricted_files = vec![file("security/repro.ts", "secret", &["team/security"])];
+
+        assert!(!can_access_merge_inputs(
+            &alice,
+            [&public_files, &restricted_files]
+        ));
+        assert!(can_access_merge_inputs(
+            &bob,
+            [&public_files, &restricted_files]
+        ));
     }
 
     #[test]
