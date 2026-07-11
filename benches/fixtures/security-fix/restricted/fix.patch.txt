@@ -1,0 +1,2 @@
+Fixture patch: replace `validate_untrusted(false)` with `validate_untrusted(true)`.
+This is synthetic and does not describe a real product vulnerability.

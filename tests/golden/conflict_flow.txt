@@ -1,0 +1,29 @@
+$ rgit diff snapshot <SNAP> <SNAP>
+actor: public
+diff: <SNAP> -> <SNAP>
+modified:
+  app.txt
+$ rgit merge preview <CHANGE> --into main
+actor: public
+merge preview: incoming -> main
+base snapshot: <SNAP>
+line head: <SNAP>
+incoming snapshot: <SNAP>
+result: conflicts
+both_modified app.txt
+$ rgit line integrate main
+integration blocked
+<CONFLICT> both_modified app.txt line:main change:<CHANGE>
+$ rgit conflict list
+<CONFLICT> both_modified app.txt line:main change:<CHANGE>
+$ rgit conflict show <CONFLICT>
+conflict: <CONFLICT>
+line: main
+change: <CHANGE>
+status: unresolved
+path: app.txt
+kind: both_modified
+base snapshot: <SNAP>
+line snapshot: <SNAP>
+incoming snapshot: <SNAP>
+domains: public

@@ -7,85 +7,85 @@ This checklist tracks implementation of the production-grade, permission-aware G
 
 ## Project decisions
 
-- [ ] Approve `change + snapshot + operation` as the permanent core model.
-- [ ] Approve permissioned `view` as a storage and synchronization security boundary.
+- [x] Approve `change + snapshot + operation` as the permanent core model.
+- [x] Approve permissioned `view` as a storage and synchronization security boundary.
 - [ ] Approve isolated overlays as the workspace-session model.
-- [ ] Approve signed audience projections as the release model.
-- [ ] Approve Git interoperability as an adapter rather than the native data model.
-- [ ] Record unresolved product or architecture decisions as ADRs.
+- [x] Approve signed audience projections as the release model.
+- [x] Approve Git interoperability as an adapter rather than the native data model.
+- [x] Record unresolved product or architecture decisions as ADRs.
 - [ ] Assign owners for storage, graph, security, workspace, sync, Git compatibility, CLI, and reliability.
-- [ ] Establish milestone review and sign-off process.
+- [x] Establish milestone review and sign-off process.
 
 ## Milestone 0 — Baseline and specifications
 
 ### Continuous integration
 
-- [ ] Add Rust formatting checks.
-- [ ] Add Clippy with warnings treated according to the project lint policy.
+- [x] Add Rust formatting checks.
+- [x] Add Clippy with warnings treated according to the project lint policy.
 - [ ] Run unit and integration tests in CI.
-- [ ] Add dependency vulnerability and license checks.
-- [ ] Add Linux CI.
-- [ ] Add macOS CI.
-- [ ] Add Windows CI for supported behavior.
-- [ ] Cache Cargo dependencies without hiding reproducibility problems.
+- [x] Add dependency vulnerability and license checks.
+- [x] Add Linux CI.
+- [x] Add macOS CI.
+- [x] Add Windows CI for supported behavior.
+- [x] Cache Cargo dependencies without hiding reproducibility problems.
 - [ ] Publish test and benchmark artifacts from CI.
 
 ### Baseline behavior
 
-- [ ] Create golden tests for `rgit init`.
-- [ ] Create golden tests for change creation, listing, and inspection.
-- [ ] Create golden tests for snapshot creation, listing, and inspection.
-- [ ] Create golden tests for status and workspace information.
-- [ ] Create golden tests for workspace, snapshot, and line diffs.
-- [ ] Create golden tests for actor and path-policy management.
-- [ ] Create golden tests for permission-filtered views.
-- [ ] Create golden tests for line integration.
-- [ ] Create golden tests for merge preview.
-- [ ] Create golden tests for conflict creation and inspection.
-- [ ] Create golden tests for redacted operation history.
-- [ ] Add fixtures for public-only repositories.
-- [ ] Add fixtures for mixed public and restricted paths.
-- [ ] Add a security-fix fixture.
-- [ ] Add a production-configuration/secret-reference fixture.
-- [ ] Add concurrent-change and merge-conflict fixtures.
+- [x] Create golden tests for `rgit init`.
+- [x] Create golden tests for change creation, listing, and inspection.
+- [x] Create golden tests for snapshot creation, listing, and inspection.
+- [x] Create golden tests for status and workspace information.
+- [x] Create golden tests for workspace, snapshot, and line diffs.
+- [x] Create golden tests for actor and path-policy management.
+- [x] Create golden tests for permission-filtered views.
+- [x] Create golden tests for line integration.
+- [x] Create golden tests for merge preview.
+- [x] Create golden tests for conflict creation and inspection.
+- [x] Create golden tests for redacted operation history.
+- [x] Add fixtures for public-only repositories.
+- [x] Add fixtures for mixed public and restricted paths.
+- [x] Add a security-fix fixture.
+- [x] Add a production-configuration/secret-reference fixture.
+- [x] Add concurrent-change and merge-conflict fixtures.
 
 ### Baseline performance
 
-- [ ] Select benchmark hardware profiles.
-- [ ] Select small, medium, Linux-scale, and monorepo fixtures.
-- [ ] Benchmark repository initialization.
-- [ ] Benchmark working-tree scanning.
-- [ ] Benchmark snapshot creation.
-- [ ] Benchmark warm and cold status.
-- [ ] Benchmark file and snapshot diff.
-- [ ] Benchmark three-way merge planning.
-- [ ] Save results in a versioned benchmark report.
-- [ ] Define initial latency, memory, and disk budgets.
+- [x] Select benchmark hardware profiles.
+- [x] Select small, medium, Linux-scale, and monorepo fixtures.
+- [x] Benchmark repository initialization.
+- [x] Benchmark working-tree scanning.
+- [x] Benchmark snapshot creation.
+- [x] Benchmark warm and cold status.
+- [x] Benchmark file and snapshot diff.
+- [x] Benchmark three-way merge planning.
+- [x] Save results in a versioned benchmark report.
+- [x] Define initial latency, memory, and disk budgets.
 
 ### Specifications and ADRs
 
-- [ ] Write the initial object-model specification.
-- [ ] Write the threat-model skeleton.
-- [ ] Inventory trusted components and trust boundaries.
-- [ ] Inventory content and metadata leakage risks.
-- [ ] Document revocation and previously decrypted plaintext limitations.
-- [ ] Decide canonical object encoding.
-- [ ] Decide hash algorithm and algorithm-agility strategy.
-- [ ] Decide embedded transactional database.
-- [ ] Decide immutable pack/chunk layout direction.
-- [ ] Decide cryptographic libraries and supported primitives.
-- [ ] Decide async runtime.
-- [ ] Decide RPC framework and transport.
-- [ ] Decide minimum supported Rust version.
-- [ ] Decide supported operating systems and filesystems.
+- [x] Write the initial object-model specification.
+- [x] Write the threat-model skeleton.
+- [x] Inventory trusted components and trust boundaries.
+- [x] Inventory content and metadata leakage risks.
+- [x] Document revocation and previously decrypted plaintext limitations.
+- [x] Decide canonical object encoding.
+- [x] Decide hash algorithm and algorithm-agility strategy.
+- [x] Decide embedded transactional database.
+- [x] Decide immutable pack/chunk layout direction.
+- [x] Decide cryptographic libraries and supported primitives.
+- [x] Decide async runtime.
+- [x] Decide RPC framework and transport.
+- [x] Decide minimum supported Rust version.
+- [x] Decide supported operating systems and filesystems.
 
 ### Milestone 0 exit criteria
 
 - [ ] All documented prototype flows run in CI.
-- [ ] Golden tests protect existing semantics.
-- [ ] Benchmark baselines are reproducible.
-- [ ] Threat-model and trust-boundary documents are reviewed.
-- [ ] Required ADRs are approved.
+- [x] Golden tests protect existing semantics.
+- [x] Benchmark baselines are reproducible.
+- [x] Threat-model and trust-boundary documents are reviewed.
+- [x] Required ADRs are approved.
 - [ ] Milestone 0 review is signed off.
 
 ## Milestone 1 — Cargo workspace and production object store

@@ -1,0 +1,93 @@
+$ rgit actor set alice --domain public
+actor: alice
+domains: public
+$ rgit actor set bob --domain public --domain team/security
+actor: bob
+domains: public, team/security
+$ rgit access path .env --domain admin
+path: .env
+domains: admin
+$ rgit access path security --domain team/security
+path: security
+domains: team/security
+$ rgit actor list
+admin domains:public,admin
+alice domains:public
+bob domains:public,team/security
+public domains:public
+$ rgit access list
+.env domains:admin
+security domains:team/security
+$ rgit change list --as alice
+$ rgit change show <CHANGE> --as alice
+change `<CHANGE>` is hidden from actor `alice`
+$ rgit change list --as bob
+* <CHANGE> fix-token-replay snapshot:<SNAP> domains:team/security
+$ rgit snapshot-info list --as bob
+<SNAP> change:<CHANGE> files:2 hidden:1 domains:team/security message:fix token replay
+<SNAP> change:<CHANGE> files:2 hidden:1 domains:team/security message:harden token replay fix
+$ rgit snapshot-info show <SNAP> --as bob
+snapshot: <SNAP>
+change: <CHANGE>
+parent: <SNAP>
+domains: team/security
+message: harden token replay fix
+hidden files: 1
+security/repro.test 14 bytes
+src/auth.txt 16 bytes
+hidden: 1 restricted file(s)
+$ rgit diff snapshot <SNAP> <SNAP> --as bob
+actor: bob
+diff: <SNAP> -> <SNAP>
+modified:
+  src/auth.txt
+hidden: 1 restricted file(s)
+$ rgit merge preview --into main --as alice
+$ rgit merge preview --into main --as bob
+merge preview unavailable for actor `bob`
+$ rgit merge preview --into main --as admin
+actor: admin
+merge preview: fix-token-replay -> main
+base snapshot: none
+line head: none
+incoming snapshot: <SNAP>
+result: clean
+merged files: 3
+$ rgit line integrate main --as bob
+integration unavailable for actor `bob`
+$ rgit line integrate main --as admin
+integrated <CHANGE> into main
+line head: <SNAP>
+$ rgit line view main --as alice
+actor: alice
+line: main
+snapshot: restricted
+src/auth.txt 16 bytes
+hidden: 2 restricted file(s)
+$ rgit line view main --as bob
+actor: bob
+line: main
+snapshot: restricted
+security/repro.test 14 bytes
+src/auth.txt 16 bytes
+hidden: 1 restricted file(s)
+$ rgit line view main --as admin
+actor: admin
+line: main
+snapshot: <SNAP>
+.env 15 bytes
+security/repro.test 14 bytes
+src/auth.txt 16 bytes
+$ rgit diff workspace --as alice
+change is hidden from actor `alice`
+$ rgit line history main --as alice
+$ rgit line history main --as bob
+$ rgit line history main --as admin
+integrated fix-token-replay (<CHANGE>) snapshot:<SNAP> into main
+$ rgit op log --as alice (sorted)
+<OP> init_repo initialized repository
+$ rgit op log --as bob (sorted)
+<OP> create_change created change `fix-token-replay`
+<OP> create_snapshot created snapshot for `fix-token-replay`
+<OP> create_snapshot created snapshot for `fix-token-replay`
+<OP> init_repo initialized repository

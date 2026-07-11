@@ -1,0 +1,28 @@
+$ rgit change new follow-up
+created change <CHANGE>
+workspace now points at `follow-up`
+target line: main
+$ rgit status
+actor: public
+change: follow-up (<CHANGE>)
+snapshot: none
+clean
+$ rgit diff workspace
+actor: public
+diff: workspace
+base snapshot: <SNAP>
+clean
+$ rgit status after edits
+actor: public
+change: follow-up (<CHANGE>)
+snapshot: none
+modified:
+  README.md
+hidden: 1 restricted file(s)
+$ rgit diff workspace after edits
+actor: public
+diff: workspace
+base snapshot: <SNAP>
+modified:
+  README.md
+hidden: 1 restricted file(s)

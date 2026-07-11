@@ -157,11 +157,28 @@ printf 'SECRET=value\n' > .env
 printf 'exploit repro\n' > security/repro.test
 ```
 
-Snapshot and integrate into `main`:
+Create the snapshot:
 
 ```sh
 cargo run -- snapshot --message "fix token replay"
+```
+
+Bob can review the security material, but cannot preview or integrate this
+snapshot because it also contains the admin-only `.env` file:
+
+```sh
+cargo run -- snapshot-info list --as bob
+cargo run -- snapshot-info show snap_example --as bob
+cargo run -- merge preview --into main --as bob
 cargo run -- line integrate main --as bob
+```
+
+An actor must be authorized for every file in a snapshot before integrating it.
+Admin can inspect the complete snapshot and integrate it into `main`:
+
+```sh
+cargo run -- merge preview --into main --as admin
+cargo run -- line integrate main --as admin
 ```
 
 Alice can see the shared line but not restricted files:
@@ -172,7 +189,8 @@ cargo run -- change list --as alice
 cargo run -- op log --as alice
 ```
 
-Bob can see the security material:
+Bob can see the security material on the integrated line, while `.env` remains
+hidden:
 
 ```sh
 cargo run -- line view main --as bob
@@ -235,6 +253,18 @@ cargo run -- conflict show conf_example --as bob
 ```
 
 Conflict output is permission-aware. Actors only see conflicts where they can access the line, change, and every file side involved in the conflict.
+
+### Exit status
+
+`merge preview` and `line integrate` return exit code `1` when authorization
+prevents the operation. `line integrate` also returns `1` after it stores a merge
+conflict and leaves the line unchanged. Successful previews and integrations return
+`0`.
+
+The permission-aware explanation and visible conflict details remain on standard
+output for interactive use. Standard error contains only a generic
+`operation unavailable` or `integration blocked by conflicts` message so automation
+can detect the refusal without receiving restricted object details.
 
 ## Storage
 

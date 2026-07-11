@@ -1,0 +1,2 @@
+$ rgit merge preview --into main --as outsider
+$ rgit line integrate main --as outsider

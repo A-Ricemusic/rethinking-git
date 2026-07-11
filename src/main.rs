@@ -12,6 +12,10 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use walkdir::WalkDir;
 
+mod cli_failure;
+
+use cli_failure::CliFailure;
+
 const META_DIR: &str = ".rgit";
 const FORMAT_VERSION: u32 = 2;
 const PUBLIC_DOMAIN: &str = "public";
@@ -329,6 +333,14 @@ struct Change {
     current_snapshot: Option<String>,
     policy: AccessPolicy,
     created_at: u64,
+}
+
+impl Change {
+    fn workspace_base_snapshot_id(&self) -> Option<&str> {
+        self.current_snapshot
+            .as_deref()
+            .or(self.base_snapshot.as_deref())
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -804,7 +816,7 @@ fn list_changes(repo: &Repo, actor_name: &str) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
     let workspace = read_workspace(repo)?;
     let mut changes = read_dir_json::<Change>(&repo.path(&["changes"]))?;
-    changes.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+    changes.sort_by_key(|change| change.created_at);
 
     for change in changes {
         if !can_access(&actor, &change.policy) {
@@ -900,7 +912,7 @@ fn create_snapshot(repo: &Repo, message: &str, requested_policy: AccessPolicy) -
 fn list_snapshots(repo: &Repo, actor_name: &str) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
     let mut snapshots = read_dir_json::<Snapshot>(&repo.path(&["snapshots"]))?;
-    snapshots.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+    snapshots.sort_by_key(|snapshot| snapshot.created_at);
 
     for snapshot in snapshots {
         if !can_access(&actor, &snapshot.policy) {
@@ -963,13 +975,10 @@ fn status(repo: &Repo, actor_name: &str) -> Result<()> {
         return Ok(());
     }
 
-    let current = visible_files(scan_working_tree(repo, false)?, &actor);
-    let previous = match &change.current_snapshot {
-        Some(snapshot_id) => read_snapshot(repo, snapshot_id)?.files,
-        None => Vec::new(),
-    };
-    let (previous_visible, previous_hidden) = visible_files_with_hidden(previous, &actor);
-    let diff = diff_files(previous_visible, current, previous_hidden);
+    let previous = read_optional_snapshot(repo, change.workspace_base_snapshot_id())?
+        .map_or_else(Vec::new, |snapshot| snapshot.files);
+    let current = scan_working_tree(repo, false)?;
+    let diff = permissioned_diff(previous, current, &actor);
 
     println!("actor: {}", actor.name);
     println!("change: {} ({})", change.name, change.id);
@@ -997,10 +1006,8 @@ fn diff_workspace(repo: &Repo, actor_name: &str) -> Result<()> {
         return Ok(());
     }
 
-    let previous = match &change.current_snapshot {
-        Some(snapshot_id) => read_snapshot(repo, snapshot_id)?.files,
-        None => Vec::new(),
-    };
+    let previous = read_optional_snapshot(repo, change.workspace_base_snapshot_id())?
+        .map_or_else(Vec::new, |snapshot| snapshot.files);
     let current = scan_working_tree(repo, false)?;
     let diff = permissioned_diff(previous, current, &actor);
 
@@ -1008,7 +1015,7 @@ fn diff_workspace(repo: &Repo, actor_name: &str) -> Result<()> {
     println!("diff: workspace");
     println!(
         "base snapshot: {}",
-        change.current_snapshot.as_deref().unwrap_or("none")
+        change.workspace_base_snapshot_id().unwrap_or("none")
     );
     diff.print();
     Ok(())
@@ -1085,22 +1092,17 @@ fn merge_preview(
             .ok_or_else(|| anyhow!("workspace has no current change"))?,
     };
     let change = read_change(repo, &change_id)?;
+    let line = read_line(repo, line_name)?;
+
+    if !can_access(&actor, &line.policy) || !can_access(&actor, &change.policy) {
+        return Err(CliFailure::OperationUnavailable.into());
+    }
+
     let incoming_snapshot_id = change
         .current_snapshot
         .as_deref()
         .ok_or_else(|| anyhow!("change has no snapshot; run `rgit snapshot` first"))?;
     let incoming = read_snapshot(repo, incoming_snapshot_id)?;
-    let line = read_line(repo, line_name)?;
-
-    if !can_access(&actor, &line.policy) {
-        println!("line `{line_name}` is hidden from actor `{}`", actor.name);
-        return Ok(());
-    }
-
-    if !can_access(&actor, &change.policy) {
-        println!("change `{change_id}` is hidden from actor `{}`", actor.name);
-        return Ok(());
-    }
 
     if change.target_line != line.name {
         println!(
@@ -1122,7 +1124,7 @@ fn merge_preview(
         [&base_files, &line_files, &incoming_files],
     ) {
         println!("merge preview unavailable for actor `{}`", actor.name);
-        return Ok(());
+        return Err(CliFailure::OperationUnavailable.into());
     }
 
     let plan = plan_merge(base_files, line_files, incoming_files);
@@ -1246,25 +1248,17 @@ fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> 
         anyhow!("workspace has no current change; run `rgit change new <name>` first")
     })?;
     let change = read_change(repo, change_id)?;
+    let mut line = read_line(repo, line_name)?;
+
+    if !can_access(&actor, &line.policy) || !can_access(&actor, &change.policy) {
+        return Err(CliFailure::OperationUnavailable.into());
+    }
+
     let incoming_snapshot_id = change
         .current_snapshot
         .as_deref()
         .ok_or_else(|| anyhow!("change has no snapshot; run `rgit snapshot` first"))?;
     let incoming = read_snapshot(repo, incoming_snapshot_id)?;
-    let mut line = read_line(repo, line_name)?;
-
-    if !can_access(&actor, &line.policy) {
-        println!("line `{line_name}` is hidden from actor `{}`", actor.name);
-        return Ok(());
-    }
-
-    if !can_access(&actor, &change.policy) {
-        println!(
-            "change `{}` is hidden from actor `{}`",
-            change.id, actor.name
-        );
-        return Ok(());
-    }
 
     if change.target_line != line.name {
         println!(
@@ -1293,7 +1287,7 @@ fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> 
         [&base_files, &line_files, &incoming_files],
     ) {
         println!("integration unavailable for actor `{}`", actor.name);
-        return Ok(());
+        return Err(CliFailure::OperationUnavailable.into());
     }
 
     let plan = plan_merge(base_files, line_files, incoming_files);
@@ -1313,7 +1307,7 @@ fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> 
                 print_conflict_for_actor(&conflict, &actor);
             }
         }
-        return Ok(());
+        return Err(CliFailure::IntegrationConflicted.into());
     }
 
     let integrated_policy = source_policy;
@@ -1942,10 +1936,6 @@ fn should_scan(path: &Path) -> bool {
     !matches!(name, Some(".git" | META_DIR | "target" | "node_modules"))
 }
 
-fn visible_files(files: Vec<FileEntry>, actor: &Actor) -> Vec<FileEntry> {
-    visible_files_with_hidden(files, actor).0
-}
-
 fn visible_files_with_hidden(files: Vec<FileEntry>, actor: &Actor) -> (Vec<FileEntry>, usize) {
     let mut hidden = 0;
     let mut visible = Vec::new();
@@ -2263,6 +2253,36 @@ mod tests {
             public_message: public_message.map(str::to_string),
             created_at: 0,
         }
+    }
+
+    fn change_with_snapshots(base: Option<&str>, current: Option<&str>) -> Change {
+        Change {
+            id: "chg_test".to_string(),
+            name: "test".to_string(),
+            base_snapshot: base.map(str::to_string),
+            target_line: DEFAULT_LINE.to_string(),
+            current_snapshot: current.map(str::to_string),
+            policy: public_policy(),
+            created_at: 0,
+        }
+    }
+
+    #[test]
+    fn workspace_base_uses_change_base_before_first_snapshot() {
+        let change = change_with_snapshots(Some("snap_line"), None);
+
+        assert_eq!(change.workspace_base_snapshot_id(), Some("snap_line"));
+    }
+
+    #[test]
+    fn workspace_base_uses_current_snapshot_after_first_snapshot() {
+        let change = change_with_snapshots(Some("snap_line"), Some("snap_current"));
+
+        assert_eq!(change.workspace_base_snapshot_id(), Some("snap_current"));
+        assert_eq!(
+            change_with_snapshots(None, None).workspace_base_snapshot_id(),
+            None
+        );
     }
 
     #[test]

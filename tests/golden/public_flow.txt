@@ -1,0 +1,85 @@
+$ rgit init
+initialized rgit repository
+default line: main
+default actors: public, admin
+$ rgit line list
+main head:none domains:public
+$ rgit status
+workspace has no current change
+next: rgit change new <name>
+$ rgit change new document-cli
+created change <CHANGE>
+workspace now points at `document-cli`
+target line: main
+$ rgit status
+actor: public
+change: document-cli (<CHANGE>)
+snapshot: none
+added:
+  README.md
+$ rgit diff workspace
+actor: public
+diff: workspace
+base snapshot: none
+added:
+  README.md
+$ rgit snapshot --message 'document public CLI'
+created snapshot <SNAP>
+change: document-cli
+$ rgit workspace info
+current change: document-cli (<CHANGE>)
+domains: public
+current snapshot: <SNAP>
+$ rgit change list
+* <CHANGE> document-cli snapshot:<SNAP> domains:public
+$ rgit change show <CHANGE>
+change: document-cli (<CHANGE>)
+target line: main
+domains: public
+current snapshot: <SNAP>
+snapshot: <SNAP>
+change: <CHANGE>
+parent: none
+domains: public
+message: document public CLI
+hidden files: 0
+$ rgit snapshot-info list
+<SNAP> change:<CHANGE> files:1 hidden:0 domains:public message:document public CLI
+$ rgit snapshot-info show <SNAP>
+snapshot: <SNAP>
+change: <CHANGE>
+parent: none
+domains: public
+message: document public CLI
+hidden files: 0
+README.md 6 bytes
+$ rgit merge preview --into main
+actor: public
+merge preview: document-cli -> main
+base snapshot: none
+line head: none
+incoming snapshot: <SNAP>
+result: clean
+merged files: 1
+$ rgit line integrate main
+integrated <CHANGE> into main
+line head: <SNAP>
+$ rgit line view main
+actor: public
+line: main
+snapshot: <SNAP>
+README.md 6 bytes
+$ rgit line history main
+integrated document-cli (<CHANGE>) snapshot:<SNAP> into main
+$ rgit diff line main
+actor: public
+diff: line main
+head snapshot: <SNAP>
+parent snapshot: none
+added:
+  README.md
+$ rgit op log (sorted for same-second operations)
+<OP> create_change created change `document-cli`
+<OP> create_snapshot created snapshot for `document-cli`
+<OP> init_repo initialized repository
+<OP> integrate_line integrated change `document-cli` (<CHANGE>) into `main`
