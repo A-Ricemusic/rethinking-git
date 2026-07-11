@@ -1,0 +1,8 @@
+# Keep repository text deterministic across Git clients and operating systems.
+# Binary files remain untouched because `text=auto` only normalizes files Git
+# identifies as text.
+* text=auto eol=lf
+
+# Windows command interpreters require CRLF in some configurations.
+*.bat text eol=crlf
+*.cmd text eol=crlf

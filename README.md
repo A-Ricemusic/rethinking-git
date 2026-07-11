@@ -16,3 +16,8 @@ Start here:
 - [docs/jj-primitives.md](/Users/pelicannurse/Documents/Apps/rethinking-git/docs/jj-primitives.md)
 - [docs/access-control.md](/Users/pelicannurse/Documents/Apps/rethinking-git/docs/access-control.md)
 - [docs/prototype.md](/Users/pelicannurse/Documents/Apps/rethinking-git/docs/prototype.md)
+
+## License
+
+Rethinking Git is dual-licensed under the [Apache License, Version 2.0](LICENSE-APACHE)
+or the [MIT License](LICENSE-MIT), at your option.

@@ -129,10 +129,10 @@ jobs:
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable, 2026-07-11 snapshot
         with:
           toolchain: stable
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --version 0.22.1 --locked
       - name: Check advisories
-        uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+        run: cargo audit --deny warnings
       - name: Check licenses, duplicate dependencies, and sources
         uses: EmbarkStudios/cargo-deny-action@9b7d65878c2d28c8e3c16e30bf555c29abe505bd # v2.0.11
         with:
