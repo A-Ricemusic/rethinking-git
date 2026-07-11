@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A product and architecture proposal for a permission-aware, agent-native replacement for Git.">
+  <title>Rethinking Git — Product &amp; Architecture Vision</title>
+  <style>
+    :root {
+      --ink: #17211d;
+      --muted: #637069;
+      --paper: #f4f1e9;
+      --card: #fffdf8;
+      --line: #d9d5ca;
+      --pine: #173f35;
+      --mint: #b9e5cc;
+      --coral: #e76f51;
+      --gold: #e9b949;
+      --code: #102b25;
+      --shadow: 0 18px 50px rgba(23, 33, 29, .09);
+      --radius: 20px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 3%, rgba(185, 229, 204, .55), transparent 27rem),
+        var(--paper);
+      font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    a { color: inherit; }
+    p { margin: .5rem 0 1rem; }
+    h1, h2, h3 { line-height: 1.08; letter-spacing: -.035em; }
+    h1 { max-width: 900px; margin: 1rem 0; font-size: clamp(3.2rem, 8vw, 7.2rem); }
+    h2 { margin: 0 0 1rem; font-size: clamp(2rem, 4.5vw, 4rem); }
+    h3 { margin: 0 0 .65rem; font-size: 1.3rem; }
+    code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+    code { padding: .15em .38em; border-radius: 5px; background: #e8e3d8; font-size: .9em; }
+    pre {
+      overflow: auto;
+      margin: 1rem 0 0;
+      padding: 1.2rem;
+      color: #e8fff1;
+      border-radius: 14px;
+      background: var(--code);
+      line-height: 1.5;
+      font-size: .86rem;
+    }
+    pre code { padding: 0; background: transparent; }
+
+    .shell { width: min(1180px, calc(100% - 36px)); margin: 0 auto; }
+    .eyebrow {
+      display: inline-flex;
+      gap: .55rem;
+      align-items: center;
+      text-transform: uppercase;
+      letter-spacing: .14em;
+      font-size: .72rem;
+      font-weight: 800;
+      color: var(--pine);
+    }
+    .eyebrow::before { content: ""; width: 28px; height: 3px; background: var(--coral); }
+    .lede { max-width: 760px; color: #35423c; font-size: clamp(1.15rem, 2vw, 1.45rem); }
+
+    .hero { padding: 6rem 0 4.5rem; }
+    .hero-meta { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: 2rem; }
+    .pill { padding: .48rem .78rem; border: 1px solid rgba(23, 63, 53, .23); border-radius: 999px; color: var(--pine); background: rgba(255,255,255,.42); font-size: .84rem; font-weight: 700; }
+
+    .toc {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      border-block: 1px solid var(--line);
+      background: rgba(244, 241, 233, .9);
+      backdrop-filter: blur(12px);
+    }
+    .toc-inner { display: flex; gap: 1.2rem; overflow: auto; padding: .8rem 0; scrollbar-width: none; }
+    .toc a { white-space: nowrap; color: var(--muted); text-decoration: none; font-size: .83rem; font-weight: 700; }
+    .toc a:hover { color: var(--pine); }
+
+    main { padding: 4.5rem 0 7rem; }
+    section { scroll-margin-top: 5rem; margin: 0 0 7rem; }
+    .section-head { display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; margin-bottom: 2rem; align-items: end; }
+    .section-head p { max-width: 560px; color: var(--muted); }
+    .grid { display: grid; gap: 1rem; }
+    .grid > *, .section-head > * { min-width: 0; }
+    .two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .card { padding: 1.45rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); box-shadow: var(--shadow); }
+    .card p:last-child, .card ul:last-child { margin-bottom: 0; }
+    .card .num { display: block; margin-bottom: 1.3rem; color: var(--coral); font-size: .8rem; font-weight: 900; letter-spacing: .1em; }
+    .card-accent { color: white; border-color: var(--pine); background: var(--pine); }
+    .card-accent p, .card-accent li { color: #d8e9e0; }
+    .card-warn { border-top: 5px solid var(--gold); }
+    .quiet { color: var(--muted); }
+    .callout { margin-top: 1.2rem; padding: 1.4rem 1.6rem; border-left: 5px solid var(--coral); border-radius: 0 14px 14px 0; background: #fff7ef; }
+    .callout strong { color: #8a2f21; }
+
+    .flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: .55rem; align-items: stretch; }
+    .flow > div { position: relative; padding: 1.15rem 1rem; border: 1px solid #bcd1c5; border-radius: 14px; background: #edf7f1; }
+    .flow > div:not(:last-child)::after { content: "→"; position: absolute; right: -.55rem; top: 50%; z-index: 1; transform: translate(50%, -50%); width: 1.5rem; height: 1.5rem; text-align: center; line-height: 1.4rem; border-radius: 50%; background: var(--paper); font-weight: 900; }
+    .flow b { display: block; color: var(--pine); }
+    .flow span { color: var(--muted); font-size: .82rem; }
+
+    .matrix { width: 100%; overflow: hidden; border-spacing: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); box-shadow: var(--shadow); }
+    .table-wrap { max-width: 100%; overflow-x: auto; }
+    .matrix th, .matrix td { padding: .9rem 1rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    .matrix th { color: white; background: var(--pine); font-size: .8rem; letter-spacing: .03em; }
+    .matrix tr:last-child td { border-bottom: 0; }
+    .matrix td:first-child { font-weight: 800; }
+
+    .architecture { display: grid; gap: .65rem; }
+    .layer { display: grid; grid-template-columns: 170px 1fr; gap: 1rem; align-items: center; padding: 1rem 1.2rem; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+    .layer b { color: var(--pine); }
+    .layer span { color: var(--muted); }
+
+    .phase { position: relative; padding-left: 3.2rem; }
+    .phase::before { content: attr(data-phase); position: absolute; left: 0; top: 0; display: grid; place-items: center; width: 2.3rem; height: 2.3rem; color: white; border-radius: 50%; background: var(--coral); font-weight: 900; }
+    .phase:not(:last-child)::after { content: ""; position: absolute; left: 1.1rem; top: 2.5rem; bottom: -1.1rem; width: 2px; background: var(--line); }
+    .phase + .phase { margin-top: 1.6rem; }
+
+    .verdict { padding: clamp(2rem, 6vw, 5rem); color: white; border-radius: 28px; background: var(--pine); box-shadow: var(--shadow); }
+    .verdict h2 { max-width: 830px; }
+    .verdict p { max-width: 800px; color: #d6e8df; font-size: 1.12rem; }
+    footer { padding: 2rem 0; color: var(--muted); border-top: 1px solid var(--line); font-size: .82rem; }
+
+    @media (max-width: 800px) {
+      .hero { padding-top: 4rem; }
+      .section-head, .two, .three, .four { grid-template-columns: 1fr; }
+      .flow { grid-template-columns: 1fr; }
+      .flow > div:not(:last-child)::after { content: "↓"; right: 50%; top: auto; bottom: -.55rem; transform: translate(50%, 50%); }
+      .layer { grid-template-columns: 1fr; gap: .25rem; }
+      .matrix { min-width: 700px; }
+    }
+    @media print {
+      .toc { display: none; }
+      body { background: white; }
+      .hero { padding-top: 2rem; }
+      section { break-inside: avoid; margin-bottom: 3rem; }
+      .card, .matrix, .verdict { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero shell">
+    <span class="eyebrow">Product &amp; architecture vision · July 2026</span>
+    <h1>Version control should understand intent, identity, and trust.</h1>
+    <p class="lede">A proposal for turning the current Rust prototype into a complete Git replacement: permission-aware at the object layer, friendly to humans and agents, compatible enough to adopt, and opinionated enough to remove Git’s daily tax.</p>
+    <div class="hero-meta">
+      <span class="pill">Rust core</span>
+      <span class="pill">jj-inspired changes</span>
+      <span class="pill">Encrypted object graph</span>
+      <span class="pill">Agent-native workspaces</span>
+      <span class="pill">Git bridge</span>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="Document sections">
+    <div class="toc-inner shell">
+      <a href="#thesis">Thesis</a><a href="#truths">Hard truths</a><a href="#model">Model</a><a href="#security">Security</a><a href="#workspace">Workspaces</a><a href="#integration">Integration</a><a href="#git">Git parity</a><a href="#architecture">Architecture</a><a href="#roadmap">Roadmap</a><a href="#adoption">Adoption</a>
+    </div>
+  </nav>
+
+  <main class="shell">
+    <section id="thesis">
+      <div class="section-head">
+        <div><span class="eyebrow">01 · Thesis</span><h2>Don’t build “Git with ACLs.” Build a trust-aware collaboration system.</h2></div>
+        <p>Git assumes every clone receives one complete, readable history. Your idea changes that assumption. Once history is actor-specific, the product needs a new storage, sync, merge, release, and audit model—not just new commands.</p>
+      </div>
+      <div class="grid three">
+        <article class="card"><span class="num">PRIMITIVE 01</span><h3>Change</h3><p>A stable unit of intent owned by a person or agent. It survives edits, automatic snapshots, review, and integration.</p></article>
+        <article class="card"><span class="num">PRIMITIVE 02</span><h3>Snapshot</h3><p>An immutable content state. Cheap, automatic, encrypted where needed, and never confused with the human story.</p></article>
+        <article class="card"><span class="num">PRIMITIVE 03</span><h3>View</h3><p>The repository materialized for one identity, capability set, device, and task. There is no universal readable checkout.</p></article>
+        <article class="card"><span class="num">PRIMITIVE 04</span><h3>Line</h3><p>A protected integration target such as <code>main</code>, <code>release/6.1</code>, or <code>production</code>—not a place where people work directly.</p></article>
+        <article class="card"><span class="num">PRIMITIVE 05</span><h3>Operation</h3><p>An append-only record of source-control actions. It powers undo, audit, recovery, concurrency, and safe history editing.</p></article>
+        <article class="card"><span class="num">PRIMITIVE 06</span><h3>Release</h3><p>A signed, immutable projection of a line for a defined audience, with provenance and policy—not merely a tag.</p></article>
+      </div>
+      <div class="callout"><strong>Product position:</strong> the system should feel simpler than Git in daily use, while the internals become more rigorous. Engineers think in “my change,” “update it,” “share it,” and “land it.” The engine handles snapshots, ancestry, rebasing, policy, and recovery.</div>
+    </section>
+
+    <section id="truths">
+      <div class="section-head">
+        <div><span class="eyebrow">02 · Hard truths</span><h2>The security promise must be precise.</h2></div>
+        <p>This product can materially improve coordinated disclosure and secret handling. Overclaiming would make it dangerous.</p>
+      </div>
+      <div class="grid two">
+        <article class="card card-warn"><h3>A public patch is eventually inspectable</h3><p>If the fixed Linux source is public, attackers can compare the old and new releases even when the private change, message, tests, and review never leak. The system reduces the disclosure window and removes the ready-made roadmap; it cannot make a shipped public fix unknowable.</p></article>
+        <article class="card card-warn"><h3>Revocation cannot erase prior plaintext</h3><p>If an authorized laptop once decrypted a blob, later revocation cannot prove every copy disappeared. Use short-lived grants, device trust, auditing, watermarking where appropriate, and rotate secrets after access changes.</p></article>
+        <article class="card card-warn"><h3>Metadata leaks</h3><p>Names, sizes, timing, graph shape, conflict paths, reviewer identity, and “something changed in auth” can all reveal intent. Private payloads need encrypted manifests and padded or deliberately generic public envelopes.</p></article>
+        <article class="card card-warn"><h3>Server-side hiding is insufficient</h3><p>Access control must gate object transfer and key release. A client must never receive restricted readable bytes and merely hide them in its UI.</p></article>
+      </div>
+    </section>
+
+    <section id="model">
+      <div class="section-head">
+        <div><span class="eyebrow">03 · User model</span><h2>One obvious workflow, with complexity pushed into policy.</h2></div>
+        <p>Keep the jj insight—stable changes plus evolving snapshots—but use vocabulary familiar enough for Git users. “Line” can be shown as “branch” in compatibility mode; the underlying semantics stay clean.</p>
+      </div>
+      <div class="flow" aria-label="Default user workflow">
+        <div><b>Start a change</b><span>Intent and target are explicit</span></div>
+        <div><b>Work normally</b><span>Automatic snapshots protect every state</span></div>
+        <div><b>Share</b><span>Policy decides who receives which objects</span></div>
+        <div><b>Land</b><span>System updates ancestry and tests the result</span></div>
+        <div><b>Release</b><span>Signed projection for a chosen audience</span></div>
+      </div>
+      <div class="grid two" style="margin-top:1rem">
+        <article class="card"><h3>Default CLI</h3><pre><code>rg change start fix-token-replay --private security
+# edit; snapshots happen automatically
+rg status
+rg share
+rg land main
+rg release create 6.12.4 --from main --audience public</code></pre></article>
+        <article class="card"><h3>No commit ceremony</h3><p><code>snapshot</code> is an internal durability boundary; <code>change</code> is what humans discuss. “Commit” remains as a compatibility alias that updates the current change and adds a message checkpoint.</p><p class="quiet">That preserves muscle memory without preserving Git’s overloaded object/workflow concept.</p></article>
+      </div>
+    </section>
+
+    <section id="security">
+      <div class="section-head">
+        <div><span class="eyebrow">04 · Permissioned history</span><h2>Policy belongs on objects, actions, and derived results.</h2></div>
+        <p>A safe merge result is not automatically public just because one input was public. Derived-object policy must conservatively include every contributing source until an explicit declassification step approves a public projection.</p>
+      </div>
+      <div class="grid three">
+        <article class="card card-accent"><h3>Identity &amp; capabilities</h3><p>Users, services, agents, devices, teams, and time-bounded roles receive signed capabilities such as read, materialize, derive, review, integrate, release, administer, and audit.</p></article>
+        <article class="card"><h3>Policy domains</h3><p>Reusable domains—<code>public</code>, <code>team/security</code>, <code>env/prod</code>, <code>customer/acme</code>—avoid copying user lists onto every blob. Policy versions are immutable and auditable.</p></article>
+        <article class="card"><h3>Cryptographic envelopes</h3><p>Each object is content-addressed over canonical plaintext, encrypted with a random data key, and stored with wrapped keys for authorized policy groups. Manifests and metadata can be separately encrypted.</p></article>
+        <article class="card"><h3>Policy-safe derivation</h3><p>Merges, diffs, builds, conflict records, search indexes, caches, and AI context inherit the union of input restrictions unless a trusted declassifier produces a reviewed output.</p></article>
+        <article class="card"><h3>Selective sync</h3><p>The sync service performs authorization before object discovery and transfer. Clients receive opaque placeholders or stable redaction envelopes only when policy explicitly permits their existence to be known.</p></article>
+        <article class="card"><h3>Auditable release</h3><p>A release is a signed manifest of exactly what an audience may receive. Private provenance can prove the build came from reviewed inputs without publishing those inputs.</p></article>
+      </div>
+
+      <h3 style="margin-top:2.5rem">Security-fix flow</h3>
+      <div class="flow">
+        <div><b>Private change</b><span>Patch, exploit test, discussion</span></div>
+        <div><b>Restricted CI</b><span>Ephemeral keys; isolated runners</span></div>
+        <div><b>Embargoed lines</b><span>Maintainers and distributors only</span></div>
+        <div><b>Coordinated release</b><span>Signed public projection at T₀</span></div>
+        <div><b>Disclosure</b><span>Advisory and full audit when safe</span></div>
+      </div>
+
+      <div class="grid two" style="margin-top:1.5rem">
+        <article class="card"><h3>Environment configuration</h3><p>Commit the <em>shape</em>, ownership, validation rules, and secret references. For low-sensitivity values, commit encrypted values directly. For high-value production credentials, commit a versioned reference to a secret manager and materialize the value only into an authorized process.</p><pre><code># tracked, reviewable configuration
+DATABASE_URL = secret://prod/api/database-url@v7
+FEATURE_LIMIT = 250
+schema = "url"
+owners = ["team/platform"]</code></pre></article>
+        <article class="card"><h3>Why not a plaintext <code>.env</code> blob?</h3><p>Repositories replicate and retain history by design. Keys need rotation, expiry, usage policy, and sometimes hardware-backed access. Treating the repo as the control plane is excellent; treating it as the only secret vault is usually not.</p><p class="quiet">The developer experience can still be one command: the workspace broker resolves authorized values without copying them into durable files.</p></article>
+      </div>
+    </section>
+
+    <section id="workspace">
+      <div class="section-head">
+        <div><span class="eyebrow">05 · Beyond worktrees</span><h2>Separate task state from dependency state.</h2></div>
+        <p>Two agents cannot safely write two different versions to the exact same pathname in one ordinary filesystem namespace. But they can share one repository store, dependency caches, build artifacts, and base tree while receiving isolated writable overlays.</p>
+      </div>
+      <div class="grid two">
+        <article class="card card-accent"><h3>Workspace sessions</h3><p>A session binds identity + change + view + environment + writable overlay. It has a stable ID, not an exclusive branch checkout. <code>main</code> is a protected line and is never “checked out” or locked by a forgotten folder.</p></article>
+        <article class="card"><h3>Virtual materialization</h3><p>Expose a per-session filesystem through overlay mounts, a FUSE/ProjFS-style provider, containers, or tool-aware path virtualization. All sessions share immutable blobs and a read-only base; only changed files consume new space.</p></article>
+        <article class="card"><h3>Shared warm environment</h3><p>Package caches, Rust target artifacts, toolchains, indexes, and generated dependencies are mounted from content-keyed caches. A lockfile + compiler + features + target hash selects the cache; it is never blindly shared when writes could race.</p></article>
+        <article class="card"><h3>Agent boundaries</h3><p>Each agent receives its own overlay and capability token, even when launched from the same visible project root. A session-aware shell or editor routes each process to the correct view. This prevents cross-agent file clobbering and secret leakage.</p></article>
+      </div>
+      <div class="callout"><strong>The experience:</strong> one canonical project folder in the UI, many lightweight sessions underneath. Users see “main,” their changes, and active agents—not scattered clone directories. Under the hood, isolation is real because same-directory concurrent writes without namespaces are not.</div>
+    </section>
+
+    <section id="integration">
+      <div class="section-head">
+        <div><span class="eyebrow">06 · Integration</span><h2>Replace merge-vs-rebase with “land my change.”</h2></div>
+        <p>Merge and rebase are implementation choices. The user’s intent is usually: preserve my logical change, update it onto the accepted project state, verify it, and integrate it safely.</p>
+      </div>
+      <div class="grid three">
+        <article class="card"><span class="num">01 · COMPUTE</span><h3>Virtual integration</h3><p>Re-evaluate the change against the current target line without rewriting the user-visible identity. Semantic and file-level merge drivers produce a candidate snapshot.</p></article>
+        <article class="card"><span class="num">02 · VERIFY</span><h3>Policy-aware checks</h3><p>Run required tests, ownership review, signatures, secret scanning, provenance checks, and restricted CI using only runners authorized for every input.</p></article>
+        <article class="card"><span class="num">03 · ADVANCE</span><h3>Atomic landing</h3><p>Advance the line only if its expected head still matches. Otherwise recompute. The operation log preserves every prior result; no force-push ritual is required.</p></article>
+      </div>
+      <div class="grid two" style="margin-top:1rem">
+        <article class="card"><h3>Conflicts become objects</h3><p>A conflict is durable, permissioned, assignable, and resolvable by a person or specialized agent. Unrestricted users see neither private sides nor revealing paths. Resolutions can be recorded as reusable merge rules.</p></article>
+        <article class="card"><h3>Advanced controls remain</h3><p>Experts can request topology policies such as linear, merge-preserving, squash projection, or exact parent selection. Teams set the default on the line; individual developers do not debate it on every change.</p></article>
+      </div>
+    </section>
+
+    <section id="git">
+      <div class="section-head">
+        <div><span class="eyebrow">07 · Complete replacement</span><h2>Cover every Git job, not every Git accident.</h2></div>
+        <p>A replacement wins by offering a migration bridge and clean native semantics. Git repositories, hosting, IDEs, and CI cannot become prerequisites for a flag day.</p>
+      </div>
+      <div class="table-wrap">
+        <table class="matrix">
+          <thead><tr><th>Git job</th><th>Native concept</th><th>Compatibility surface</th></tr></thead>
+          <tbody>
+            <tr><td>Commit / amend</td><td>Automatic snapshot + stable change checkpoints</td><td><code>commit</code> and <code>amend</code> aliases</td></tr>
+            <tr><td>Branch / switch</td><td>Shared line, personal change, or typed marker</td><td>Import/export Git refs; branch-like display mode</td></tr>
+            <tr><td>Tag / release</td><td>Signed typed marker and audience-specific release manifest</td><td>Annotated tag projection</td></tr>
+            <tr><td>Clone / fetch / pull</td><td>Open project and sync authorized object view</td><td>Git smart-protocol bridge for public projections</td></tr>
+            <tr><td>Push / force-push</td><td>Publish operations and atomically advance authorized lines</td><td>Push gateway; guarded history projection</td></tr>
+            <tr><td>Merge / rebase / cherry-pick</td><td>Land, retarget, or apply a logical change</td><td>Explicit expert commands map to graph transforms</td></tr>
+            <tr><td>Stash / reflog</td><td>Automatic snapshots + operation log + universal undo</td><td>Familiar aliases and recovery UI</td></tr>
+            <tr><td>Worktree / sparse checkout</td><td>Isolated workspace sessions and permissioned views</td><td>Materialize a conventional directory on demand</td></tr>
+            <tr><td>Submodule / subtree / LFS</td><td>Versioned project dependencies and chunked large objects</td><td>Import/export adapters with pinned provenance</td></tr>
+            <tr><td>Hooks / attributes / ignore</td><td>Versioned policy pipeline, typed path rules, materialization rules</td><td>Read common files during migration</td></tr>
+            <tr><td>Signing / blame / bisect</td><td>Signed operations, provenance query, automated change search</td><td>Porcelain-compatible output where practical</td></tr>
+            <tr><td>PRs / code review</td><td>Published changes with review, discussion, CI, and landing state</td><td>Bidirectional GitHub/GitLab bridge later</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="architecture">
+      <div class="section-head">
+        <div><span class="eyebrow">08 · Architecture</span><h2>Keep the trusted core small and make policy unavoidable.</h2></div>
+        <p>The current single-binary JSON store is a good executable specification. The production system should retain understandable objects while replacing filesystem scans, flat JSON, and simulated actors with robust boundaries.</p>
+      </div>
+      <div class="architecture">
+        <div class="layer"><b>Experience layer</b><span>CLI, TUI/GUI, IDE protocol, review UI, agent SDK, Git-compatible porcelain</span></div>
+        <div class="layer"><b>Workflow engine</b><span>Changes, lines, releases, review, land queue, conflict objects, operation transactions</span></div>
+        <div class="layer"><b>Policy engine</b><span>Identity, capabilities, path/object rules, derivation labels, declassification, audit decisions</span></div>
+        <div class="layer"><b>Workspace engine</b><span>Filesystem watcher, overlays, view materialization, environment broker, content-keyed build caches</span></div>
+        <div class="layer"><b>Graph engine</b><span>Canonical manifests, DAG queries, diffs, merge drivers, reachability, garbage collection</span></div>
+        <div class="layer"><b>Crypto &amp; storage</b><span>Hashing, envelope encryption, signatures, key rotation, local object DB, chunking, pack/index format</span></div>
+        <div class="layer"><b>Sync &amp; hosting</b><span>Authorization-before-discovery, resumable transfer, line transactions, policy service, remote audit log</span></div>
+      </div>
+      <div class="grid two" style="margin-top:1rem">
+        <article class="card"><h3>Suggested Rust boundaries</h3><pre><code>crates/
+  rgit-objects      canonical object schemas
+  rgit-store        object DB, pack, GC
+  rgit-crypto       encryption, signing, key envelopes
+  rgit-policy       capabilities and derivation labels
+  rgit-graph        ancestry, diff, merge
+  rgit-workspace    watcher, overlay, materialization
+  rgit-sync         protocol and transactions
+  rgit-gitbridge    import/export and remote helper
+  rgit-cli          human interface</code></pre></article>
+        <article class="card"><h3>Non-negotiable invariants</h3><ul><li>Objects are immutable; pointers advance transactionally.</li><li>Unauthorized clients cannot discover or decrypt restricted objects.</li><li>Derived data cannot become less restricted implicitly.</li><li>Every state-changing command is an operation with undo semantics.</li><li>Releases are reproducible, signed projections—not mutable folders.</li><li>Format and protocol versions are explicit from day one.</li></ul></article>
+      </div>
+    </section>
+
+    <section id="roadmap">
+      <div class="section-head">
+        <div><span class="eyebrow">09 · From this repo</span><h2>Build evidence in layers.</h2></div>
+        <p>The prototype already demonstrates policy-filtered changes, snapshots, line views, diffs, merges, conflicts, and operations. Keep it as the semantic testbed while each milestone replaces one simulated boundary with a real one.</p>
+      </div>
+      <div>
+        <article class="phase" data-phase="1"><h3>Harden the local object model</h3><p>Split the monolith into object/store/graph crates; define canonical serialization and schema migration; add typed markers and release objects; make operation updates transactional; add property and crash-consistency tests.</p></article>
+        <article class="phase" data-phase="2"><h3>Prove cryptographic views</h3><p>Implement real identity, signatures, per-object encryption, key envelopes, metadata redaction, key rotation, and policy-safe derivation. Commission a threat model and external design review before promising secure secret storage.</p></article>
+        <article class="phase" data-phase="3"><h3>Make local work irresistible</h3><p>Add automatic snapshots via a watcher, universal undo, fast status/diff, background maintenance, workspace sessions, shared dependency/build caches, and editor integration. Benchmark on Linux-scale repositories.</p></article>
+        <article class="phase" data-phase="4"><h3>Build sync and a self-hosted remote</h3><p>Design authorization-before-discovery, resumable object transfer, line compare-and-swap, audit replication, partial views, offline capability expiry, backup, and disaster recovery.</p></article>
+        <article class="phase" data-phase="5"><h3>Deliver the Git bridge</h3><p>Losslessly import ordinary Git history, export public/audience projections, add a remote helper, mirror lines to Git hosts, and publish a compatibility matrix. Never export restricted history by default.</p></article>
+        <article class="phase" data-phase="6"><h3>Layer on collaboration</h3><p>Native review, merge queue, CI attestations, agent sessions, ownership, audit UI, release coordination, and enterprise identity. Hosting is where the access-control promise becomes a complete product.</p></article>
+      </div>
+      <div class="callout"><strong>Recommended first vertical slice:</strong> two users clone different encrypted views of one hosted repository; a security engineer lands a restricted change into an embargoed line; CI builds it; a signed public release publishes only the approved projection; an auditor reconstructs the full private provenance.</div>
+    </section>
+
+    <section id="adoption">
+      <div class="section-head">
+        <div><span class="eyebrow">10 · Adoption</span><h2>Engineers switch for less friction, not a more elegant DAG.</h2></div>
+        <p>Access-controlled history is the differentiator, but daily delight is the wedge. The product has to be faster, safer, and easier even for teams that never ship an embargoed fix.</p>
+      </div>
+      <div class="grid four">
+        <article class="card"><h3>Instant safety</h3><p>Automatic snapshots, obvious undo, no detached HEAD, no lost stash, no destructive rebase fear.</p></article>
+        <article class="card"><h3>Warm sessions</h3><p>New agent or task sessions reuse dependencies and builds without sharing writable source state.</p></article>
+        <article class="card"><h3>One command to land</h3><p>No recurring merge-versus-rebase decision; policy and automation choose the team’s topology.</p></article>
+        <article class="card"><h3>Gradual migration</h3><p>Mirror an existing Git remote, let individuals opt into the client, then adopt native protected views.</p></article>
+      </div>
+      <div class="grid two" style="margin-top:1rem">
+        <article class="card"><h3>Success metrics</h3><ul><li>Time from clone/open to a runnable workspace</li><li>Status and snapshot latency at monorepo scale</li><li>Percentage of conflicts resolved before the user sees them</li><li>Recovery success after mistakes or interrupted operations</li><li>Restricted-object leakage tests: target must be zero</li><li>Time to onboard a Git-fluent engineer</li></ul></article>
+        <article class="card"><h3>Trust strategy</h3><ul><li>Open specification and independently testable format</li><li>Open-source local client and cryptographic core</li><li>Threat model, security audits, reproducible releases</li><li>Export path so customers are never trapped</li><li>Clear compatibility levels rather than “works with Git”</li><li>Dogfood on this repository and publish benchmarks</li></ul></article>
+      </div>
+    </section>
+
+    <section>
+      <div class="verdict">
+        <span class="eyebrow" style="color:var(--mint)">Recommendation</span>
+        <h2>Keep the jj-inspired core. Make the view—not the commit—the fundamental security boundary.</h2>
+        <p>Preserve stable changes, snapshots, lines, conflicts, and the operation log already present here. Add releases, typed markers, real cryptographic policy, session-based workspaces, and a Git bridge in that order. The winning product is not “more powerful Git.” It is a calmer default workflow backed by a permissioned object system Git’s architecture cannot safely emulate.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer><div class="shell">Rethinking Git · Product and architecture brainstorming document · Based on the current Rust prototype in this repository.</div></footer>
+</body>
+</html>
