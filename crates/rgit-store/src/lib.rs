@@ -5,11 +5,18 @@
 //! principal-dependent views.
 
 mod error;
+mod loose;
 mod memory;
 mod model;
+mod platform;
 mod store;
 
+pub use error::LooseStoreError;
 pub use error::{ClosureError, StoreError};
+pub use loose::{
+    FailureInjector, FailurePoint, InventoryEntry, InventoryEntryKind, LooseObjectStore,
+    NoFailures, PutLooseOutcome, VerifiedReader,
+};
 pub use memory::MemoryStore;
 pub use model::{
     Closure, ExpectedRef, ObjectPresence, Publication, PublicationObject, PutOutcome, RefUpdate,

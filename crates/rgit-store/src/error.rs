@@ -1,6 +1,53 @@
 use rgit_objects::{DecodeObjectError, ObjectKind};
 use thiserror::Error;
 
+/// Typed failures from immutable loose-record storage.
+///
+/// The variants and their `Debug` representation intentionally contain neither
+/// object identifiers nor repository paths. An auditor can correlate a failure
+/// with separately access-controlled request context.
+#[derive(Debug, Error)]
+pub enum LooseStoreError {
+    #[error("loose-record I/O failed during {operation}")]
+    Io {
+        operation: &'static str,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("loose record has invalid framing")]
+    InvalidFrame,
+    #[error("loose record uses an unsupported format")]
+    UnsupportedFormat,
+    #[error("loose record contains a non-minimal or invalid varint")]
+    InvalidVarint,
+    #[error("loose record exceeds its allocation limit")]
+    AllocationLimit,
+    #[error("loose record checksum failed")]
+    Checksum,
+    #[error("loose record failed canonical object verification")]
+    InvalidObject(#[source] DecodeObjectError),
+    #[error("loose record metadata does not agree with its object")]
+    MetadataMismatch,
+    #[error("loose record is not at its derived location")]
+    PathMismatch,
+    #[error("loose object is unavailable")]
+    Unavailable,
+    #[error("immutable-object collision or corruption incident")]
+    CollisionIncident,
+    #[error("loose store is in fail-closed incident mode")]
+    ReadOnlyIncident,
+    #[error("publication was interrupted at an injected failure boundary")]
+    InjectedFailure,
+    #[error("platform does not provide required durable no-replace publication")]
+    UnsupportedPlatform,
+}
+
+impl LooseStoreError {
+    pub(crate) fn io(operation: &'static str, source: std::io::Error) -> Self {
+        Self::Io { operation, source }
+    }
+}
+
 /// Failures at the verified storage boundary.
 ///
 /// Display strings deliberately omit object and reference identifiers. Callers

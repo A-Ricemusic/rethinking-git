@@ -7,6 +7,12 @@ description = "Verified object storage and atomic reference publication for RGit
 license.workspace = true
 
 [dependencies]
+hex.workspace = true
 rgit-graph = { path = "../rgit-graph" }
 rgit-objects = { path = "../rgit-objects" }
+sha2.workspace = true
+subtle.workspace = true
 thiserror.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_Storage_FileSystem"] }

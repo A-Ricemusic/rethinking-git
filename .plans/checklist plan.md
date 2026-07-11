@@ -125,15 +125,15 @@ This checklist tracks implementation of the production-grade, permission-aware G
 ### Object store
 
 - [x] Implement an in-memory store for reference tests.
-- [ ] Implement immutable loose-object writes.
+- [x] Implement immutable loose-object writes.
 - [ ] Implement transactional metadata and indexes.
-- [ ] Write through temporary files.
-- [ ] Flush file content before publication.
-- [ ] Atomically rename published object data.
+- [x] Write through temporary files.
+- [x] Flush file content before publication.
+- [x] Atomically rename published object data.
 - [ ] Commit metadata only after referenced objects are durable.
-- [ ] Implement streaming object reads.
+- [x] Implement streaming object reads.
 - [ ] Implement chunked large-object storage.
-- [ ] Deduplicate identical logical content.
+- [x] Deduplicate identical logical content.
 - [ ] Implement reachability indexes.
 - [ ] Implement graph generation numbers.
 - [ ] Add repository format version and migration framework.
