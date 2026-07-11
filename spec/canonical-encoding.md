@@ -33,15 +33,39 @@ The byte sequence hashed for an object is:
 "RGIT-OBJECT\0" || uvarint(kind) || uvarint(schema_version) || canonical_cbor
 ```
 
-The byte sequence signed for a purpose is:
+The byte sequence signed under frozen signature profile 0 is exactly:
 
 ```text
-"RGIT-SIGNATURE\0" || uvarint(purpose_length) || purpose_utf8 || object_id_bytes
+"RGIT-SIGNATURE\0" ||
+uvarint(signature_profile = 0) ||
+uvarint(signature_algorithm) ||
+uvarint(signature_purpose) ||
+signer_actor_id[16] ||
+uvarint(signing_key_id_length = 32) || signing_key_id[32] ||
+uvarint(object_kind) || uvarint(schema_version) ||
+uvarint(unsigned_cbor_length) || unsigned_cbor
 ```
 
-Kinds and signature purposes are registry values, not user strings. Unsigned LEB128
-is used for the shown varints and MUST use its shortest encoding. Hash computation is
-streaming and MUST verify that the payload itself declares the same kind and version.
+`unsigned_cbor` is the kind-specific canonical object map with only its assigned
+signature field omitted. Every other field, including the common header, remains.
+For a multi-signature object, every signature covers the same unsigned projection;
+the signature record itself supplies the algorithm, purpose, signer, and key ID bound
+by its preimage. The final object ID covers the complete object including signatures.
+
+Kinds, algorithms, and purposes are numeric closed registry values, not user strings.
+Unsigned LEB128 is used for every shown varint and length and MUST use its shortest
+encoding. The domain separator includes its trailing NUL byte. Implementations MAY
+stream these bytes. Before constructing an ID or signing preimage from untrusted
+canonical bytes, a decoder MUST verify that the payload declares the supplied kind
+and version. Typed schema encoders establish that correspondence by construction.
+Profile 0 assigns signing algorithm 0 to Ed25519 and purposes 0 through 4 to line
+state, operation, marker, release, and policy respectively.
+
+Profile 0 structurally treats an Ed25519 signing-key ID as an opaque, nonzero 32-byte
+value. The crypto milestone will freeze its derivation from public-key material and
+perform actual Ed25519 verification. Schema-0 vectors in this milestone use fixed
+nonzero record bytes only to pin structure and preimage construction; they are not
+proof that a signature or key binding has been cryptographically verified.
 
 ## Object ID binary and text form
 

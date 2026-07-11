@@ -1,8 +1,30 @@
 [package]
 name = "rethinking-git"
 version = "0.1.0"
+# The legacy prototype remains edition 2021 until it is extracted; production
+# workspace crates inherit edition 2024 below.
 edition = "2021"
+rust-version.workspace = true
 description = "A small jj-inspired source control prototype."
+
+[workspace]
+resolver = "3"
+members = ["crates/rgit-objects"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.85"
+
+[workspace.dependencies]
+blake3 = "1.8"
+data-encoding = "2.9"
+hex = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+thiserror = "2.0"
+unicode-normalization = "0.1"
+unicode-casefold = "=0.2.0"
 
 [[bin]]
 name = "rgit"
@@ -11,9 +33,9 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1.0"
 clap = { version = "4.5", features = ["derive"] }
-hex = "0.4"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+hex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 sha2 = "0.10"
 uuid = { version = "1.10", features = ["v4"] }
 walkdir = "2.5"

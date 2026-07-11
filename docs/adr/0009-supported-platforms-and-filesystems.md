@@ -24,7 +24,13 @@ macOS, and Windows. Architectures without CI artifacts are Tier 2 best-effort.
 
 Repositories default to the portable path profile in the object specification: UTF-8
 NFC segments, no traversal/separators/NUL, case-fold collision rejection, Windows
-reserved-name/trailing-dot-space rejection, and bounded component/path lengths.
+reserved-name/trailing-dot-space rejection, rejection of Windows-illegal ASCII and
+ASCII control characters (plus DEL), and bounded component/path lengths. The stricter
+DEL rule avoids an invisible terminal control character even though Windows itself
+does not reserve it. Collision checks apply to siblings in a single manifest, not to
+equal names at different directory levels. This profile is intentionally stricter
+than ext4/XFS/Btrfs, and canonical NFC plus sibling folding avoids names that APFS or
+default NTFS may normalize or compare as aliases.
 Canonical objects track only regular files, executable intent, safe symlinks,
 directories, subprojects, and secret references. Windows stores executable intent as
 metadata. Symlink materialization on Windows requires capability/support or produces

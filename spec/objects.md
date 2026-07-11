@@ -63,9 +63,13 @@ less restrictive. Derived-data rules are specified by the referenced policy.
 
 ### 2.5 Signature
 
-A signature record contains the signature algorithm, signer `ActorId`, signing-key
-ID, signature bytes, and signed-purpose string. Signatures cover a domain-separated
-canonical object or transaction statement, never a display serialization.
+A schema-0 signature record contains closed algorithm `Ed25519` (registry 0), signer
+`ActorId`, exactly 32 bytes of signing-key ID, exactly 64 signature bytes, and a
+closed numeric purpose. Its profile-0 preimage is defined in
+[canonical-encoding.md](canonical-encoding.md). A signed object's unsigned projection
+omits only its assigned signature field. Signature arrays MUST be nonempty, sorted by
+canonical signature-record encoding, and duplicate-free. Zero-filled placeholders,
+deferred signatures, and unsigned variants are not canonical production objects.
 
 ## 3. Common object header
 
@@ -188,11 +192,19 @@ description, and retarget updates.
 - monotonically increasing unsigned 64-bit generation;
 - previous line-state object ID;
 - integration, approval, release, and visibility policy references;
-- transaction operation ID and signature.
+- finalized transaction operation ID and signature.
 
 A line update is valid only when the expected generation and previous state both
 match. Generation overflow permanently freezes the line pending a format migration.
 The names `main`, `release`, and similar have no special storage semantics.
+
+The operation is finalized first. Its closed `line_advance` action embeds the complete
+intended line-state declaration: policy, stable line ID, display name, head snapshot,
+generation, optional previous state, and all four line policies. It never embeds the
+new `LineState` ID, transaction-operation ID, or line-state signature. The subsequent
+`LineState` points to that finalized operation and MUST exactly match one declaration.
+Generic before/after transitions MUST NOT name `LineState` as their `after` object.
+This ordering removes the otherwise unavoidable `LineState`/`Operation` ID cycle.
 
 ### 5.4 Typed marker
 
@@ -260,7 +272,7 @@ An `Operation` records every state-changing command:
 - operation ID derived from the canonical object;
 - ordered parent operation IDs;
 - actor, device, logical time, and informational wall time;
-- typed action records with before/after references;
+- closed typed actions: generic before/after transitions and line-advance declarations;
 - recovery or inverse payload references where reversal is supported;
 - public/redacted envelope and private/audit payload references;
 - policy, signature, and client implementation identity.
@@ -268,6 +280,17 @@ An `Operation` records every state-changing command:
 Operations form a DAG. A local journal transaction may contain several object writes
 and reference compare-and-swaps but publishes one operation as their audit boundary.
 Undo creates a new operation; existing operations are never deleted or rewritten.
+
+### 7.2.1 Bootstrap ordering
+
+Schema-0 never bootstraps trust with a zero, omitted, or deferred signature. A new
+repository must obtain its initial trusted actor/key binding from an authenticated
+external trust anchor, construct and fully sign the genesis identity/root-policy
+material, finalize the genesis operation, and only then sign a genesis `LineState`
+that names that operation. Identity and `RepositoryRoot` object kinds are assigned in
+the next registry slice; until those schemas exist, this object set alone cannot
+claim a self-contained production repository bootstrap. Implementations MUST reject
+attempts to treat structurally valid fixed test bytes as bootstrap trust.
 
 ### 7.3 Review, approval, and CI evidence
 
