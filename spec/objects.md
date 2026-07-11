@@ -1,7 +1,9 @@
 # RGit Object Model, Version 0
 
-Status: initial normative specification  
-Audience: object-store, graph, policy, crypto, workspace, sync, and compatibility implementers  
+Status: initial normative specification
+
+Audience: object-store, graph, policy, crypto, workspace, sync, and compatibility implementers
+
 Last updated: 2026-07-11
 
 ## 1. Purpose and conformance

@@ -1,6 +1,7 @@
 # Canonical Encoding and Object Identity, Version 0
 
-Status: initial normative specification  
+Status: initial normative specification
+
 Decision record: [ADR 0001](../docs/adr/0001-canonical-object-encoding.md)
 
 ## Encoding profile

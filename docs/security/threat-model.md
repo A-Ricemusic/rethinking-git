@@ -1,7 +1,9 @@
 # RGit Threat Model, Version 0
 
-Status: initial review baseline  
-Last updated: 2026-07-11  
+Status: initial review baseline
+
+Last updated: 2026-07-11
+
 Review cadence: at every milestone and before each security-sensitive release
 
 ## 1. Security objectives
