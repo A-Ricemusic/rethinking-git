@@ -1,0 +1,12 @@
+[package]
+name = "rgit-store"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "Verified object storage and atomic reference publication for RGit"
+license.workspace = true
+
+[dependencies]
+rgit-graph = { path = "../rgit-graph" }
+rgit-objects = { path = "../rgit-objects" }
+thiserror.workspace = true

@@ -94,7 +94,7 @@ This checklist tracks implementation of the production-grade, permission-aware G
 
 - [x] Convert the repository to a Cargo workspace.
 - [x] Create `rgit-objects`.
-- [ ] Create `rgit-store`.
+- [x] Create `rgit-store`.
 - [x] Create `rgit-graph`.
 - [ ] Create `rgit-operations`.
 - [ ] Create `rgit-cli`.
@@ -124,7 +124,7 @@ This checklist tracks implementation of the production-grade, permission-aware G
 
 ### Object store
 
-- [ ] Implement an in-memory store for reference tests.
+- [x] Implement an in-memory store for reference tests.
 - [ ] Implement immutable loose-object writes.
 - [ ] Implement transactional metadata and indexes.
 - [ ] Write through temporary files.

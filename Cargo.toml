@@ -10,7 +10,7 @@ license = "Apache-2.0 OR MIT"
 
 [workspace]
 resolver = "3"
-members = ["crates/rgit-graph", "crates/rgit-objects"]
+members = ["crates/rgit-graph", "crates/rgit-objects", "crates/rgit-store"]
 
 [workspace.package]
 edition = "2024"
