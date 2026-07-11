@@ -36,6 +36,16 @@ directories, subprojects, and secret references. Windows stores executable inten
 metadata. Symlink materialization on Windows requires capability/support or produces
 a typed non-materialized entry; it never silently becomes an ordinary file.
 
+The frozen schema-0 bounds are 255 bytes per NFC UTF-8 component and 1,023 bytes per
+slash-joined materialized relative path. Separator bytes count; a root prefix and
+terminating NUL do not. UTF-8 bytes are deterministic across hosts and conservatively
+bound Windows UTF-16 because a valid Unicode string has at most as many UTF-16 code
+units as UTF-8 bytes. This meets NTFS/Win32's 255-code-unit component bound, the
+smallest Tier-1 POSIX path profile, and remains well below extended-length Win32's
+total limit. Materializers still use directory handles or extended-length paths:
+there is no portable suffix limit that can compensate for an unbounded checkout-root
+prefix under legacy `MAX_PATH`.
+
 Repositories and SQLite databases must be on one local filesystem for atomic publish.
 NFS/SMB, FUSE providers, cloud-synchronized folders, FAT/exFAT, removable media, and
 case-sensitive APFS/NTFS variants are unsupported for production in 1.0 unless added
@@ -64,4 +74,5 @@ locking, case behavior, symlink behavior, and durability assumptions and fails s
 Build path corpus and materialization round-trip tests on every Tier 1 target; test
 case/normalization collisions, long paths, safe/escaping symlinks, permission failures,
 watcher loss, concurrent processes, crash publication, and disk-full recovery. Set
-precise supported OS version windows and path length limits in the release policy.
+precise supported OS version windows in the release policy. The schema-0 path limits
+are frozen above and in the object specification.

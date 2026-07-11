@@ -1,9 +1,14 @@
 use std::str::FromStr;
 
 use rgit_objects::{
-    ActorId, AnyObject, CanonicalLimits, CanonicalObject, Chunk, HashAlgorithm, Manifest,
-    ManifestEntry, ManifestTarget, ObjectId, PathSegment, PolicyId, PolicyRef, PortablePath,
-    Signature, SignatureAlgorithm, SignatureError, SignaturePurpose, Value, decode_canonical,
+    ActorId, AnyObject, BULK_MAX_BYTE_STRING_BYTES, BULK_MAX_COLLECTION_ITEMS, BULK_MAX_DEPTH,
+    BULK_MAX_ENCODED_BYTES, BULK_MAX_TEXT_STRING_BYTES, Blob, BlobContent, CanonicalLimits,
+    CanonicalObject, Chunk, ChunkProfile, ChunkRef, Conflict, ConflictRegion, HashAlgorithm,
+    METADATA_MAX_BYTE_STRING_BYTES, METADATA_MAX_COLLECTION_ITEMS, METADATA_MAX_DEPTH,
+    METADATA_MAX_ENCODED_BYTES, METADATA_MAX_TEXT_STRING_BYTES, Manifest, ManifestEntry,
+    ManifestTarget, ObjectId, ObjectKind, PORTABLE_COMPONENT_MAX_BYTES, PORTABLE_PATH_MAX_BYTES,
+    PathError, PathSegment, PolicyId, PolicyRef, PortablePath, Signature, SignatureAlgorithm,
+    SignatureError, SignaturePurpose, TypedObjectRef, Value, decode_canonical,
 };
 
 fn zero_id() -> ObjectId {
@@ -205,6 +210,265 @@ fn four_mibibyte_chunk_round_trips_only_under_bulk_profile() {
 }
 
 #[test]
+fn bulk_blob_envelope_is_not_limited_to_one_chunk_size() {
+    const CHUNK_COUNT: usize = 120_000;
+    let blob = Blob {
+        policy_ref: policy(),
+        byte_length: CHUNK_COUNT as u64,
+        content: BlobContent::Chunks(vec![
+            ChunkRef {
+                id: zero_id(),
+                plaintext_length: 1,
+            };
+            CHUNK_COUNT
+        ]),
+        chunk_profile: Some(ChunkProfile::fastcdc_v0()),
+        content_hint: None,
+    };
+    let encoded = blob.encode().unwrap();
+    assert!(encoded.len() > 4 * 1024 * 1024 + 64 * 1024);
+    assert!(encoded.len() <= BULK_MAX_ENCODED_BYTES);
+    assert!(AnyObject::decode(&encoded, CanonicalLimits::metadata()).is_err());
+    assert!(AnyObject::decode(&encoded, CanonicalLimits::bulk()).is_ok());
+}
+
+#[test]
+fn fastcdc_algorithm_and_profile_registry_is_closed() {
+    let blob = Blob {
+        policy_ref: policy(),
+        byte_length: 65_537,
+        content: BlobContent::Chunks(vec![ChunkRef {
+            id: zero_id(),
+            plaintext_length: 65_537,
+        }]),
+        chunk_profile: Some(ChunkProfile::fastcdc_v0()),
+        content_hint: None,
+    };
+    for profile_field in [0, 1] {
+        let mut value = decode_canonical(&blob.encode().unwrap(), CanonicalLimits::bulk()).unwrap();
+        let Value::Map(map) = &mut value else {
+            unreachable!()
+        };
+        let Value::Map(profile) = &mut map.iter_mut().find(|(key, _)| *key == 7).unwrap().1 else {
+            unreachable!()
+        };
+        profile
+            .iter_mut()
+            .find(|(key, _)| *key == profile_field)
+            .unwrap()
+            .1 = Value::Unsigned(1);
+        assert!(AnyObject::decode(&value.encode().unwrap(), CanonicalLimits::bulk()).is_err());
+    }
+}
+
+#[test]
+fn chunk_references_are_nonempty_and_profile_bounded() {
+    for length in [0_u64, rgit_objects::FASTCDC_V0_MAX_SIZE as u64 + 1] {
+        let blob = Blob {
+            policy_ref: policy(),
+            byte_length: length,
+            content: BlobContent::Chunks(vec![ChunkRef {
+                id: zero_id(),
+                plaintext_length: length,
+            }]),
+            chunk_profile: Some(ChunkProfile::fastcdc_v0()),
+            content_hint: None,
+        };
+        assert!(blob.encode().is_err());
+    }
+    let valid = Blob {
+        policy_ref: policy(),
+        byte_length: 70_000,
+        content: BlobContent::Chunks(vec![ChunkRef {
+            id: zero_id(),
+            plaintext_length: 70_000,
+        }]),
+        chunk_profile: Some(ChunkProfile::fastcdc_v0()),
+        content_hint: None,
+    };
+    let base = decode_canonical(&valid.encode().unwrap(), CanonicalLimits::bulk()).unwrap();
+    for length in [0_u64, rgit_objects::FASTCDC_V0_MAX_SIZE as u64 + 1] {
+        let mut value = base.clone();
+        let Value::Map(map) = &mut value else {
+            unreachable!()
+        };
+        map.iter_mut().find(|(key, _)| *key == 3).unwrap().1 = Value::Unsigned(length);
+        let Value::Array(chunks) = &mut map.iter_mut().find(|(key, _)| *key == 5).unwrap().1 else {
+            unreachable!()
+        };
+        let Value::Map(chunk) = &mut chunks[0] else {
+            unreachable!()
+        };
+        chunk.iter_mut().find(|(key, _)| *key == 1).unwrap().1 = Value::Unsigned(length);
+        assert!(AnyObject::decode(&value.encode().unwrap(), CanonicalLimits::bulk()).is_err());
+    }
+}
+
+#[test]
+fn blob_size_selects_exactly_one_canonical_representation() {
+    let one_byte_chunked = Blob {
+        policy_ref: policy(),
+        byte_length: 1,
+        content: BlobContent::Chunks(vec![ChunkRef {
+            id: zero_id(),
+            plaintext_length: 1,
+        }]),
+        chunk_profile: Some(ChunkProfile::fastcdc_v0()),
+        content_hint: None,
+    };
+    assert!(one_byte_chunked.encode().is_err());
+    assert!(
+        AnyObject::decode(
+            &one_byte_chunked
+                .canonical_value()
+                .unwrap()
+                .encode()
+                .unwrap(),
+            CanonicalLimits::bulk()
+        )
+        .is_err()
+    );
+
+    let oversized_inline = Blob {
+        policy_ref: policy(),
+        byte_length: 65_537,
+        content: BlobContent::Inline(vec![0; 65_537]),
+        chunk_profile: None,
+        content_hint: None,
+    };
+    assert!(oversized_inline.encode().is_err());
+    assert!(
+        AnyObject::decode(
+            &oversized_inline
+                .canonical_value()
+                .unwrap()
+                .encode()
+                .unwrap(),
+            CanonicalLimits::bulk()
+        )
+        .is_err()
+    );
+    for length in [0, 1, 65_535, 65_536] {
+        let built =
+            Blob::from_bytes_fastcdc_v0(policy(), &vec![0; length], HashAlgorithm::Sha256).unwrap();
+        assert!(matches!(built.blob.content, BlobContent::Inline(_)));
+    }
+    let built =
+        Blob::from_bytes_fastcdc_v0(policy(), &vec![0; 65_537], HashAlgorithm::Sha256).unwrap();
+    assert!(matches!(built.blob.content, BlobContent::Chunks(_)));
+}
+
+#[test]
+fn frozen_schema_zero_profiles_match_exported_limits_and_documentation() {
+    assert_eq!(
+        CanonicalLimits::metadata(),
+        CanonicalLimits {
+            max_bytes: METADATA_MAX_ENCODED_BYTES,
+            max_byte_string_bytes: METADATA_MAX_BYTE_STRING_BYTES,
+            max_string_bytes: METADATA_MAX_TEXT_STRING_BYTES,
+            max_depth: METADATA_MAX_DEPTH,
+            max_collection_items: METADATA_MAX_COLLECTION_ITEMS,
+        }
+    );
+    assert_eq!(
+        CanonicalLimits::bulk(),
+        CanonicalLimits {
+            max_bytes: BULK_MAX_ENCODED_BYTES,
+            max_byte_string_bytes: BULK_MAX_BYTE_STRING_BYTES,
+            max_string_bytes: BULK_MAX_TEXT_STRING_BYTES,
+            max_depth: BULK_MAX_DEPTH,
+            max_collection_items: BULK_MAX_COLLECTION_ITEMS,
+        }
+    );
+    assert_eq!(METADATA_MAX_ENCODED_BYTES, 1_048_576);
+    assert_eq!(METADATA_MAX_BYTE_STRING_BYTES, 262_144);
+    assert_eq!(METADATA_MAX_TEXT_STRING_BYTES, 65_536);
+    assert_eq!(METADATA_MAX_COLLECTION_ITEMS, 65_536);
+    assert_eq!(METADATA_MAX_DEPTH, 64);
+    assert_eq!(BULK_MAX_ENCODED_BYTES, 16_777_216);
+    assert_eq!(BULK_MAX_BYTE_STRING_BYTES, 4_194_304);
+    assert_eq!(BULK_MAX_TEXT_STRING_BYTES, 65_536);
+    assert_eq!(BULK_MAX_COLLECTION_ITEMS, 1_000_000);
+    assert_eq!(BULK_MAX_DEPTH, 64);
+
+    let normative = include_str!("../../../spec/canonical-encoding.md");
+    let format = include_str!("../FORMAT.md");
+    for required in [
+        "1,048,576 bytes (1 MiB)",
+        "16,777,216 bytes (16 MiB)",
+        "262,144 bytes (256 KiB)",
+        "4,194,304 bytes (4 MiB)",
+        "65,536 bytes (64 KiB)",
+        "1,000,000",
+        "Nested container depth | 64 | 64",
+    ] {
+        assert!(normative.contains(required), "spec omits {required}");
+    }
+    for required in [
+        "1 MiB encoded",
+        "16 MiB encoded",
+        "256 KiB byte string",
+        "4 MiB byte string",
+        "1,000,000 items",
+        "64 nested container levels",
+    ] {
+        assert!(format.contains(required), "FORMAT omits {required}");
+    }
+}
+
+#[test]
+fn schema_limits_cannot_be_relaxed_by_admission_callers() {
+    let unlimited = CanonicalLimits {
+        max_bytes: usize::MAX,
+        max_byte_string_bytes: usize::MAX,
+        max_string_bytes: usize::MAX,
+        max_depth: usize::MAX,
+        max_collection_items: usize::MAX,
+    };
+    let oversized_chunk = Chunk {
+        policy_ref: policy(),
+        bytes: vec![0; BULK_MAX_BYTE_STRING_BYTES + 1],
+    };
+    assert!(oversized_chunk.encode_with_limits(unlimited).is_err());
+
+    let invalid_profile = Blob {
+        policy_ref: policy(),
+        byte_length: 0,
+        content: BlobContent::Chunks(Vec::new()),
+        chunk_profile: Some(ChunkProfile {
+            algorithm: rgit_objects::ChunkAlgorithm::FastCdc,
+            version: 0,
+            min_size: 1,
+            target_size: 1024,
+            max_size: BULK_MAX_BYTE_STRING_BYTES as u64 + 1,
+        }),
+        content_hint: None,
+    };
+    assert!(invalid_profile.encode_with_limits(unlimited).is_err());
+
+    // A metadata object cannot borrow the larger bulk envelope merely because
+    // the caller supplied it.
+    let large_metadata = Value::Map(vec![
+        (
+            0,
+            Value::Unsigned(rgit_objects::ObjectKind::Manifest as u64),
+        ),
+        (1, Value::Unsigned(0)),
+        (
+            2,
+            Value::Map(vec![
+                (0, Value::Bytes(vec![0; 16])),
+                (1, Value::Bytes(zero_id().to_bytes())),
+            ]),
+        ),
+        (3, Value::Array(Vec::new())),
+        (99, Value::Bytes(vec![0; METADATA_MAX_ENCODED_BYTES])),
+    ]);
+    let bytes = large_metadata.encode_with_limits(unlimited).unwrap();
+    assert!(AnyObject::decode(&bytes, unlimited).is_err());
+}
+
+#[test]
 fn path_segments_reject_traversal_and_nonportable_names() {
     for name in ["", ".", "..", "a/b", "a\\b", "a\0b"] {
         assert!(PathSegment::new(name).is_err());
@@ -322,6 +586,128 @@ fn portable_paths_preserve_valid_unicode_and_scope_collisions_to_siblings() {
     };
     assert!(child.encode().is_ok());
     assert!(parent.encode().is_ok());
+}
+
+#[test]
+fn portable_path_byte_limits_accept_exact_boundaries_and_reject_one_byte_over() {
+    let ascii_at_limit = "a".repeat(PORTABLE_COMPONENT_MAX_BYTES);
+    let ascii_over_limit = "a".repeat(PORTABLE_COMPONENT_MAX_BYTES + 1);
+    assert!(PathSegment::new(&ascii_at_limit).is_ok());
+    assert!(PathSegment::new_portable(&ascii_at_limit).is_ok());
+    assert_eq!(
+        PathSegment::new(ascii_over_limit),
+        Err(PathError::SegmentTooLong)
+    );
+
+    // 63 four-byte scalars plus one three-byte scalar is exactly 255 UTF-8
+    // bytes but only 64 Unicode scalars and 127 UTF-16 code units.
+    let unicode_at_limit = format!("{}界", "🦀".repeat(63));
+    let unicode_over_limit = "🦀".repeat(64);
+    assert_eq!(unicode_at_limit.len(), PORTABLE_COMPONENT_MAX_BYTES);
+    assert_eq!(unicode_over_limit.len(), PORTABLE_COMPONENT_MAX_BYTES + 1);
+    assert!(PathSegment::new_portable(unicode_at_limit).is_ok());
+    assert_eq!(
+        PathSegment::new_portable(unicode_over_limit),
+        Err(PathError::SegmentTooLong)
+    );
+
+    let maximum_path = PortablePath::new(
+        (0..4)
+            .map(|_| PathSegment::new_portable(&ascii_at_limit).unwrap())
+            .collect(),
+    )
+    .unwrap();
+    assert_eq!(
+        maximum_path
+            .segments()
+            .iter()
+            .map(|segment| segment.as_str().len())
+            .sum::<usize>()
+            + maximum_path.segments().len()
+            - 1,
+        PORTABLE_PATH_MAX_BYTES
+    );
+
+    let overlong_segments = vec![
+        PathSegment::new_portable(&ascii_at_limit).unwrap(),
+        PathSegment::new_portable(&ascii_at_limit).unwrap(),
+        PathSegment::new_portable(&ascii_at_limit).unwrap(),
+        PathSegment::new_portable("a".repeat(PORTABLE_COMPONENT_MAX_BYTES - 1)).unwrap(),
+        PathSegment::new_portable("x").unwrap(),
+    ];
+    assert_eq!(
+        overlong_segments
+            .iter()
+            .map(|segment| segment.as_str().len())
+            .sum::<usize>()
+            + overlong_segments.len()
+            - 1,
+        PORTABLE_PATH_MAX_BYTES + 1
+    );
+    assert_eq!(
+        PortablePath::new(overlong_segments),
+        Err(PathError::PathTooLong)
+    );
+}
+
+#[test]
+fn conflict_decoder_enforces_component_and_aggregate_path_limits() {
+    let component = "🦀".repeat(63) + "界";
+    let path = PortablePath::new(
+        (0..4)
+            .map(|_| PathSegment::new_portable(&component).unwrap())
+            .collect(),
+    )
+    .unwrap();
+    let object_ref = TypedObjectRef {
+        kind: ObjectKind::Blob,
+        id: zero_id(),
+    };
+    let conflict = Conflict {
+        policy_ref: policy(),
+        base: object_ref.clone(),
+        left: object_ref.clone(),
+        right: object_ref,
+        path,
+        conflict_kind: rgit_objects::ConflictKind::Content,
+        merge_driver: "text".to_owned(),
+        merge_driver_version: "1".to_owned(),
+        regions: vec![ConflictRegion { start: 0, end: 1 }],
+    };
+    let encoded = conflict.encode().unwrap();
+    assert!(AnyObject::decode(&encoded, CanonicalLimits::metadata()).is_ok());
+
+    let mut overlong_path = decode_canonical(&encoded, CanonicalLimits::metadata()).unwrap();
+    if let Value::Map(fields) = &mut overlong_path {
+        let (_, Value::Array(segments)) = fields.iter_mut().find(|(key, _)| *key == 6).unwrap()
+        else {
+            panic!("conflict path field must be an array");
+        };
+        *segments = vec![
+            Value::Text("a".repeat(PORTABLE_COMPONENT_MAX_BYTES)),
+            Value::Text("a".repeat(PORTABLE_COMPONENT_MAX_BYTES)),
+            Value::Text("a".repeat(PORTABLE_COMPONENT_MAX_BYTES)),
+            Value::Text("a".repeat(PORTABLE_COMPONENT_MAX_BYTES - 1)),
+            Value::Text("x".to_owned()),
+        ];
+    } else {
+        panic!("conflict must encode as a map");
+    }
+    let encoded_overlong_path = overlong_path.encode().unwrap();
+    assert!(AnyObject::decode(&encoded_overlong_path, CanonicalLimits::metadata()).is_err());
+
+    let mut overlong_segment = decode_canonical(&encoded, CanonicalLimits::metadata()).unwrap();
+    if let Value::Map(fields) = &mut overlong_segment {
+        let (_, Value::Array(segments)) = fields.iter_mut().find(|(key, _)| *key == 6).unwrap()
+        else {
+            panic!("conflict path field must be an array");
+        };
+        segments[0] = Value::Text("a".repeat(PORTABLE_COMPONENT_MAX_BYTES + 1));
+    } else {
+        panic!("conflict must encode as a map");
+    }
+    let encoded_overlong_segment = overlong_segment.encode().unwrap();
+    assert!(AnyObject::decode(&encoded_overlong_segment, CanonicalLimits::metadata()).is_err());
 }
 
 #[test]

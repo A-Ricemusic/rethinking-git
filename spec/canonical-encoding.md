@@ -84,7 +84,31 @@ the current authorized view.
 ## Verification rules
 
 Decoders enforce nesting, allocation, and collection limits before allocation. The
-default maximum canonical metadata object is 16 MiB; chunks carry bulk content.
+following schema-0 admission profiles are frozen. A limit is inclusive; a value at
+the listed maximum is accepted. “Text string” is measured in UTF-8 bytes, and
+“collection items” applies independently to each array or map.
+
+| Maximum | Metadata objects | Chunk and Blob objects |
+| --- | ---: | ---: |
+| Encoded canonical object | 1,048,576 bytes (1 MiB) | 16,777,216 bytes (16 MiB) |
+| Individual byte string | 262,144 bytes (256 KiB) | 4,194,304 bytes (4 MiB) |
+| Individual text string | 65,536 bytes (64 KiB) | 65,536 bytes (64 KiB) |
+| Array or map items | 65,536 | 1,000,000 |
+| Nested container depth | 64 | 64 |
+
+Metadata uses the smaller profile because graph objects are routinely decoded while
+walking attacker-influenced DAGs; the per-string and collection caps bound allocation
+amplification within the 1 MiB envelope. Chunk and Blob use the bulk profile. A Chunk
+payload and a chunk profile's declared maximum are each limited to 4 MiB, matching
+the versioned content-defined chunking ceiling. The 16 MiB encoded envelope is mainly
+for Blob chunk-reference arrays; it does not permit a larger individual payload.
+
+Implementations MAY impose stricter operational limits, in which case objects above
+those limits are unavailable in that deployment. They MUST NOT admit a schema-0
+object above these ceilings. Changing a ceiling alters the schema-0 compatibility
+contract and requires a new canonical profile or object schema decision; it must not
+be silently changed in a patch release.
+
 Implementations MUST decode, re-encode, compare bytes, validate schema invariants, and
 then verify the digest before admitting untrusted data to durable storage.
 

@@ -19,12 +19,33 @@ fsynced, atomically renamed, then indexed transactionally. Packs are never modif
 compaction writes replacements and retires old packs after reader leases and a recovery
 grace period. Pack indexes are independently checksummed and rebuildable by scanning.
 
-Blob payloads through 64 KiB may be inline. Larger payloads use deterministic FastCDC
-content-defined chunking targeting 1 MiB average chunks, initially bounded to 256 KiB
-minimum and 4 MiB maximum. Chunk parameters are stored/versioned in the blob schema.
+Blob payloads through and including 64 KiB MUST be inline. Larger payloads MUST use deterministic FastCDC
+profile 0 with an exact 1 MiB target, 256 KiB minimum, and 4 MiB maximum. Chunk
+parameters are stored/versioned in the blob schema and must equal this profile.
 Chunks and complete blob recipes are content-addressed logical objects. Compression
 and authenticated encryption happen per stored record/envelope after canonical ID
 calculation. Transfers can resume only at verified record/chunk boundaries.
+
+FastCDC schema-0 algorithm/profile 0 is frozen as follows:
+
+- gear seed `0x7267697466636463`; entry `G[i]` is SplitMix64 of
+  `seed + (i + 1) * 0x9e3779b97f4a7c15`, using xor-shifts 30/27/31 and multipliers
+  `0xbf58476d1ce4e5b9` and `0x94d049bb133111eb`, with wrapping `u64` arithmetic;
+- early mask `(1 << 21) - 1`, late mask `(1 << 19) - 1`, normalization level 1;
+- begin a chunk with rolling value zero. After appending a byte, do nothing while
+  length is below 256 KiB. At and above that length update
+  `H = rotate_left(H, 1) + G[byte]` using wrapping `u64` addition;
+- use the early mask below 1 MiB and late mask at or above 1 MiB. Cut after the
+  current byte when `H & mask == 0`, or unconditionally at 4 MiB, then reset `H`;
+- finalization emits one pending nonempty chunk even below the minimum. Empty input
+  emits no chunks and is represented as an empty inline Blob. Complete content at or
+  below 64 KiB is inline; larger content uses the FastCDC recipe;
+- every ChunkRef length is in `1..=4 MiB`; references remain in stream order and
+  their checked sum must equal Blob length. Reader buffer segmentation must not
+  affect boundaries, Chunk IDs, the Blob recipe, or Blob ID.
+
+`crates/rgit-objects/tests/vectors/fastcdc-v0.json` is the cross-platform known-answer
+set for empty, small, repetitive, periodic, and deterministic pseudorandom inputs.
 
 ## Consequences
 
@@ -44,7 +65,7 @@ calculation. Transfers can resume only at verified record/chunk boundaries.
 
 ## Verification and open work
 
-Benchmark parameters before format freeze; test power loss at every publish/retire
-step, truncated/corrupt packs, hostile compression ratios, chunk-boundary determinism,
-leases, and policy-safe deduplication. Exact pack record/table layout is deferred to a
-Milestone 1 format specification.
+Test power loss at every publish/retire step, truncated/corrupt packs, hostile
+compression ratios, leases, and policy-safe deduplication. Exact pack record/table
+layout is deferred to a Milestone 1 format specification. FastCDC parameters and
+boundary behavior are format-frozen and may change only under a new profile number.

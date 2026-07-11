@@ -92,35 +92,35 @@ This checklist tracks implementation of the production-grade, permission-aware G
 
 ### Workspace refactor
 
-- [ ] Convert the repository to a Cargo workspace.
-- [ ] Create `rgit-objects`.
+- [x] Convert the repository to a Cargo workspace.
+- [x] Create `rgit-objects`.
 - [ ] Create `rgit-store`.
-- [ ] Create `rgit-graph`.
+- [x] Create `rgit-graph`.
 - [ ] Create `rgit-operations`.
 - [ ] Create `rgit-cli`.
 - [ ] Create `rgit-testkit`.
 - [ ] Enforce intended crate dependency direction.
 - [ ] Move orchestration out of library code.
 - [ ] Replace direct library printing with typed results.
-- [ ] Preserve current CLI behavior during the refactor.
+- [x] Preserve current CLI behavior during the refactor.
 
 ### Canonical objects
 
-- [ ] Define versioned object IDs.
-- [ ] Define canonical blob encoding.
-- [ ] Define canonical path segments and normalization.
-- [ ] Define manifest entry types.
-- [ ] Define canonical manifest ordering.
-- [ ] Define snapshot schema.
-- [ ] Define change schema.
-- [ ] Define line schema and generation counter.
-- [ ] Define conflict schema.
-- [ ] Define operation schema.
-- [ ] Define policy-label reference schema.
-- [ ] Add schema-version fields.
-- [ ] Add canonical encoding test vectors.
+- [x] Define versioned object IDs.
+- [x] Define canonical blob encoding.
+- [x] Define canonical path segments and normalization.
+- [x] Define manifest entry types.
+- [x] Define canonical manifest ordering.
+- [x] Define snapshot schema.
+- [x] Define change schema.
+- [x] Define line schema and generation counter.
+- [x] Define conflict schema.
+- [x] Define operation schema.
+- [x] Define policy-label reference schema.
+- [x] Add schema-version fields.
+- [x] Add canonical encoding test vectors.
 - [ ] Add cross-platform decode tests.
-- [ ] Add debug JSON rendering for canonical objects.
+- [x] Add debug JSON rendering for canonical objects.
 
 ### Object store
 
@@ -140,10 +140,10 @@ This checklist tracks implementation of the production-grade, permission-aware G
 
 ### Verification and recovery
 
-- [ ] Implement object digest verification.
+- [x] Implement object digest verification.
 - [ ] Implement reference integrity verification.
 - [ ] Detect missing referenced objects.
-- [ ] Detect invalid or unsupported schema versions.
+- [x] Detect invalid or unsupported schema versions.
 - [ ] Produce non-destructive repair reports.
 - [ ] Add transaction failure-injection points.
 - [ ] Test process termination between transaction phases.

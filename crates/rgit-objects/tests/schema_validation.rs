@@ -166,9 +166,18 @@ fn operation_reference_roles_preserve_before_and_after_types() {
         (ReferenceRole::OperationParent, Some(ObjectKind::Operation)),
         (ReferenceRole::OperationBefore, Some(ObjectKind::Blob)),
         (ReferenceRole::OperationAfter, Some(ObjectKind::Snapshot)),
-        (ReferenceRole::OperationInversePayload, None),
-        (ReferenceRole::OperationPublicEnvelope, None),
-        (ReferenceRole::OperationPrivatePayload, None),
+        (
+            ReferenceRole::OperationInversePayload,
+            Some(ObjectKind::OperationPayload),
+        ),
+        (
+            ReferenceRole::OperationPublicEnvelope,
+            Some(ObjectKind::OperationPayload),
+        ),
+        (
+            ReferenceRole::OperationPrivatePayload,
+            Some(ObjectKind::OperationPayload),
+        ),
     ] {
         assert!(
             edges
@@ -302,10 +311,11 @@ fn policy_reference_extraction_includes_declassification_dependencies() {
     let edges = decode(&policy()).unwrap().references().unwrap();
     assert!(edges.iter().any(|edge| {
         edge.role == ReferenceRole::PolicyDeclassificationRequirement
-            && edge.expected_kind.is_none()
+            && edge.expected_kind == Some(ObjectKind::PolicyDecisionEvidence)
     }));
     assert!(edges.iter().any(|edge| {
-        edge.role == ReferenceRole::PolicyKeyEnvelopeSet && edge.expected_kind.is_none()
+        edge.role == ReferenceRole::PolicyKeyEnvelopeSet
+            && edge.expected_kind == Some(ObjectKind::KeyEnvelopeSet)
     }));
 }
 

@@ -92,7 +92,8 @@ critical fields make the object unsupported.
 A `Blob` represents logical file bytes:
 
 - `byte_length`: unsigned 64-bit length;
-- exactly one of `inline_bytes` (up to 64 KiB) or `chunks`;
+- exactly one canonical representation selected by length: `inline_bytes` MUST be
+  used for 0 through 65,536 bytes, and `chunks` MUST be used at 65,537 bytes and above;
 - `chunks`: ordered `ChunkRef` values containing a chunk ID and plaintext length;
 - optional non-authoritative `content_hint` such as MIME type;
 - `policy_ref`.
@@ -100,6 +101,11 @@ A `Blob` represents logical file bytes:
 A `Chunk` contains raw bytes and has its own content-derived object ID. Chunking is a
 storage and streaming concern; concatenating chunk plaintext MUST produce exactly
 `byte_length` bytes. A blob ID is independent of storage compression and encryption.
+Schema-0 FastCDC algorithm/profile 0 is the frozen state machine in ADR 0004: 256 KiB
+minimum, 1 MiB target, 4 MiB maximum, normalization level 1, fixed gear derivation
+and masks. Each ChunkRef length is nonzero and no greater than the profile maximum;
+the ordered checked sum equals Blob length. Empty content uses the inline empty
+representation. Input read segmentation MUST NOT change boundaries or object IDs.
 
 ### 4.2 Secret reference
 
@@ -121,7 +127,21 @@ Paths are arrays of normalized UTF-8 `PathSegment` values, not host path strings
 Segments MUST be valid UTF-8 in Unicode NFC, non-empty, and must not be `.`, `..`,
 contain NUL, `/`, or `\\`. Absolute paths and platform prefixes are invalid. The
 portable profile additionally rejects Windows reserved names, trailing spaces/dots,
-and paths that collide under Unicode default case folding.
+and paths that collide under Unicode default case folding. Schema 0 limits every
+segment to 255 bytes in its canonical UTF-8 encoding and a materialized relative path
+to 1,023 UTF-8 bytes, counting one `/` separator byte between adjacent segments (and
+no leading separator or trailing NUL). The root path is the empty segment array and
+has encoded path length zero. These limits are evaluated on the NFC text before host
+path conversion and are therefore identical on every platform.
+
+The byte bounds are deliberately conservative for Win32: for valid Unicode, the
+number of UTF-16 code units is never greater than its UTF-8 byte length. A component
+accepted at 255 UTF-8 bytes therefore cannot exceed NTFS/Win32's 255-code-unit
+component limit, including non-BMP text. The total bound fits the smallest Tier-1
+POSIX `PATH_MAX` profile as a relative path and is far below extended-length Win32's
+32,767-code-unit ceiling. Materializers MUST still use relative/handle-based traversal
+or extended-length Win32 paths because an arbitrarily long checkout-root prefix cannot
+be made safe by constraining the repository-relative suffix.
 
 Repositories declare the portable profile by default. A non-portable repository MUST
 record its filesystem profile and may be impossible to materialize on another host.
@@ -287,10 +307,14 @@ Schema-0 never bootstraps trust with a zero, omitted, or deferred signature. A n
 repository must obtain its initial trusted actor/key binding from an authenticated
 external trust anchor, construct and fully sign the genesis identity/root-policy
 material, finalize the genesis operation, and only then sign a genesis `LineState`
-that names that operation. Identity and `RepositoryRoot` object kinds are assigned in
-the next registry slice; until those schemas exist, this object set alone cannot
-claim a self-contained production repository bootstrap. Implementations MUST reject
-attempts to treat structurally valid fixed test bytes as bootstrap trust.
+that names that operation. `RepositoryRoot` then names the fully signed root Policy,
+a sorted nonempty set of bootstrap Identities, the epoch-zero KeyEnvelopeSet, the
+finalized genesis Operation, and a sorted nonempty set of genesis LineStates. A
+bootstrap Identity is version zero and uniquely omits policy, previous identity, and
+activation operation; a bootstrap KeyEnvelopeSet is epoch zero and uniquely omits
+policy. Every non-bootstrap instance requires those links. The root is signed last
+by the externally anchored identities. Implementations MUST reject nonzero bootstrap
+omissions and any back-reference that creates a root/policy/identity hash cycle.
 
 ### 7.3 Review, approval, and CI evidence
 
@@ -336,12 +360,32 @@ represents the object. Readers preserve unknown non-critical extensions byte-for
 when proxying but MUST NOT reinterpret them. Hash or encoding changes create new IDs;
 repository migration records old-to-new mappings in signed migration objects.
 
+Schema 0 assigns logical kinds 14--31 to RepositoryRoot, Identity,
+GroupMembership, KeyEnvelopeSet, ChangeRelation, ConflictResolution, four distinct
+evidence kinds, ProjectionRules, ProjectionProof, BuildProvenance, Artifact,
+OperationPayload, View, Migration, and Ruleset. Their frozen numeric fields and
+closed subregistries are normative in `crates/rgit-objects/FORMAT.md`. Releases name
+a typed ProjectionProof object rather than embedding proof bytes. Operation inverse,
+public-redaction, and private-audit fields name OperationPayload objects. Migration
+mappings are sorted, duplicate-free, and one-to-one; evidence always binds an exact
+Snapshot and Ruleset. `StorageEnvelope` remains outside this logical registry.
+All schema-0 algorithm, suite, kind, purpose, and payload-schema namespaces are
+closed and numerically frozen in `crates/rgit-objects/FORMAT.md`; readers MUST reject
+unknown values. Registered constraint and payload fields contain canonical CBOR maps,
+not arbitrary byte extensions. Identity signing/encryption key records are separately
+sorted, duplicate-free, restricted to their registered algorithms, and use key IDs
+that are unique across both arrays. Ed25519 and X25519 public key material is exactly
+32 bytes. A nonbootstrap Identity requires all three of its
+exact policy, previous Identity, and activation Operation links. Views contain at
+most one generation record per stable LineId.
+
 ## 11. Explicit non-goals and open questions
 
 Schema 0 does not define remote protocol framing, a policy language with conditions,
 cross-repository object identity, semantic merge formats, transparency-log anchoring,
 or confidential-computing enforcement. These require later specifications and ADRs.
 
-Before schema 0 is frozen, test vectors must settle numeric field assignments, maximum
-object/reference counts, projection-proof construction, group-membership evaluation
-time, and whether inline blobs are worth their additional representation.
+Later profiles must still settle the cryptographic construction carried by a
+ProjectionProof, group-membership evaluation time, and registered constraint
+languages. Those decisions may assign new closed algorithm values but MUST NOT alter
+schema-0 kind, field, enum, or signature-purpose assignments.

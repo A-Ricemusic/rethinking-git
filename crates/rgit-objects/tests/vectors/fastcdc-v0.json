@@ -1,0 +1,173 @@
+[
+  {
+    "name": "empty",
+    "input_length": 0,
+    "input_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "chunk_lengths": [],
+    "chunk_sha256_ids": [],
+    "blob_sha256_id": "rg0_00920fqk2c0v1kpb3rck9v0pi2mjqd3kq0efgpd5jrjtir2qbs66klh5",
+    "blob_blake3_id": "rg0_00f21bb22h6uiikmppmlecbhnq5e9lra2glgpl1mrpg4vc5parqu0j6a"
+  },
+  {
+    "name": "inline-1",
+    "input_length": 1,
+    "input_sha256": "559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd",
+    "chunk_lengths": [
+      1
+    ],
+    "chunk_sha256_ids": [],
+    "blob_sha256_id": "rg0_00920daia7iqbjuujuge7j292r06l4iciubk770lgtfgopjqqhflusaj",
+    "blob_blake3_id": "rg0_00f20vf6kqncpclem20bnmk82obgdqti8bjv0vmj8sj2tcb3nsadtgp7"
+  },
+  {
+    "name": "inline-65535",
+    "input_length": 65535,
+    "input_sha256": "9f797b60edaf440d5831da53c35f4d4847a2f55adc64cfe887a7bcfcd9eca495",
+    "chunk_lengths": [
+      65535
+    ],
+    "chunk_sha256_ids": [],
+    "blob_sha256_id": "rg0_009201rq1u0hfjhjoqan8v031blsan3fcnd4oalfcblnkkqc9griakba",
+    "blob_blake3_id": "rg0_00f21bd56sudfn50gtvg5ka89lm9i21a8b76iolgtc6s0hcp9ok072k7"
+  },
+  {
+    "name": "inline-65536",
+    "input_length": 65536,
+    "input_sha256": "de2f256064a0af797747c2b97505dc0b9f3df0de4f489eac731c23ae9ca9cc31",
+    "chunk_lengths": [
+      65536
+    ],
+    "chunk_sha256_ids": [],
+    "blob_sha256_id": "rg0_00921vpgpjksbbhq503h4h8qk666qs3gegv72t24dq5qjdoe1df3vga3",
+    "blob_blake3_id": "rg0_00f20tonqpc90p3pk7hp5h5dmiekpvlr8554iatjj8ip0c1pioagqdv6"
+  },
+  {
+    "name": "chunked-65537",
+    "input_length": 65537,
+    "input_sha256": "3266304f31be278d06c3bd3eb9aa3e00c59bedec0a890de466568b0b90b0e01f",
+    "chunk_lengths": [
+      65537
+    ],
+    "chunk_sha256_ids": [
+      "rg0_00920p8p9h4j3d16omb254oqgh4cqifq05tgeuuv6775l7mnpbqepr3v"
+    ],
+    "blob_sha256_id": "rg0_00920uvnt7rbdrls7ffhumou98ut5nj8f2j2dhm888h1th518p8rtsgj",
+    "blob_blake3_id": "rg0_00f21pls9210cvj066blhu7cujpfhm8u8d3qsfeaodgvo19go2icjka1"
+  },
+  {
+    "name": "profile-min-256kib",
+    "input_length": 262144,
+    "input_sha256": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90",
+    "chunk_lengths": [
+      262144
+    ],
+    "chunk_sha256_ids": [
+      "rg0_009200cgj6gke807hsb92dpl348cjbjgndds6k9a7ipeucs1he0iosa6"
+    ],
+    "blob_sha256_id": "rg0_00921fnoaqe1hhfrc840d0mg69srn1ks0qgjopd8al6764m27aj7s87j",
+    "blob_blake3_id": "rg0_00f21179mtjf8lskuvldec5ajf5ptmtp4jfvbgmchqtuta0vngdmnuph"
+  },
+  {
+    "name": "profile-target-1mib",
+    "input_length": 1048576,
+    "input_sha256": "30e14955ebf1352266dc2ff8067e68104607e750abb9d3b36582b8af909fcb58",
+    "chunk_lengths": [
+      1048576
+    ],
+    "chunk_sha256_ids": [
+      "rg0_009214kjhddhi5fm1t756s19jijn1s5026q43sikrejbubfpkj6lbf0i"
+    ],
+    "blob_sha256_id": "rg0_00921h2jsa4bbp8hd2vj03ogujtavjbbtbj8eg597gv68bs6ailaddf8",
+    "blob_blake3_id": "rg0_00f20m2asm57q692kgqs6ukpqapeegjiqhg7drc8idia1i6s92uol15f"
+  },
+  {
+    "name": "forced-max-boundary-4mib",
+    "input_length": 4194304,
+    "input_sha256": "2fa197228d4a52847048c1f37a9245bd9d95698f201f3fda83a8bbeda4975d39",
+    "chunk_lengths": [
+      4194304
+    ],
+    "chunk_sha256_ids": [
+      "rg0_00920rupseqq0s2n1pvnl0vmclv80ntnh55pgvrvorbuql9os9ebev8h"
+    ],
+    "blob_sha256_id": "rg0_00921bd15f85kplbvf88qk8kf3cbi8fvvppssu9ufb2qe8kqs2ohoes8",
+    "blob_blake3_id": "rg0_00f20j2femi0jj0i958ut91p6397grho1rqnumkd8fcfm61pvmsgp9sq"
+  },
+  {
+    "name": "zeroes-5mib",
+    "input_length": 5242880,
+    "input_sha256": "c036cbb7553a909f8b8877d4461924307f27ecb66cff928eeeafd569c3887e29",
+    "chunk_lengths": [
+      1293742,
+      1293742,
+      1293742,
+      1293742,
+      67912
+    ],
+    "chunk_sha256_ids": [
+      "rg0_009202ivbhhra90gv0j89kbe268l3bcki47anptr446kl7gtu79fjdev",
+      "rg0_009202ivbhhra90gv0j89kbe268l3bcki47anptr446kl7gtu79fjdev",
+      "rg0_009202ivbhhra90gv0j89kbe268l3bcki47anptr446kl7gtu79fjdev",
+      "rg0_009202ivbhhra90gv0j89kbe268l3bcki47anptr446kl7gtu79fjdev",
+      "rg0_009207gmbnhgb9r52gofubtm8leir9aqthid6882cb63trsucldqts41"
+    ],
+    "blob_sha256_id": "rg0_009214phmsfri0p1s2qhlp9ok5o0aibl3hh2fh3ka1gns84kppcacqhj",
+    "blob_blake3_id": "rg0_00f21reghk3n246intkpae2sdrflmqe41eb5512m28gqo4autv95ct6f"
+  },
+  {
+    "name": "ramp-8mib",
+    "input_length": 8388608,
+    "input_sha256": "7d212b9c884f5c77896de960ae17cc341cda43b14d6a971f34ca29ebd4badf7f",
+    "chunk_lengths": [
+      1292751,
+      1150789,
+      1072531,
+      1101998,
+      1695983,
+      273153,
+      1114934,
+      380823,
+      305646
+    ],
+    "chunk_sha256_ids": [
+      "rg0_00920n5grvk1csnt8f3t2ijpu11pbq2p6phugrrt3t83gq4lmbir7pg4",
+      "rg0_009204oalou3vqfggagpjb4ft1l39s775134legjbeji6ov6i6pid8fo",
+      "rg0_00920qmel9k6l213ev33h85ad1rvcar11514kqc7dgovslp1g6abgi0g",
+      "rg0_00920hsoag330sjhi3dqug8cnosg183clerashkrmnahd6i76bt5butg",
+      "rg0_009206u0um7o97pg8oqs96i989v5t1117ne2mav988lr57i6h7jn65p4",
+      "rg0_00921ssuqnr9sjufu0obojt7raiui0rlbnvfh868cml443i3a1bjb552",
+      "rg0_009214o8evq9pq9sh6b7f85b1vqbqc73uu54qdnbes0dn3o4uat7efdp",
+      "rg0_00921thdmn10kd0hghrh5fi3gnvkqc60sdmkh70mfdqq1vk4uekfqkqk",
+      "rg0_00921u2aeva8dlrfq6o768uq50qlstv0pfpgorrhjmlbk2s9cfl49onn"
+    ],
+    "blob_sha256_id": "rg0_00921q6s48hacu8b5rvv5h8p0kk52i05n331oc9urpfnucruopioaes3",
+    "blob_blake3_id": "rg0_00f20f2l9it39geva60076p38u0gc8p2s3igqfdu0ppai3r2bpohm69j"
+  },
+  {
+    "name": "xorshift-10mib",
+    "input_length": 10485760,
+    "input_sha256": "0a7b32efc4c260a01967dfc1d6c0537490f8db4b6cb003673a4d0d3a84b1a1fd",
+    "chunk_lengths": [
+      554662,
+      1247386,
+      1699020,
+      1772401,
+      1668841,
+      1314454,
+      1066517,
+      1162479
+    ],
+    "chunk_sha256_ids": [
+      "rg0_00921olgd2ppiuq1v40gts2b6dr9j7res2jiv4o1trchqh4b1u4jf8p3",
+      "rg0_00921ssricfha884vh1oghmviocn2u4q6bnntobj3a8dn8voqn3283eu",
+      "rg0_00921o8hbr2vj63j3esbbmgm6k7ir0dkbbqoun1ncusq23vsnlqhtfou",
+      "rg0_00921netmv1iejf8b46oolfkhdgj52c5psol1oq9kov24gl0uca209vo",
+      "rg0_00920vau9mmovojrgk6i66070sf5ucfbpkisjt07tjo7dpmakdk9ed5t",
+      "rg0_00921slor7s13frgtnaabvf77tdi935j2rmike6m40aaj66uf4rb6132",
+      "rg0_00921127vbfi5gihg6h8pmchqep6vrunpfd09aadt3eig91hg8ihdllu",
+      "rg0_0092018pahjokhp25edtcs344rokprqcmsgef1lsgnprh71cirts902v"
+    ],
+    "blob_sha256_id": "rg0_00920qajdkdv9gj3n9gjiuabda1rtkof9cp4p74838jv1epr90dkos94",
+    "blob_blake3_id": "rg0_00f20ialpnuo8bgkjo1nvr5n4qfqbug16lfg765fn3fg5jm202a51ja7"
+  }
+]

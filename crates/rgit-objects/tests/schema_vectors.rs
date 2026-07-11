@@ -266,7 +266,7 @@ fn fixture_objects() -> Vec<(&'static str, ObjectKind, Vec<u8>)> {
                 PathSegment::new_portable("lib.rs").unwrap(),
             ])
             .unwrap(),
-            conflict_kind: 1,
+            conflict_kind: rgit_objects::ConflictKind::AddAdd,
             merge_driver: "text".to_owned(),
             merge_driver_version: "1".to_owned(),
             regions: vec![ConflictRegion { start: 0, end: 2 }],
@@ -298,7 +298,7 @@ fn fixture_objects() -> Vec<(&'static str, ObjectKind, Vec<u8>)> {
             audience_policy: policy.clone(),
             projection_rules: oid.clone(),
             projected_root: oid.clone(),
-            projection_proof: vec![0x99],
+            projection_proof: oid.clone(),
             version_identifier: "v1.0.0".to_owned(),
             release_notes_blob: None,
             build_provenance: vec![],
@@ -324,7 +324,7 @@ fn fixture_objects() -> Vec<(&'static str, ObjectKind, Vec<u8>)> {
                 capabilities: vec![Capability::Discover, Capability::Read],
             }],
             redaction_mode: RedactionMode::Omit,
-            derivation_rule: 0,
+            derivation_rule: rgit_objects::DerivationRule::NoDerivation,
             declassification_requirements: vec![],
             key_epoch: u64::MAX,
             key_envelope_set: oid,
@@ -389,7 +389,7 @@ fn generate_schema_vectors() {
 }
 
 #[test]
-fn provisional_object_kind_assignments_are_exhaustively_pinned() {
+fn frozen_object_kind_assignments_are_exhaustively_pinned() {
     let expected = [
         ObjectKind::Chunk,
         ObjectKind::Blob,
@@ -404,11 +404,29 @@ fn provisional_object_kind_assignments_are_exhaustively_pinned() {
         ObjectKind::Marker,
         ObjectKind::Release,
         ObjectKind::Policy,
+        ObjectKind::RepositoryRoot,
+        ObjectKind::Identity,
+        ObjectKind::GroupMembership,
+        ObjectKind::KeyEnvelopeSet,
+        ObjectKind::ChangeRelation,
+        ObjectKind::ConflictResolution,
+        ObjectKind::ReviewEvidence,
+        ObjectKind::ApprovalEvidence,
+        ObjectKind::CiEvidence,
+        ObjectKind::PolicyDecisionEvidence,
+        ObjectKind::ProjectionRules,
+        ObjectKind::ProjectionProof,
+        ObjectKind::BuildProvenance,
+        ObjectKind::Artifact,
+        ObjectKind::OperationPayload,
+        ObjectKind::View,
+        ObjectKind::Migration,
+        ObjectKind::Ruleset,
     ];
-    for (number, kind) in (1_u64..=13).zip(expected) {
+    for (number, kind) in (1_u64..=31).zip(expected) {
         assert_eq!(kind as u64, number);
         assert_eq!(ObjectKind::try_from(number), Ok(kind));
     }
     assert_eq!(ObjectKind::try_from(0), Err(0));
-    assert_eq!(ObjectKind::try_from(14), Err(14));
+    assert_eq!(ObjectKind::try_from(32), Err(32));
 }

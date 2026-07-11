@@ -28,33 +28,74 @@ pub struct CanonicalLimits {
     pub max_collection_items: usize,
 }
 
+/// Schema-0 metadata profile: maximum encoded canonical object size.
+pub const METADATA_MAX_ENCODED_BYTES: usize = 1024 * 1024;
+/// Schema-0 metadata profile: maximum individual CBOR byte string size.
+pub const METADATA_MAX_BYTE_STRING_BYTES: usize = 256 * 1024;
+/// Schema-0 metadata profile: maximum individual CBOR text string UTF-8 size.
+pub const METADATA_MAX_TEXT_STRING_BYTES: usize = 64 * 1024;
+/// Schema-0 metadata profile: maximum nested container depth.
+pub const METADATA_MAX_DEPTH: usize = 64;
+/// Schema-0 metadata profile: maximum items in one array or map.
+pub const METADATA_MAX_COLLECTION_ITEMS: usize = 65_536;
+
+/// Schema-0 Chunk/Blob profile: maximum encoded canonical object size.
+pub const BULK_MAX_ENCODED_BYTES: usize = 16 * 1024 * 1024;
+/// Schema-0 Chunk/Blob profile: maximum individual CBOR byte string size.
+pub const BULK_MAX_BYTE_STRING_BYTES: usize = 4 * 1024 * 1024;
+/// Schema-0 Chunk/Blob profile: maximum individual CBOR text string UTF-8 size.
+pub const BULK_MAX_TEXT_STRING_BYTES: usize = 64 * 1024;
+/// Schema-0 Chunk/Blob profile: maximum nested container depth.
+pub const BULK_MAX_DEPTH: usize = 64;
+/// Schema-0 Chunk/Blob profile: maximum items in one array or map.
+pub const BULK_MAX_COLLECTION_ITEMS: usize = 1_000_000;
+
 impl CanonicalLimits {
     /// Limits for graph metadata and small inline blob content.
     #[must_use]
     pub const fn metadata() -> Self {
         Self {
-            max_bytes: 1024 * 1024,
-            max_byte_string_bytes: 256 * 1024,
-            max_string_bytes: 64 * 1024,
-            max_depth: 64,
-            max_collection_items: 65_536,
+            max_bytes: METADATA_MAX_ENCODED_BYTES,
+            max_byte_string_bytes: METADATA_MAX_BYTE_STRING_BYTES,
+            max_string_bytes: METADATA_MAX_TEXT_STRING_BYTES,
+            max_depth: METADATA_MAX_DEPTH,
+            max_collection_items: METADATA_MAX_COLLECTION_ITEMS,
         }
     }
 
     /// Limits for chunk payloads and blob descriptors.
     ///
-    /// The extra encoded-size allowance covers a 4 MiB chunk's schema and
-    /// policy-reference envelope without weakening metadata decoding limits.
+    /// The 16 MiB envelope accommodates a large chunk-reference array in a
+    /// blob descriptor. An individual chunk payload remains capped at 4 MiB.
     #[must_use]
     pub const fn bulk() -> Self {
         Self {
-            max_bytes: 4 * 1024 * 1024 + 64 * 1024,
-            max_byte_string_bytes: 4 * 1024 * 1024,
-            max_string_bytes: 64 * 1024,
-            max_depth: 64,
-            max_collection_items: 1_000_000,
+            max_bytes: BULK_MAX_ENCODED_BYTES,
+            max_byte_string_bytes: BULK_MAX_BYTE_STRING_BYTES,
+            max_string_bytes: BULK_MAX_TEXT_STRING_BYTES,
+            max_depth: BULK_MAX_DEPTH,
+            max_collection_items: BULK_MAX_COLLECTION_ITEMS,
         }
     }
+
+    /// Return the component-wise stricter combination of two profiles.
+    ///
+    /// Admission APIs use this to permit caller-selected limits to be stricter
+    /// than schema 0, but never to relax the frozen schema resource ceiling.
+    #[must_use]
+    pub const fn restricted_by(self, ceiling: Self) -> Self {
+        Self {
+            max_bytes: min(self.max_bytes, ceiling.max_bytes),
+            max_byte_string_bytes: min(self.max_byte_string_bytes, ceiling.max_byte_string_bytes),
+            max_string_bytes: min(self.max_string_bytes, ceiling.max_string_bytes),
+            max_depth: min(self.max_depth, ceiling.max_depth),
+            max_collection_items: min(self.max_collection_items, ceiling.max_collection_items),
+        }
+    }
+}
+
+const fn min(left: usize, right: usize) -> usize {
+    if left < right { left } else { right }
 }
 
 impl Default for CanonicalLimits {

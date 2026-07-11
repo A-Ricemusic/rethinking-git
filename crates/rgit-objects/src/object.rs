@@ -12,6 +12,8 @@ use crate::{
 };
 
 pub const MAX_INLINE_BLOB_BYTES: usize = 64 * 1024;
+/// Maximum plaintext bytes carried by one schema-0 chunk.
+pub const MAX_CHUNK_BYTES: usize = crate::BULK_MAX_BYTE_STRING_BYTES;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ObjectError {
@@ -175,6 +177,12 @@ pub struct Chunk {
 }
 impl CanonicalObject for Chunk {
     const KIND: ObjectKind = ObjectKind::Chunk;
+    fn validate(&self) -> Result<(), ObjectError> {
+        if self.bytes.len() > MAX_CHUNK_BYTES {
+            return Err(ObjectError::Invalid("chunk exceeds schema-0 4 MiB maximum"));
+        }
+        Ok(())
+    }
     fn canonical_value(&self) -> Result<Value, ObjectError> {
         let mut m = header(Self::KIND, &self.policy_ref);
         m.push((3, Value::Bytes(self.bytes.clone())));
@@ -203,16 +211,31 @@ pub enum BlobContent {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ChunkProfile {
     /// Registry value for the content-defined chunking algorithm.
-    pub algorithm: u64,
+    pub algorithm: ChunkAlgorithm,
     pub version: u64,
     pub min_size: u64,
     pub target_size: u64,
     pub max_size: u64,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u64)]
+pub enum ChunkAlgorithm {
+    FastCdc = 0,
+}
 impl ChunkProfile {
+    #[must_use]
+    pub const fn fastcdc_v0() -> Self {
+        Self {
+            algorithm: ChunkAlgorithm::FastCdc,
+            version: 0,
+            min_size: crate::FASTCDC_V0_MIN_SIZE as u64,
+            target_size: crate::FASTCDC_V0_TARGET_SIZE as u64,
+            max_size: crate::FASTCDC_V0_MAX_SIZE as u64,
+        }
+    }
     fn value(&self) -> Value {
         Value::Map(vec![
-            (0, Value::Unsigned(self.algorithm)),
+            (0, Value::Unsigned(self.algorithm as u64)),
             (1, Value::Unsigned(self.version)),
             (2, Value::Unsigned(self.min_size)),
             (3, Value::Unsigned(self.target_size)),
@@ -220,10 +243,7 @@ impl ChunkProfile {
         ])
     }
     fn validate(&self) -> Result<(), ObjectError> {
-        if self.min_size == 0
-            || self.min_size > self.target_size
-            || self.target_size > self.max_size
-        {
+        if self != &Self::fastcdc_v0() {
             return Err(ObjectError::Invalid("invalid chunk profile size bounds"));
         }
         Ok(())
@@ -256,12 +276,21 @@ impl CanonicalObject for Blob {
             BlobContent::Chunks(_) if self.chunk_profile.is_none() => Err(ObjectError::Invalid(
                 "chunked blob requires a chunk profile",
             )),
+            BlobContent::Chunks(_) if self.byte_length <= MAX_INLINE_BLOB_BYTES as u64 => Err(
+                ObjectError::Invalid("blob at or below 64 KiB must use inline representation"),
+            ),
             BlobContent::Chunks(chunks)
-                if chunks
-                    .iter()
-                    .try_fold(0_u64, |sum, chunk| sum.checked_add(chunk.plaintext_length))
-                    .filter(|sum| *sum == self.byte_length)
-                    .is_none() =>
+                if chunks.is_empty()
+                    || chunks.iter().any(|chunk| {
+                        chunk.plaintext_length == 0
+                            || chunk.plaintext_length
+                                > self.chunk_profile.as_ref().map_or(0, |p| p.max_size)
+                    })
+                    || chunks
+                        .iter()
+                        .try_fold(0_u64, |sum, chunk| sum.checked_add(chunk.plaintext_length))
+                        .filter(|sum| *sum == self.byte_length)
+                        .is_none() =>
             {
                 Err(ObjectError::Invalid(
                     "chunk lengths do not equal blob length",
@@ -620,10 +649,18 @@ pub struct Conflict {
     pub left: TypedObjectRef,
     pub right: TypedObjectRef,
     pub path: PortablePath,
-    pub conflict_kind: u64,
+    pub conflict_kind: ConflictKind,
     pub merge_driver: String,
     pub merge_driver_version: String,
     pub regions: Vec<ConflictRegion>,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u64)]
+pub enum ConflictKind {
+    Content = 0,
+    AddAdd = 1,
+    ModifyDelete = 2,
+    TypeChange = 3,
 }
 impl CanonicalObject for Conflict {
     const KIND: ObjectKind = ObjectKind::Conflict;
@@ -647,7 +684,7 @@ impl CanonicalObject for Conflict {
             (4, self.left.value()),
             (5, self.right.value()),
             (6, self.path.value()),
-            (7, Value::Unsigned(self.conflict_kind)),
+            (7, Value::Unsigned(self.conflict_kind as u64)),
             (8, text(&self.merge_driver)),
             (9, text(&self.merge_driver_version)),
             (
@@ -889,7 +926,7 @@ pub struct Release {
     pub audience_policy: PolicyRef,
     pub projection_rules: ObjectId,
     pub projected_root: ObjectId,
-    pub projection_proof: Vec<u8>,
+    pub projection_proof: ObjectId,
     pub version_identifier: String,
     pub release_notes_blob: Option<ObjectId>,
     pub build_provenance: Vec<ObjectId>,
@@ -923,7 +960,7 @@ impl Release {
             (6, self.audience_policy.value()),
             (7, oid(&self.projection_rules)),
             (8, oid(&self.projected_root)),
-            (9, Value::Bytes(self.projection_proof.clone())),
+            (9, oid(&self.projection_proof)),
             (10, text(&self.version_identifier)),
             (12, oid_array(&self.build_provenance)),
             (13, oid_array(&self.artifacts)),
@@ -992,13 +1029,20 @@ pub struct Policy {
     pub grants: Vec<Grant>,
     pub redaction_mode: RedactionMode,
     /// Registered, non-executable derivation rule plus its canonical parameters.
-    pub derivation_rule: u64,
+    pub derivation_rule: DerivationRule,
     pub declassification_requirements: Vec<ObjectId>,
     pub key_epoch: u64,
     pub key_envelope_set: ObjectId,
     pub administrators: Vec<ActorId>,
     pub activation_constraints: Vec<u8>,
     pub signatures: Vec<Signature>,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u64)]
+pub enum DerivationRule {
+    NoDerivation = 0,
+    SamePolicy = 1,
+    ExplicitEvidence = 2,
 }
 impl CanonicalObject for Policy {
     const KIND: ObjectKind = ObjectKind::Policy;
@@ -1093,7 +1137,7 @@ impl Policy {
                 ),
             ),
             (8, Value::Unsigned(self.redaction_mode as u64)),
-            (9, Value::Unsigned(self.derivation_rule)),
+            (9, Value::Unsigned(self.derivation_rule as u64)),
             (10, oid_array(&self.declassification_requirements)),
             (11, Value::Unsigned(self.key_epoch)),
             (12, oid(&self.key_envelope_set)),

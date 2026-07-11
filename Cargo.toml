@@ -6,14 +6,16 @@ version = "0.1.0"
 edition = "2021"
 rust-version.workspace = true
 description = "A small jj-inspired source control prototype."
+license = "Apache-2.0 OR MIT"
 
 [workspace]
 resolver = "3"
-members = ["crates/rgit-objects"]
+members = ["crates/rgit-graph", "crates/rgit-objects"]
 
 [workspace.package]
 edition = "2024"
 rust-version = "1.85"
+license = "Apache-2.0 OR MIT"
 
 [workspace.dependencies]
 blake3 = "1.8"
@@ -31,7 +33,7 @@ name = "rgit"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0"
+anyhow = "1.0.103"
 clap = { version = "4.5", features = ["derive"] }
 hex.workspace = true
 serde.workspace = true

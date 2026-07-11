@@ -6,6 +6,20 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::Value;
 
+/// Maximum UTF-8 encoding length of one schema-0 portable path component.
+///
+/// UTF-8 bytes are used instead of host-native units so validation is identical
+/// on every platform. This bound is also conservative for Windows: a valid
+/// Unicode string never has more UTF-16 code units than UTF-8 bytes.
+pub const PORTABLE_COMPONENT_MAX_BYTES: usize = 255;
+
+/// Maximum UTF-8 encoding length of a schema-0 materialized relative path.
+///
+/// The length includes one `/` byte between components, but no leading slash or
+/// trailing NUL. The 1,023-byte limit fits the smallest Tier-1 `PATH_MAX`
+/// profile while remaining far below extended-length Win32's UTF-16 limit.
+pub const PORTABLE_PATH_MAX_BYTES: usize = 1_023;
+
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PathSegment(String);
 
@@ -21,6 +35,10 @@ pub enum PathError {
     NonPortableCharacter,
     #[error("path segment is not portable to Windows filesystems")]
     WindowsReserved,
+    #[error("path segment exceeds the portable profile byte limit")]
+    SegmentTooLong,
+    #[error("relative path exceeds the portable profile byte limit")]
+    PathTooLong,
 }
 
 impl PathSegment {
@@ -47,6 +65,9 @@ impl PathSegment {
     fn validate(value: String, portable: bool) -> Result<Self, PathError> {
         if value.is_empty() {
             return Err(PathError::Empty);
+        }
+        if value.len() > PORTABLE_COMPONENT_MAX_BYTES {
+            return Err(PathError::SegmentTooLong);
         }
         if !value.nfc().eq(value.chars()) {
             return Err(PathError::NonNormalized);
@@ -97,8 +118,16 @@ impl From<&PathSegment> for Value {
 pub struct PortablePath(Vec<PathSegment>);
 impl PortablePath {
     pub fn new(segments: Vec<PathSegment>) -> Result<Self, PathError> {
+        let mut encoded_len = 0_usize;
         for segment in &segments {
             segment.ensure_portable()?;
+            encoded_len = encoded_len
+                .checked_add(usize::from(encoded_len != 0))
+                .and_then(|length| length.checked_add(segment.as_str().len()))
+                .ok_or(PathError::PathTooLong)?;
+            if encoded_len > PORTABLE_PATH_MAX_BYTES {
+                return Err(PathError::PathTooLong);
+            }
         }
         Ok(Self(segments))
     }
