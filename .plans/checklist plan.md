@@ -145,7 +145,7 @@ This checklist tracks implementation of the production-grade, permission-aware G
 - [ ] Detect missing referenced objects.
 - [x] Detect invalid or unsupported schema versions.
 - [ ] Produce non-destructive repair reports.
-- [ ] Add transaction failure-injection points.
+- [x] Add transaction failure-injection points.
 - [ ] Test process termination between transaction phases.
 - [ ] Test partial writes and corrupted indexes.
 - [ ] Prove a line cannot point at a missing object after recovery.
