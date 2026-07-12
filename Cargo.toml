@@ -21,11 +21,13 @@ license = "Apache-2.0 OR MIT"
 blake3 = "1.8"
 data-encoding = "2.9"
 hex = "0.4"
+libc = "=0.2.186"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"
 subtle = "2.6"
 thiserror = "2.0"
+rusqlite = { version = "=0.32.1", features = ["bundled", "backup", "hooks", "limits", "load_extension"] }
 unicode-normalization = "0.1"
 unicode-casefold = "=0.2.0"
 

@@ -2,7 +2,10 @@ use std::collections::BTreeSet;
 
 use thiserror::Error;
 
-use crate::{CanonicalLimits, HashAlgorithm, ObjectId, ObjectKind, Value, decode_canonical};
+use crate::{
+    CanonicalLimits, ChangeId, HashAlgorithm, LineId, ObjectId, ObjectKind, ReferenceKey,
+    TypedObjectRef, Value, decode_canonical,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DecodedObject {
@@ -11,7 +14,7 @@ pub struct DecodedObject {
     value: Value,
 }
 
-/// A closed dispatch enum for every schema-0 object kind.
+/// A closed dispatch enum for every supported object kind and schema.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AnyObject {
     Chunk(DecodedObject),
@@ -52,6 +55,14 @@ pub struct ReferenceEdge {
     pub role: ReferenceRole,
     pub expected_kind: Option<ObjectKind>,
     pub id: ObjectId,
+}
+
+/// Validated schema-1 transition projection for storage publication checks.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BoundReferenceTransition {
+    pub key: ReferenceKey,
+    pub before: Option<TypedObjectRef>,
+    pub after: TypedObjectRef,
 }
 
 /// The schema field that gives an object reference its meaning.
@@ -189,7 +200,7 @@ impl AnyObject {
         let kind_number = unsigned(field(map, 0)?, 0)?;
         let kind = ObjectKind::try_from(kind_number).map_err(DecodeObjectError::Kind)?;
         let schema = unsigned(field(map, 1)?, 1)?;
-        if schema != 0 {
+        if !kind.supports_schema(schema) {
             return Err(DecodeObjectError::Schema(schema));
         }
         let kind_limits = match kind {
@@ -199,7 +210,7 @@ impl AnyObject {
         // Enforce the kind-specific ceiling even when initial parsing needed
         // the broader bulk profile in order to discover the kind.
         value.encode_with_limits(limits.restricted_by(kind_limits))?;
-        validate_fields(kind, map)?;
+        validate_fields(kind, schema, map)?;
         let decoded = DecodedObject {
             kind,
             schema_version: schema,
@@ -304,6 +315,35 @@ impl AnyObject {
     pub fn references(&self) -> Result<Vec<ReferenceEdge>, DecodeObjectError> {
         references(self.decoded())
     }
+
+    /// Returns exact mutable-key transitions for an Operation schema-1 object.
+    /// Other kinds and schema-0 Operations return `None`.
+    pub fn bound_reference_transitions(
+        &self,
+    ) -> Result<Option<Vec<BoundReferenceTransition>>, DecodeObjectError> {
+        let decoded = self.decoded();
+        if decoded.kind != ObjectKind::Operation || decoded.schema_version != 1 {
+            return Ok(None);
+        }
+        let map = as_map(&decoded.value)?;
+        let mut transitions = Vec::new();
+        for action in array(field(map, 8)?, 8)? {
+            let action = as_map(action)?;
+            if unsigned(field(action, 0)?, 8)? != 2 {
+                continue;
+            }
+            transitions.push(BoundReferenceTransition {
+                key: reference_key(field(action, 1)?, 8)?,
+                before: action
+                    .iter()
+                    .find(|(key, _)| *key == 2)
+                    .map(|(_, value)| typed_ref_value(value, 8))
+                    .transpose()?,
+                after: typed_ref_value(field(action, 3)?, 8)?,
+            });
+        }
+        Ok(Some(transitions))
+    }
 }
 
 impl DecodedObject {
@@ -321,7 +361,11 @@ impl DecodedObject {
     }
 }
 
-fn validate_fields(kind: ObjectKind, map: &[(u64, Value)]) -> Result<(), DecodeObjectError> {
+fn validate_fields(
+    kind: ObjectKind,
+    schema: u64,
+    map: &[(u64, Value)],
+) -> Result<(), DecodeObjectError> {
     let (required, optional): (&[u64], &[u64]) = match kind {
         ObjectKind::Chunk => (&[0, 1, 2, 3], &[]),
         ObjectKind::Blob => (&[0, 1, 2, 3], &[4, 5, 6, 7]),
@@ -377,10 +421,14 @@ fn validate_fields(kind: ObjectKind, map: &[(u64, Value)]) -> Result<(), DecodeO
     {
         policy_ref(field(map, 2)?, 2)?;
     }
-    validate_shapes(kind, map)
+    validate_shapes(kind, schema, map)
 }
 
-fn validate_shapes(kind: ObjectKind, map: &[(u64, Value)]) -> Result<(), DecodeObjectError> {
+fn validate_shapes(
+    kind: ObjectKind,
+    schema: u64,
+    map: &[(u64, Value)],
+) -> Result<(), DecodeObjectError> {
     match kind {
         ObjectKind::Chunk => {
             if bytes(field(map, 3)?, 3)?.len() > crate::MAX_CHUNK_BYTES {
@@ -551,10 +599,11 @@ fn validate_shapes(kind: ObjectKind, map: &[(u64, Value)]) -> Result<(), DecodeO
             fixed_bytes(field(map, 5)?, 5, 16)?;
             unsigned(field(map, 6)?, 6)?;
             wall_time(field(map, 7)?, 7)?;
+            let mut action_keys = BTreeSet::new();
             for action in array(field(map, 8)?, 8)? {
                 let action_map = as_map(action)?;
-                match unsigned(field(action_map, 0)?, 8)? {
-                    0 => {
+                match (schema, unsigned(field(action_map, 0)?, 8)?) {
+                    (0, 0) => {
                         let action = exact_map(action, &[0], &[1, 2], 8)?;
                         let before = action.iter().find(|(k, _)| *k == 1).map(|(_, v)| v);
                         let after = action.iter().find(|(k, _)| *k == 2).map(|(_, v)| v);
@@ -571,9 +620,31 @@ fn validate_shapes(kind: ObjectKind, map: &[(u64, Value)]) -> Result<(), DecodeO
                             }
                         }
                     }
-                    1 => {
+                    (0 | 1, 1) => {
                         let action = exact_map(action, &[0, 3], &[], 8)?;
-                        line_advance(field(action, 3)?, 8)?;
+                        let declaration = line_advance(field(action, 3)?, 8)?;
+                        if schema == 1
+                            && !action_keys.insert(ReferenceKey::Line(declaration.line_id))
+                        {
+                            return Err(DecodeObjectError::Field(8));
+                        }
+                    }
+                    (1, 2) => {
+                        let action = exact_map(action, &[0, 1, 3], &[2], 8)?;
+                        let key = reference_key(field(action, 1)?, 8)?;
+                        if matches!(key, ReferenceKey::Line(_) | ReferenceKey::OperationHead)
+                            || !action_keys.insert(key.clone())
+                        {
+                            return Err(DecodeObjectError::Field(8));
+                        }
+                        if let Some(before) = action.iter().find(|(k, _)| *k == 2).map(|(_, v)| v) {
+                            if typed_ref_kind(before, 8)? != key.expected_kind() {
+                                return Err(DecodeObjectError::Field(8));
+                            }
+                        }
+                        if typed_ref_kind(field(action, 3)?, 8)? != key.expected_kind() {
+                            return Err(DecodeObjectError::Field(8));
+                        }
                     }
                     _ => return Err(DecodeObjectError::Field(8)),
                 }
@@ -1295,6 +1366,28 @@ fn references(d: &DecodedObject) -> Result<Vec<ReferenceEdge>, DecodeObjectError
                             }
                         }
                     }
+                    2 => {
+                        for (key, role) in [
+                            (2, ReferenceRole::OperationBefore),
+                            (3, ReferenceRole::OperationAfter),
+                        ] {
+                            if let Some(reference) = action
+                                .iter()
+                                .find(|(actual, _)| *actual == key)
+                                .map(|(_, value)| value)
+                            {
+                                let reference = as_map(reference)?;
+                                out.push(ReferenceEdge {
+                                    role,
+                                    expected_kind: Some(
+                                        ObjectKind::try_from(unsigned(field(reference, 0)?, 8)?)
+                                            .map_err(DecodeObjectError::Kind)?,
+                                    ),
+                                    id: oid(field(reference, 1)?, 8)?,
+                                });
+                            }
+                        }
+                    }
                     1 => {
                         let declaration = as_map(field(action, 3)?)?;
                         for (key, role) in [
@@ -1737,6 +1830,33 @@ fn typed_ref_kind(v: &Value, k: u64) -> Result<ObjectKind, DecodeObjectError> {
     oid(field(m, 1)?, k)?;
     Ok(kind)
 }
+fn typed_ref_value(v: &Value, k: u64) -> Result<TypedObjectRef, DecodeObjectError> {
+    let map = exact_map(v, &[0, 1], &[], k)?;
+    Ok(TypedObjectRef {
+        kind: ObjectKind::try_from(unsigned(field(map, 0)?, k)?)
+            .map_err(DecodeObjectError::Kind)?,
+        id: oid(field(map, 1)?, k)?,
+    })
+}
+fn reference_key(value: &Value, key: u64) -> Result<ReferenceKey, DecodeObjectError> {
+    let map = as_map(value)?;
+    let kind = unsigned(field(map, 0)?, key)?;
+    if kind == 3 {
+        exact_map(value, &[0], &[], key)?;
+        return Ok(ReferenceKey::OperationHead);
+    }
+    let map = exact_map(value, &[0, 1], &[], key)?;
+    let stable: [u8; 16] = bytes(field(map, 1)?, key)?
+        .try_into()
+        .map_err(|_| DecodeObjectError::Field(key))?;
+    match kind {
+        1 => Ok(ReferenceKey::Line(LineId::from_bytes(stable))),
+        2 => Ok(ReferenceKey::Change(ChangeId::from_bytes(stable))),
+        4 => Ok(ReferenceKey::Release(LineId::from_bytes(stable))),
+        5 => Ok(ReferenceKey::Marker(stable)),
+        _ => Err(DecodeObjectError::Field(key)),
+    }
+}
 fn oid_values(v: &Value, k: u64) -> Result<Vec<ObjectId>, DecodeObjectError> {
     array(v, k)?.iter().map(|value| oid(value, k)).collect()
 }
@@ -1830,10 +1950,13 @@ fn ensure_sorted_unique_values(values: &[Value], key: u64) -> Result<(), DecodeO
         Ok(())
     }
 }
-fn line_advance(value: &Value, key: u64) -> Result<(), DecodeObjectError> {
+fn line_advance(value: &Value, key: u64) -> Result<LineAdvanceIdentity, DecodeObjectError> {
     let map = exact_map(value, &[0, 1, 2, 3, 4, 6, 7, 8, 9], &[5], key)?;
     policy_ref(field(map, 0)?, key)?;
-    fixed_bytes(field(map, 1)?, key, 16)?;
+    let line_id = bytes(field(map, 1)?, key)?
+        .try_into()
+        .map(LineId::from_bytes)
+        .map_err(|_| DecodeObjectError::Field(key))?;
     text(field(map, 2)?, key)?;
     oid(field(map, 3)?, key)?;
     let generation = unsigned(field(map, 4)?, key)?;
@@ -1847,7 +1970,11 @@ fn line_advance(value: &Value, key: u64) -> Result<(), DecodeObjectError> {
     for policy_key in [6, 7, 8, 9] {
         policy_ref(field(map, policy_key)?, key)?;
     }
-    Ok(())
+    Ok(LineAdvanceIdentity { line_id })
+}
+
+struct LineAdvanceIdentity {
+    line_id: LineId,
 }
 fn exact_map<'a>(
     value: &'a Value,

@@ -301,6 +301,16 @@ Operations form a DAG. A local journal transaction may contain several object wr
 and reference compare-and-swaps but publishes one operation as their audit boundary.
 Undo creates a new operation; existing operations are never deleted or rewritten.
 
+Schema 0's generic transition binds only typed before/after object IDs and remains
+readable as frozen history. It MUST NOT authorize a new mutable-reference publication.
+Operation schema 1 replaces it with a bound transition that signs the exact closed
+reference-key kind and stable ID together with typed before/after values. Change,
+release, and marker transitions use this action. Line advance already binds its exact
+LineId, while operation-head publication is bound to the Operation ID and declared
+parents. Schema 1 rejects duplicate action keys, mismatched target kinds, and schema
+0's unbound transition discriminator. New writers emit schema 1; readers retain
+schema 0 so existing Operation IDs and DAG ancestry never change.
+
 ### 7.2.1 Bootstrap ordering
 
 Schema-0 never bootstraps trust with a zero, omitted, or deferred signature. A new

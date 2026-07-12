@@ -8,8 +8,10 @@ license.workspace = true
 
 [dependencies]
 hex.workspace = true
+libc.workspace = true
 rgit-graph = { path = "../rgit-graph" }
 rgit-objects = { path = "../rgit-objects" }
+rusqlite.workspace = true
 sha2.workspace = true
 subtle.workspace = true
 thiserror.workspace = true

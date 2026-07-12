@@ -83,6 +83,22 @@ pub enum StoreError {
     Closure(#[from] ClosureError),
     #[error("stored graph is invalid")]
     InvalidGraph,
+    #[error("metadata database operation failed")]
+    Database,
+    #[error("metadata database is foreign, corrupt, or unsupported")]
+    UnsupportedDatabase,
+    #[error("metadata database requires a newer RGit binary")]
+    UpgradeRequired,
+    #[error("metadata database requires an explicit supported migration")]
+    MigrationRequired,
+    #[error("metadata writer is busy; retry the complete operation")]
+    RetryableConflict,
+    #[error("repository is in durable incident read-only mode")]
+    IncidentReadOnly,
+    #[error("metadata transaction stopped at an injected failure boundary")]
+    InjectedTransactionFailure,
+    #[error("durable object storage operation failed")]
+    ObjectStorage,
 }
 
 impl From<DecodeObjectError> for StoreError {

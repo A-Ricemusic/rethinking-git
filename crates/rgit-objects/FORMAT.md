@@ -7,6 +7,10 @@ repository format.
 The schema-0 registry below is frozen. Incompatible changes require a new schema
 version and migration; numeric values MUST NOT be renumbered or reused.
 
+Operation schema 1 is the sole schema-1 assignment. Every other logical kind remains
+at schema 0. Implementations dispatch support by `(kind, schema)` rather than assuming
+that all kinds share one current schema.
+
 Object-kind registry: chunk 1, blob 2, secret reference 3, manifest 4, subproject 5,
 snapshot 6, change revision 7, line state 8, conflict 9, operation 10, marker 11,
 release 12, policy 13, repository root 14, identity 15, group membership 16,
@@ -47,6 +51,27 @@ previous state. All later generations require one. A line-advance operation embe
 the complete intended state declaration but never the new line-state ID; the signed
 line state subsequently points to the finalized operation. Generic transitions may
 refer to an old line state as `before` but may not install one as `after`.
+
+## Operation schema 1
+
+Operation schema 1 preserves schema-0 top-level fields 0 through 13, changes common
+field 1 to `1`, and replaces unbound generic action 0 with bound-transition action 2.
+Schema-1 decoders reject action 0. Line-advance action 1 is unchanged.
+
+A bound transition is `{0: 2, 1: reference_key, 2?: before, 3: after}`. `before` and
+`after` are typed object references; `after` is required. The reference key is
+`{0: key_kind, 1?: stable_id}` using the closed registry line 1, change 2, operation
+head 3, release 4, and marker 5. Stable ID is exactly 16 bytes and required for kinds
+1, 2, 4, and 5; it is omitted for operation head. Bound-transition accepts only
+change, release, and marker keys. Line updates use line-advance, whose declaration
+already binds the exact LineId, and operation-head updates use the Operation's own ID
+and parents. Before and after kinds must equal the key's required target kind. One
+Operation may contain at most one action for any exact reference key.
+
+Schema-0 Operation bytes, signatures, IDs, and semantics remain frozen and readable.
+Schema 1 uses the same metadata ceiling and signature profile, but its schema number
+is present in both the canonical map and signature/object-ID domain preimages.
+Operation DAG parent edges may cross schema versions.
 
 Schema objects carry fixed profile-0 signature records. Algorithm 0 is Ed25519; key
 IDs are exactly 32 bytes, signature bytes exactly 64 bytes, and purposes are numeric

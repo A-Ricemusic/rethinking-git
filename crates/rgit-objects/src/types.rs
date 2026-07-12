@@ -1,3 +1,5 @@
+use std::fmt;
+
 use serde::Serialize;
 
 use crate::{ObjectId, Value};
@@ -30,6 +32,73 @@ stable_id!(LineId);
 stable_id!(PolicyId);
 stable_id!(ActorId);
 stable_id!(DeviceId);
+
+/// Canonical identity of one mutable repository reference.
+///
+/// Numeric assignments are shared with the metadata-store registry and are
+/// part of Operation schema 1. Debug output deliberately hides stable IDs.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ReferenceKey {
+    Line(LineId),
+    Change(ChangeId),
+    OperationHead,
+    Release(LineId),
+    Marker([u8; 16]),
+}
+
+impl ReferenceKey {
+    #[must_use]
+    pub const fn kind_code(&self) -> u64 {
+        match self {
+            Self::Line(_) => 1,
+            Self::Change(_) => 2,
+            Self::OperationHead => 3,
+            Self::Release(_) => 4,
+            Self::Marker(_) => 5,
+        }
+    }
+
+    #[must_use]
+    pub const fn expected_kind(&self) -> ObjectKind {
+        match self {
+            Self::Line(_) => ObjectKind::LineState,
+            Self::Change(_) => ObjectKind::ChangeRevision,
+            Self::OperationHead => ObjectKind::Operation,
+            Self::Release(_) => ObjectKind::Release,
+            Self::Marker(_) => ObjectKind::Marker,
+        }
+    }
+
+    #[must_use]
+    pub const fn stable_id(&self) -> Option<&[u8; 16]> {
+        match self {
+            Self::Line(id) | Self::Release(id) => Some(id.as_bytes()),
+            Self::Change(id) => Some(id.as_bytes()),
+            Self::OperationHead => None,
+            Self::Marker(id) => Some(id),
+        }
+    }
+
+    pub(crate) fn value(&self) -> Value {
+        let mut fields = vec![(0, Value::Unsigned(self.kind_code()))];
+        if let Some(stable_id) = self.stable_id() {
+            fields.push((1, Value::Bytes(stable_id.to_vec())));
+        }
+        Value::Map(fields)
+    }
+}
+
+impl fmt::Debug for ReferenceKey {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Line(_) => "ReferenceKey::Line(<redacted>)",
+            Self::Change(_) => "ReferenceKey::Change(<redacted>)",
+            Self::OperationHead => "ReferenceKey::OperationHead",
+            Self::Release(_) => "ReferenceKey::Release(<redacted>)",
+            Self::Marker(_) => "ReferenceKey::Marker(<redacted>)",
+        })
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PolicyRef {
@@ -312,8 +381,17 @@ pub enum ObjectKind {
 }
 impl ObjectKind {
     #[must_use]
-    pub const fn schema_version(self) -> u64 {
-        0
+    pub const fn supports_schema(self, schema: u64) -> bool {
+        schema == 0 || matches!(self, Self::Operation) && schema == 1
+    }
+
+    #[must_use]
+    pub const fn latest_schema_version(self) -> u64 {
+        if matches!(self, Self::Operation) {
+            1
+        } else {
+            0
+        }
     }
 }
 impl TryFrom<u64> for ObjectKind {

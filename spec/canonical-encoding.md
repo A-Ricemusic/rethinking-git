@@ -122,7 +122,9 @@ semantic fixture JSON, canonical CBOR hex, preimage hex, and final binary/text I
 The project maintains registries for object kinds, field keys per kind, hash codes,
 signature purposes, and critical extensions. Assigned values are never reused. A
 canonical profile change increments the ID format and necessarily changes IDs. A
-schema change alone increments that object kind's schema version.
+schema change alone increments that object kind's schema version. Supported schemas
+are registered per object kind, not as one global current version. Operation schema 1
+is the first additive assignment; all schema-0 encodings and IDs remain unchanged.
 
 Open implementation detail: select a CBOR crate only after it passes rejection and
 round-trip tests for this profile. Library-provided “canonical mode” is not assumed to

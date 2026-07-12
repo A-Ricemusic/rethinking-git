@@ -24,6 +24,10 @@ impl DirectoryHandle {
     pub(crate) fn metadata(&self) -> io::Result<std::fs::Metadata> {
         self.0.metadata()
     }
+
+    pub(crate) fn raw_fd(&self) -> std::os::fd::RawFd {
+        self.0.as_raw_fd()
+    }
 }
 
 #[cfg(windows)]
@@ -33,6 +37,10 @@ impl DirectoryHandle {
             io::ErrorKind::Unsupported,
             "NTFS directory handle adapter is not qualified",
         ))
+    }
+
+    pub(crate) fn raw_fd(&self) -> i32 {
+        -1
     }
 }
 
@@ -79,6 +87,38 @@ unsafe extern "C" {
         path: *const std::ffi::c_char,
         flags: std::ffi::c_int,
     ) -> std::ffi::c_int;
+    fn flock(fd: std::ffi::c_int, operation: std::ffi::c_int) -> std::ffi::c_int;
+    fn dup(fd: std::ffi::c_int) -> std::ffi::c_int;
+    fn fdopendir(fd: std::ffi::c_int) -> *mut CDirectory;
+    fn readdir(directory: *mut CDirectory) -> *mut CDirent;
+    fn closedir(directory: *mut CDirectory) -> std::ffi::c_int;
+}
+
+#[cfg(unix)]
+#[repr(C)]
+struct CDirectory {
+    _private: [u8; 0],
+}
+
+#[cfg(target_os = "macos")]
+#[repr(C)]
+struct CDirent {
+    inode: u64,
+    seek_offset: u64,
+    record_length: u16,
+    name_length: u16,
+    entry_type: u8,
+    name: [std::ffi::c_char; 1024],
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+#[repr(C)]
+struct CDirent {
+    inode: u64,
+    offset: i64,
+    record_length: u16,
+    entry_type: u8,
+    name: [std::ffi::c_char; 256],
 }
 
 pub(crate) fn open_directory(path: &Path) -> io::Result<DirectoryHandle> {
@@ -164,6 +204,63 @@ pub(crate) fn create_file_at(parent: &DirectoryHandle, name: &str) -> io::Result
     }
 }
 
+pub(crate) fn open_lock_file_at(parent: &DirectoryHandle, name: &str) -> io::Result<File> {
+    #[cfg(unix)]
+    {
+        let name = CString::new(name)?;
+        #[cfg(target_os = "macos")]
+        let flags = 0x0002 | 0x0200 | 0x0000_0100 | 0x0100_0000;
+        #[cfg(not(target_os = "macos"))]
+        let flags = 0x0002 | 0x0040 | 0x0002_0000 | 0x0008_0000;
+        let fd = unsafe { openat(parent.0.as_raw_fd(), name.as_ptr(), flags, 0o600_u32) };
+        if fd < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let file = unsafe { File::from_raw_fd(fd) };
+        use std::os::unix::fs::MetadataExt;
+        let metadata = file.metadata()?;
+        if !metadata.file_type().is_file() || metadata.nlink() != 1 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "unsafe lock entry",
+            ));
+        }
+        Ok(file)
+    }
+    #[cfg(windows)]
+    {
+        let _ = (parent, name);
+        Err(io::Error::new(io::ErrorKind::Unsupported, "unsupported"))
+    }
+}
+
+pub(crate) struct ExclusiveFileLock {
+    #[cfg(unix)]
+    file: File,
+}
+
+pub(crate) fn try_lock_exclusive(file: File) -> io::Result<ExclusiveFileLock> {
+    #[cfg(unix)]
+    {
+        if unsafe { flock(file.as_raw_fd(), 0x02 | 0x04) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(ExclusiveFileLock { file })
+    }
+    #[cfg(windows)]
+    {
+        let _ = file;
+        Err(io::Error::new(io::ErrorKind::Unsupported, "unsupported"))
+    }
+}
+
+#[cfg(unix)]
+impl Drop for ExclusiveFileLock {
+    fn drop(&mut self) {
+        let _ = unsafe { flock(self.file.as_raw_fd(), 0x08) };
+    }
+}
+
 pub(crate) fn open_file_at(parent: &DirectoryHandle, name: &str) -> io::Result<File> {
     #[cfg(unix)]
     {
@@ -207,6 +304,52 @@ pub(crate) fn sync_handle(directory: &DirectoryHandle) -> io::Result<()> {
     #[cfg(unix)]
     {
         directory.0.sync_all()
+    }
+    #[cfg(windows)]
+    {
+        let _ = directory;
+        Err(io::Error::new(io::ErrorKind::Unsupported, "unsupported"))
+    }
+}
+
+pub(crate) fn list_directory_names(directory: &DirectoryHandle) -> io::Result<Vec<String>> {
+    #[cfg(unix)]
+    {
+        let duplicated = unsafe { dup(directory.0.as_raw_fd()) };
+        if duplicated < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let stream = unsafe { fdopendir(duplicated) };
+        if stream.is_null() {
+            let error = io::Error::last_os_error();
+            let _ = unsafe { File::from_raw_fd(duplicated) };
+            return Err(error);
+        }
+        let mut names = Vec::new();
+        loop {
+            let entry = unsafe { readdir(stream) };
+            if entry.is_null() {
+                break;
+            }
+            let name = match unsafe { std::ffi::CStr::from_ptr((*entry).name.as_ptr()) }.to_str() {
+                Ok(name) => name,
+                Err(_) => {
+                    let _ = unsafe { closedir(stream) };
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "non-UTF-8 entry",
+                    ));
+                }
+            };
+            if name != "." && name != ".." {
+                names.push(name.to_owned());
+            }
+        }
+        if unsafe { closedir(stream) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        names.sort();
+        Ok(names)
     }
     #[cfg(windows)]
     {
@@ -336,6 +479,43 @@ pub(crate) fn file_identity(file: &File) -> io::Result<FileIdentity> {
 
 pub(crate) fn same_file(expected: &FileIdentity, observed: &File) -> io::Result<bool> {
     Ok(*expected == file_identity(observed)?)
+}
+
+pub(crate) fn same_entry(expected: &FileIdentity, observed: &File) -> io::Result<bool> {
+    let observed = file_identity(observed)?;
+    Ok(expected.filesystem == observed.filesystem && expected.file == observed.file)
+}
+
+pub(crate) fn same_directory_entry(
+    expected: &DirectoryHandle,
+    observed: &DirectoryHandle,
+) -> io::Result<bool> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let expected = expected.metadata()?;
+        let observed = observed.metadata()?;
+        Ok(expected.dev() == observed.dev() && expected.ino() == observed.ino())
+    }
+    #[cfg(windows)]
+    {
+        let _ = (expected, observed);
+        Ok(false)
+    }
+}
+
+pub(crate) fn regular_single_link(file: &File) -> io::Result<bool> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let metadata = file.metadata()?;
+        Ok(metadata.file_type().is_file() && metadata.nlink() == 1)
+    }
+    #[cfg(windows)]
+    {
+        let _ = file;
+        Ok(false)
+    }
 }
 
 #[cfg(all(test, windows))]

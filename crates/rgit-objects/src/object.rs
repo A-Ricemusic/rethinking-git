@@ -6,9 +6,9 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::types::{oid, oid_array, optional, text};
 use crate::{
-    ActorId, ChangeId, DeviceId, HashAlgorithm, LineId, ObjectId, ObjectKind, PathSegment,
-    PolicyRef, PortablePath, SCHEMA_VERSION_0, Signature, SignaturePurpose, TypedObjectRef, Value,
-    WallTime,
+    ActorId, ChangeId, DeviceId, HashAlgorithm, LineId, OPERATION_SCHEMA_VERSION_1, ObjectId,
+    ObjectKind, PathSegment, PolicyRef, PortablePath, ReferenceKey, SCHEMA_VERSION_0, Signature,
+    SignaturePurpose, TypedObjectRef, Value, WallTime,
 };
 
 pub const MAX_INLINE_BLOB_BYTES: usize = 64 * 1024;
@@ -99,9 +99,12 @@ pub trait SignedObject: CanonicalObject {
 }
 
 fn header(kind: ObjectKind, policy: &PolicyRef) -> Vec<(u64, Value)> {
+    header_version(kind, SCHEMA_VERSION_0, policy)
+}
+fn header_version(kind: ObjectKind, schema: u64, policy: &PolicyRef) -> Vec<(u64, Value)> {
     vec![
         (0, Value::Unsigned(kind as u64)),
-        (1, Value::Unsigned(SCHEMA_VERSION_0)),
+        (1, Value::Unsigned(schema)),
         (2, policy.value()),
     ]
 }
@@ -627,6 +630,31 @@ impl LineState {
         }
         Ok(())
     }
+
+    /// Schema-1 counterpart of [`Self::validate_transaction`].
+    pub fn validate_transaction_v1(&self, operation: &OperationV1) -> Result<(), ObjectError> {
+        if operation.id(self.transaction_operation.algorithm())? != self.transaction_operation {
+            return Err(ObjectError::Invalid(
+                "line state transaction operation ID does not match operation",
+            ));
+        }
+        let matches = operation
+            .actions
+            .iter()
+            .filter_map(|action| match action {
+                OperationActionV1::LineAdvance(declaration) if declaration.matches(self) => {
+                    Some(())
+                }
+                _ => None,
+            })
+            .count();
+        if matches != 1 {
+            return Err(ObjectError::Invalid(
+                "operation must contain exactly one matching line advance declaration",
+            ));
+        }
+        Ok(())
+    }
 }
 impl SignedObject for LineState {
     fn unsigned_value(&self) -> Result<Value, ObjectError> {
@@ -860,6 +888,143 @@ impl SignedObject for Operation {
     fn unsigned_value(&self) -> Result<Value, ObjectError> {
         Ok(Value::Map(self.unsigned_map()))
     }
+    fn signatures(&self) -> &[Signature] {
+        std::slice::from_ref(&self.signature)
+    }
+}
+
+/// Closed action registry for Operation schema 1.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OperationActionV1 {
+    /// A compare-and-swap transition bound to one exact mutable key.
+    BoundTransition {
+        key: ReferenceKey,
+        before: Option<TypedObjectRef>,
+        after: TypedObjectRef,
+    },
+    LineAdvance(Box<LineAdvanceDeclaration>),
+}
+
+impl OperationActionV1 {
+    fn value(&self) -> Value {
+        match self {
+            Self::BoundTransition { key, before, after } => {
+                let mut fields = vec![
+                    (0, Value::Unsigned(2)),
+                    (1, key.value()),
+                    (3, after.value()),
+                ];
+                optional(&mut fields, 2, before.as_ref().map(TypedObjectRef::value));
+                Value::Map(fields)
+            }
+            Self::LineAdvance(declaration) => {
+                Value::Map(vec![(0, Value::Unsigned(1)), (3, declaration.value())])
+            }
+        }
+    }
+}
+
+/// Key-bound Operation schema 1.
+///
+/// Schema-0 [`Operation`] remains frozen and independently decodable. New
+/// reference publications use this type so the signature commits to the exact
+/// mutable key as well as its before/after object IDs.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OperationV1 {
+    pub policy_ref: PolicyRef,
+    pub parents: Vec<ObjectId>,
+    pub actor: ActorId,
+    pub device: DeviceId,
+    pub logical_time: u64,
+    pub wall_time: WallTime,
+    pub actions: Vec<OperationActionV1>,
+    pub inverse_payloads: Vec<ObjectId>,
+    pub public_envelope: Option<ObjectId>,
+    pub private_payload: Option<ObjectId>,
+    pub signature: Signature,
+    pub client_implementation: String,
+}
+
+impl OperationV1 {
+    fn unsigned_map(&self) -> Vec<(u64, Value)> {
+        let mut fields = header_version(Self::KIND, OPERATION_SCHEMA_VERSION_1, &self.policy_ref);
+        fields.extend([
+            (3, oid_array(&self.parents)),
+            (4, self.actor.into()),
+            (5, self.device.into()),
+            (6, Value::Unsigned(self.logical_time)),
+            (7, self.wall_time.value()),
+            (
+                8,
+                Value::Array(self.actions.iter().map(OperationActionV1::value).collect()),
+            ),
+            (9, oid_array(&self.inverse_payloads)),
+            (13, text(&self.client_implementation)),
+        ]);
+        optional(&mut fields, 10, self.public_envelope.as_ref().map(oid));
+        optional(&mut fields, 11, self.private_payload.as_ref().map(oid));
+        fields
+    }
+}
+
+impl CanonicalObject for OperationV1 {
+    const KIND: ObjectKind = ObjectKind::Operation;
+    const SCHEMA_VERSION: u64 = OPERATION_SCHEMA_VERSION_1;
+
+    fn validate(&self) -> Result<(), ObjectError> {
+        ensure_nfc(&[&self.client_implementation])?;
+        let parents: BTreeSet<_> = self.parents.iter().collect();
+        if parents.len() != self.parents.len() {
+            return Err(ObjectError::Invalid(
+                "operation parents must be duplicate-free",
+            ));
+        }
+        let mut keys = BTreeSet::new();
+        for action in &self.actions {
+            let key = match action {
+                OperationActionV1::BoundTransition { key, before, after } => {
+                    if matches!(key, ReferenceKey::Line(_) | ReferenceKey::OperationHead) {
+                        return Err(ObjectError::Invalid(
+                            "bound transition key requires a dedicated operation action",
+                        ));
+                    }
+                    if before
+                        .as_ref()
+                        .is_some_and(|reference| reference.kind != key.expected_kind())
+                        || after.kind != key.expected_kind()
+                    {
+                        return Err(ObjectError::Invalid(
+                            "bound transition object kind does not match its reference key",
+                        ));
+                    }
+                    key.clone()
+                }
+                OperationActionV1::LineAdvance(declaration) => {
+                    declaration.validate()?;
+                    ReferenceKey::Line(declaration.line_id)
+                }
+            };
+            if !keys.insert(key) {
+                return Err(ObjectError::Invalid(
+                    "operation actions must have unique reference keys",
+                ));
+            }
+        }
+        ensure_signature_purpose(&self.signature, SignaturePurpose::Operation)
+    }
+
+    fn canonical_value(&self) -> Result<Value, ObjectError> {
+        let mut fields = self.unsigned_map();
+        fields.push((12, self.signature.value()));
+        Ok(Value::Map(fields))
+    }
+}
+
+impl SignedObject for OperationV1 {
+    fn unsigned_value(&self) -> Result<Value, ObjectError> {
+        Ok(Value::Map(self.unsigned_map()))
+    }
+
     fn signatures(&self) -> &[Signature] {
         std::slice::from_ref(&self.signature)
     }

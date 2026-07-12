@@ -16,6 +16,7 @@ baseline; it does not imply code exists or external review is complete.
 | [0008](0008-minimum-supported-rust-version.md) | Rust 1.85 MSRV and edition 2024 | Accepted |
 | [0009](0009-supported-platforms-and-filesystems.md) | Linux/macOS/Windows portable filesystem profile | Accepted |
 | [0010](0010-isolated-overlay-workspace-sessions.md) | Isolated per-session overlay roots with portable managed fallback | Proposed |
+| [0011](0011-key-bound-operation-transitions.md) | Key-bound mutable-reference transitions | Accepted |
 
 New ADRs use the next four-digit number. Do not rewrite an accepted decision's history;
 supersede it and link both records. Every record states consequences, verification,

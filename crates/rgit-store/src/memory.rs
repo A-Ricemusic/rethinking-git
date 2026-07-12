@@ -14,19 +14,19 @@ use crate::{
     StoredObject,
 };
 
-#[derive(Default)]
-struct State {
-    objects: BTreeMap<ObjectId, StoredObject>,
-    promised: BTreeSet<ObjectId>,
-    quarantined: BTreeSet<ObjectId>,
-    references: BTreeMap<ReferenceKey, ReferenceState>,
-    revision: u64,
+#[derive(Clone, Default)]
+pub(crate) struct MemorySnapshot {
+    pub(crate) objects: BTreeMap<ObjectId, StoredObject>,
+    pub(crate) promised: BTreeSet<ObjectId>,
+    pub(crate) quarantined: BTreeSet<ObjectId>,
+    pub(crate) references: BTreeMap<ReferenceKey, ReferenceState>,
+    pub(crate) revision: u64,
 }
 
 /// Thread-safe in-memory reference backend used by tests and ephemeral clients.
 #[derive(Default)]
 pub struct MemoryStore {
-    state: Mutex<State>,
+    state: Mutex<MemorySnapshot>,
 }
 
 impl MemoryStore {
@@ -35,7 +35,34 @@ impl MemoryStore {
         Self::default()
     }
 
-    fn lock(&self) -> MutexGuard<'_, State> {
+    pub(crate) fn from_snapshot(snapshot: MemorySnapshot) -> Self {
+        Self {
+            state: Mutex::new(snapshot),
+        }
+    }
+
+    pub(crate) fn snapshot(&self) -> MemorySnapshot {
+        self.lock().clone()
+    }
+
+    pub(crate) fn replace_if_revision(
+        &self,
+        expected_revision: u64,
+        replacement: MemorySnapshot,
+    ) -> Result<(), StoreError> {
+        let mut state = self.lock();
+        if state.revision != expected_revision {
+            return Err(StoreError::ReferenceConflict);
+        }
+        *state = replacement;
+        Ok(())
+    }
+
+    pub(crate) fn replace(&self, replacement: MemorySnapshot) {
+        *self.lock() = replacement;
+    }
+
+    fn lock(&self) -> MutexGuard<'_, MemorySnapshot> {
         self.state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -46,7 +73,10 @@ impl MemoryStore {
         Ok(StoredObject::new(id.clone(), bytes.to_vec(), object)?)
     }
 
-    fn visible_object<'a>(state: &'a State, id: &ObjectId) -> Result<&'a StoredObject, StoreError> {
+    fn visible_object<'a>(
+        state: &'a MemorySnapshot,
+        id: &ObjectId,
+    ) -> Result<&'a StoredObject, StoreError> {
         if state.quarantined.contains(id) {
             return Err(StoreError::Quarantined);
         }
@@ -59,7 +89,7 @@ impl MemoryStore {
         Err(StoreError::NotPresent)
     }
 
-    fn check_expected(state: &State, update: &crate::RefUpdate) -> Result<(), StoreError> {
+    fn check_expected(state: &MemorySnapshot, update: &crate::RefUpdate) -> Result<(), StoreError> {
         let actual = state.references.get(&update.key);
         let matches = match &update.expected {
             ExpectedRef::Absent => actual.is_none(),
@@ -69,7 +99,7 @@ impl MemoryStore {
     }
 
     fn next_state(
-        state: &State,
+        state: &MemorySnapshot,
         publication: &Publication,
         update: &crate::RefUpdate,
     ) -> Result<ReferenceState, StoreError> {
@@ -85,8 +115,11 @@ impl MemoryStore {
         })
     }
 
-    fn stage(publication: &Publication, state: &State) -> Result<State, StoreError> {
-        let mut staged = State {
+    fn stage(
+        publication: &Publication,
+        state: &MemorySnapshot,
+    ) -> Result<MemorySnapshot, StoreError> {
+        let mut staged = MemorySnapshot {
             objects: state.objects.clone(),
             promised: state.promised.clone(),
             quarantined: state.quarantined.clone(),
@@ -154,7 +187,7 @@ impl MemoryStore {
     fn validate_operation(
         publication: &Publication,
         operation: &StoredObject,
-        state: &State,
+        state: &MemorySnapshot,
     ) -> Result<(), StoreError> {
         let operation_map =
             value_map(operation.object().decoded().value()).ok_or(StoreError::OperationMismatch)?;
@@ -227,7 +260,10 @@ impl MemoryStore {
         Ok(())
     }
 
-    fn closure_from(state: &State, roots: &[ReferenceEdge]) -> Result<Closure, StoreError> {
+    fn closure_from(
+        state: &MemorySnapshot,
+        roots: &[ReferenceEdge],
+    ) -> Result<Closure, StoreError> {
         let mut objects = BTreeMap::new();
         let mut pending = roots.to_vec();
         while let Some(edge) = pending.pop() {
@@ -288,7 +324,7 @@ impl MemoryStore {
     }
 
     fn ancestry_closure(
-        state: &State,
+        state: &MemorySnapshot,
         roots: &[ObjectId],
         kind: ObjectKind,
     ) -> Result<BTreeMap<ObjectId, StoredObject>, StoreError> {
@@ -597,7 +633,7 @@ fn transition_matches(action: &Value, update: &crate::RefUpdate) -> bool {
     before == expected_before && after == Some((update.key.expected_kind(), update.target.clone()))
 }
 
-fn reference_identity_matches(key: &ReferenceKey, target: &StoredObject) -> bool {
+pub(crate) fn reference_identity_matches(key: &ReferenceKey, target: &StoredObject) -> bool {
     let Some(map) = value_map(target.object().decoded().value()) else {
         return false;
     };
