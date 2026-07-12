@@ -58,7 +58,8 @@ jobs:
         with:
           name: test-output-${{ runner.os }}
           path: test-output.log
-          if-no-files-found: error
+          # Earlier compile, format, or lint failures legitimately prevent this file.
+          if-no-files-found: warn
           retention-days: 14
 
   msrv:

@@ -245,8 +245,7 @@ impl LooseObjectStore {
             .map_err(|error| LooseStoreError::io("sync temporary record", error))?;
         self.injector.check(FailurePoint::AfterTempSync)?;
 
-        let expected_identity = temporary_file
-            .metadata()
+        let expected_identity = platform::file_identity(&temporary_file)
             .map_err(|error| LooseStoreError::io("inspect temporary record", error))?;
         verify_open_file(&mut temporary_file, Some(id), None)?;
         self.injector.check(FailurePoint::AfterTempVerify)?;
@@ -264,10 +263,11 @@ impl LooseObjectStore {
             Ok(()) => {
                 self.injector.check(FailurePoint::AfterPublish)?;
                 let published = open_regular_at(&parent, &final_name, "open published record")?;
-                let published_identity = published
-                    .metadata()
-                    .map_err(|error| LooseStoreError::io("inspect published record", error))?;
-                if !platform::same_file(&expected_identity, &published_identity) {
+                let identity_matches = platform::same_file(&expected_identity, &published)
+                    .map_err(|error| {
+                        LooseStoreError::io("verify published record identity", error)
+                    })?;
+                if !identity_matches {
                     self.incident.store(true, Ordering::Release);
                     let _ = self.persist_incident();
                     return Err(LooseStoreError::CollisionIncident);
