@@ -22,13 +22,13 @@ This checklist tracks implementation of the production-grade, permission-aware G
 
 - [x] Add Rust formatting checks.
 - [x] Add Clippy with warnings treated according to the project lint policy.
-- [ ] Run unit and integration tests in CI.
+- [x] Run unit and integration tests in CI.
 - [x] Add dependency vulnerability and license checks.
 - [x] Add Linux CI.
 - [x] Add macOS CI.
 - [x] Add Windows CI for supported behavior.
 - [x] Cache Cargo dependencies without hiding reproducibility problems.
-- [ ] Publish test and benchmark artifacts from CI.
+- [x] Publish test and benchmark artifacts from CI.
 
 ### Baseline behavior
 
@@ -81,7 +81,7 @@ This checklist tracks implementation of the production-grade, permission-aware G
 
 ### Milestone 0 exit criteria
 
-- [ ] All documented prototype flows run in CI.
+- [x] All documented prototype flows run in CI.
 - [x] Golden tests protect existing semantics.
 - [x] Benchmark baselines are reproducible.
 - [x] Threat-model and trust-boundary documents are reviewed.
@@ -119,7 +119,7 @@ This checklist tracks implementation of the production-grade, permission-aware G
 - [x] Define policy-label reference schema.
 - [x] Add schema-version fields.
 - [x] Add canonical encoding test vectors.
-- [ ] Add cross-platform decode tests.
+- [x] Add cross-platform decode tests.
 - [x] Add debug JSON rendering for canonical objects.
 
 ### Object store
@@ -153,8 +153,8 @@ This checklist tracks implementation of the production-grade, permission-aware G
 ### Milestone 1 exit criteria
 
 - [ ] Existing prototype scenarios pass on the new store.
-- [ ] Canonical test vectors are byte-stable across supported platforms.
-- [ ] Identical logical objects deduplicate.
+- [x] Canonical test vectors are byte-stable across supported platforms.
+- [x] Identical logical objects deduplicate.
 - [ ] Repository verification works without CLI in-memory state.
 - [ ] Failure-injection tests demonstrate crash-safe reference updates.
 - [ ] Milestone 1 review is signed off.
