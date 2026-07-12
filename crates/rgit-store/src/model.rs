@@ -1,6 +1,8 @@
 use std::{collections::BTreeMap, fmt, sync::Arc};
 
-use rgit_objects::{AnyObject, ChangeId, LineId, ObjectId, ObjectKind, ReferenceEdge};
+use rgit_objects::{AnyObject, ObjectId, ObjectKind, ReferenceEdge};
+
+pub use rgit_objects::ReferenceKey;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PutOutcome {
@@ -68,41 +70,6 @@ impl StoredObject {
     #[must_use]
     pub fn references(&self) -> &[ReferenceEdge] {
         &self.references
-    }
-}
-
-/// Closed namespaces for mutable repository references.
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ReferenceKey {
-    Line(LineId),
-    Change(ChangeId),
-    OperationHead,
-    Release(LineId),
-    Marker([u8; 16]),
-}
-
-impl ReferenceKey {
-    #[must_use]
-    pub const fn expected_kind(&self) -> ObjectKind {
-        match self {
-            Self::Line(_) => ObjectKind::LineState,
-            Self::Change(_) => ObjectKind::ChangeRevision,
-            Self::OperationHead => ObjectKind::Operation,
-            Self::Release(_) => ObjectKind::Release,
-            Self::Marker(_) => ObjectKind::Marker,
-        }
-    }
-}
-
-impl fmt::Debug for ReferenceKey {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::Line(_) => "ReferenceKey::Line(<redacted>)",
-            Self::Change(_) => "ReferenceKey::Change(<redacted>)",
-            Self::OperationHead => "ReferenceKey::OperationHead",
-            Self::Release(_) => "ReferenceKey::Release(<redacted>)",
-            Self::Marker(_) => "ReferenceKey::Marker(<redacted>)",
-        })
     }
 }
 

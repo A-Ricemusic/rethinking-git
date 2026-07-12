@@ -697,7 +697,7 @@ fn parse_record_stream(
     let kind_number = read_varint_stream(reader, &mut checksum, &mut consumed)?;
     let kind = ObjectKind::try_from(kind_number).map_err(|_| LooseStoreError::UnsupportedFormat)?;
     let schema = read_varint_stream(reader, &mut checksum, &mut consumed)?;
-    if schema != 0 {
+    if !kind.supports_schema(schema) {
         return Err(LooseStoreError::UnsupportedFormat);
     }
     let payload_length_u64 = read_varint_stream(reader, &mut checksum, &mut consumed)?;
