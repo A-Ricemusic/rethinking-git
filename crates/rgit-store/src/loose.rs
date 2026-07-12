@@ -9,7 +9,7 @@ use std::{
     },
 };
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 use std::fs::OpenOptions;
 
 use rgit_objects::{
@@ -383,7 +383,7 @@ impl LooseObjectStore {
         self.incident.load(Ordering::Acquire)
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     fn path_for(&self, id: &ObjectId) -> PathBuf {
         let digest = hex::encode(id.digest());
         self.loose
@@ -966,7 +966,7 @@ fn reject_link(path: &Path) -> Result<(), LooseStoreError> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 fn open_regular_nofollow(path: &Path, operation: &'static str) -> Result<File, LooseStoreError> {
     let mut options = OpenOptions::new();
     options.read(true);
@@ -1118,6 +1118,7 @@ fn fill_random(output: &mut [u8]) -> io::Result<()> {
 mod tests {
     use super::*;
     use rgit_objects::HashAlgorithm;
+    #[cfg(unix)]
     use std::{
         collections::BTreeSet,
         process::Command,
@@ -1127,8 +1128,10 @@ mod tests {
 
     const VECTOR: &str = "524749544c4f4f5300001e20fcb8cf563145b1628a69e25e3a775d0d11cf3ae40cab63cc3bf94af1bfcbb166010044a40001010002a20050000000000000000000000000000000000158230012200000000000000000000000000000000000000000000000000000000000000000034361626306967a7dc69492425c9d81d219dd62ab37434c8e3690f00686fd6d7c47059e06";
 
+    #[cfg(unix)]
     struct TestDirectory(PathBuf);
 
+    #[cfg(unix)]
     impl TestDirectory {
         fn new() -> Self {
             let mut random = [0_u8; 16];
@@ -1140,12 +1143,14 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     impl Drop for TestDirectory {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
     }
 
+    #[cfg(unix)]
     fn vector_parts() -> (ObjectId, Vec<u8>, AnyObject) {
         let bytes = hex::decode(VECTOR).unwrap();
         let verified = parse_test_record(&bytes).unwrap();
@@ -1295,6 +1300,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     #[test]
     fn real_filesystem_round_trip_dedup_reopen_and_inventory() {
         let directory = TestDirectory::new();
@@ -1336,6 +1342,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn derived_path_and_permissions_match_contract() {
         let directory = TestDirectory::new();
@@ -1363,6 +1370,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     #[test]
     fn wrong_path_and_symlink_are_never_followed() {
         let directory = TestDirectory::new();
@@ -1386,9 +1394,11 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     #[derive(Debug)]
     struct FailOnce(FailurePoint);
 
+    #[cfg(unix)]
     impl FailureInjector for FailOnce {
         fn check(&self, point: FailurePoint) -> Result<(), LooseStoreError> {
             if point == self.0 {
@@ -1399,9 +1409,11 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     #[derive(Debug)]
     struct ExitAt(FailurePoint);
 
+    #[cfg(unix)]
     impl FailureInjector for ExitAt {
         fn check(&self, point: FailurePoint) -> Result<(), LooseStoreError> {
             if point == self.0 {
@@ -1411,6 +1423,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     fn point_name(point: FailurePoint) -> &'static str {
         match point {
             FailurePoint::AfterEncode => "after-encode",
@@ -1425,6 +1438,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     fn parse_point(name: &str) -> FailurePoint {
         [
             FailurePoint::AfterEncode,
@@ -1442,6 +1456,7 @@ mod tests {
         .unwrap()
     }
 
+    #[cfg(unix)]
     #[test]
     #[ignore = "subprocess crash helper"]
     fn crash_child() {
@@ -1453,6 +1468,7 @@ mod tests {
         panic!("failure point was not reached");
     }
 
+    #[cfg(unix)]
     #[test]
     fn process_termination_at_every_boundary_has_recoverable_layout() {
         let points = [
@@ -1532,6 +1548,7 @@ mod tests {
         assert!(!store.path_for(&id).exists());
     }
 
+    #[cfg(unix)]
     #[test]
     fn prepublication_failpoints_never_expose_final_object() {
         let points = [
@@ -1561,6 +1578,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     #[test]
     fn postrename_failpoints_are_reported_as_inventory_orphans() {
         for point in [FailurePoint::AfterPublish, FailurePoint::AfterParentSync] {
@@ -1584,6 +1602,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     #[test]
     fn collision_quarantines_candidate_and_enters_incident_mode() {
         let directory = TestDirectory::new();
@@ -1619,6 +1638,7 @@ mod tests {
         ));
     }
 
+    #[cfg(unix)]
     #[test]
     fn ordinary_reads_collapse_corruption_while_audited_reads_retain_detail() {
         let directory = TestDirectory::new();
@@ -1705,11 +1725,13 @@ mod tests {
         assert_eq!(fs::read_dir(outside).unwrap().count(), 0);
     }
 
+    #[cfg(unix)]
     #[derive(Debug)]
     struct SubstitutePublished {
         final_path: PathBuf,
     }
 
+    #[cfg(unix)]
     impl FailureInjector for SubstitutePublished {
         fn check(&self, point: FailurePoint) -> Result<(), LooseStoreError> {
             if point == FailurePoint::AfterPublish {
@@ -1720,6 +1742,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     #[test]
     fn postrename_substitution_persists_incident_across_restart() {
         let directory = TestDirectory::new();
@@ -1792,6 +1815,7 @@ mod tests {
         assert!(!store.path_for(&id).exists());
     }
 
+    #[cfg(unix)]
     #[test]
     fn concurrent_identical_writers_publish_once_without_replacement() {
         let directory = TestDirectory::new();
@@ -1881,6 +1905,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     #[test]
     fn errors_and_debug_output_do_not_disclose_paths_or_ids() {
         let directory = TestDirectory::new();
