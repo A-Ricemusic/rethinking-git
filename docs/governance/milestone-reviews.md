@@ -67,11 +67,11 @@ valid `Blocked` reason, never an implied approval.
 ## Milestone 0 gate
 
 Milestone 0 specifically requires evidence that documented prototype flows run in CI,
-golden tests protect existing semantics, benchmark baselines are reproducible, and the
-threat model/trust boundaries have been reviewed. All required ADRs must be `Accepted`,
-not merely drafted. The project maintainer, reliability owner, owners of affected ADRs,
-and security owner sign the record. If one person holds multiple roles, each role is
-listed separately and the lack of independent review is disclosed.
+golden tests protect existing semantics, and the threat model/trust boundaries have
+been reviewed. All required ADRs must be `Accepted`, not merely drafted. The project
+maintainer, reliability owner, owners of affected ADRs, and security owner sign the
+record. If one person holds multiple roles, each role is listed separately and the lack
+of independent review is disclosed.
 
 Because this project currently has no formal role assignees, these documents establish
 the process but do not by themselves sign off Milestone 0.

@@ -66,7 +66,7 @@ human independence requirement.
 - The relevant accountable owner accepts implementation ADRs in their scope.
 - The security owner must co-approve decisions that change confidentiality,
   authorization, key handling, secret materialization, or metadata exposure.
-- The reliability owner verifies test, benchmark, recovery, and CI evidence; they do
+- The reliability owner verifies test, performance, recovery, and CI evidence; they do
   not waive a failed acceptance criterion.
 - Only the project maintainer declares a milestone accepted after all required owner
   approvals and independent reviews are present.
