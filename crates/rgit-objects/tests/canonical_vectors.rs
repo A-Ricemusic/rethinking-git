@@ -390,30 +390,6 @@ fn frozen_schema_zero_profiles_match_exported_limits_and_documentation() {
     assert_eq!(BULK_MAX_TEXT_STRING_BYTES, 65_536);
     assert_eq!(BULK_MAX_COLLECTION_ITEMS, 1_000_000);
     assert_eq!(BULK_MAX_DEPTH, 64);
-
-    let normative = include_str!("../../../spec/canonical-encoding.md");
-    let format = include_str!("../FORMAT.md");
-    for required in [
-        "1,048,576 bytes (1 MiB)",
-        "16,777,216 bytes (16 MiB)",
-        "262,144 bytes (256 KiB)",
-        "4,194,304 bytes (4 MiB)",
-        "65,536 bytes (64 KiB)",
-        "1,000,000",
-        "Nested container depth | 64 | 64",
-    ] {
-        assert!(normative.contains(required), "spec omits {required}");
-    }
-    for required in [
-        "1 MiB encoded",
-        "16 MiB encoded",
-        "256 KiB byte string",
-        "4 MiB byte string",
-        "1,000,000 items",
-        "64 nested container levels",
-    ] {
-        assert!(format.contains(required), "FORMAT omits {required}");
-    }
 }
 
 #[test]

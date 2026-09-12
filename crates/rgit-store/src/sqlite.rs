@@ -1,4 +1,5 @@
 //! Transactional SQLite metadata paired with the immutable loose-object store.
+use crate::edge_roles::{V1 as EDGE_ROLES_V1, name as role_name};
 
 use std::{
     collections::BTreeSet,
@@ -875,8 +876,9 @@ fn verify_schema(connection: &Connection) -> Result<(), StoreError> {
     if schema_fingerprint(connection)? != expected_schema_fingerprint()? {
         return Err(StoreError::UnsupportedDatabase);
     }
-    let expected = edge_roles()?
-        .into_iter()
+    let expected = EDGE_ROLES_V1
+        .iter()
+        .copied()
         .map(str::to_owned)
         .collect::<BTreeSet<_>>();
     let mut statement = connection
@@ -1829,18 +1831,6 @@ fn ensure_same_filesystem<'a>(
     Err(StoreError::UnsupportedDatabase)
 }
 
-fn role_name(role: ReferenceRole) -> String {
-    let debug = format!("{role:?}");
-    let mut result = String::with_capacity(debug.len() + 8);
-    for (index, character) in debug.chars().enumerate() {
-        if character.is_ascii_uppercase() && index != 0 {
-            result.push('_');
-        }
-        result.push(character.to_ascii_lowercase());
-    }
-    result
-}
-
 fn value_unsigned_field(value: &Value, key: u64) -> Option<u64> {
     let Value::Map(map) = value else { return None };
     let Value::Unsigned(value) = &map.iter().find(|(candidate, _)| *candidate == key)?.1 else {
@@ -1859,26 +1849,6 @@ fn migration_1_digest() -> Result<[u8; 32], StoreError> {
         return Err(StoreError::UnsupportedDatabase);
     }
     Ok(actual)
-}
-
-fn edge_roles() -> Result<Vec<&'static str>, StoreError> {
-    let spec = include_str!("../../../spec/sqlite-store.md");
-    let section = spec
-        .split("complete version-1 closed registry is:")
-        .nth(1)
-        .ok_or(StoreError::UnsupportedDatabase)?;
-    let block = section
-        .split("```text")
-        .nth(1)
-        .ok_or(StoreError::UnsupportedDatabase)?;
-    Ok(block
-        .split("```")
-        .next()
-        .ok_or(StoreError::UnsupportedDatabase)?
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .collect())
 }
 
 fn pragma_i64(connection: &Connection, name: &str) -> Result<i64, StoreError> {
@@ -1944,8 +1914,8 @@ mod tests {
                 .expect("DDL")
                 .contains("CREATE TABLE repository")
         );
-        assert_eq!(edge_roles().expect("roles").len(), 97);
-        assert!(edge_roles().expect("roles").contains(&"operation_parent"));
+        assert_eq!(EDGE_ROLES_V1.len(), 97);
+        assert!(EDGE_ROLES_V1.contains(&"operation_parent"));
     }
 
     #[test]
