@@ -20,6 +20,7 @@ mod git_bridge;
 mod git_objects;
 mod git_remotes;
 mod ignore_rules;
+mod lines;
 mod resolution;
 mod transaction;
 mod verify;
@@ -274,6 +275,25 @@ enum AccessCommand {
 
 #[derive(Subcommand)]
 enum LineCommand {
+    /// Create a line at another line's saved head, preserving its policy.
+    Create {
+        name: String,
+        #[arg(long, default_value = DEFAULT_LINE)]
+        from: String,
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
+    /// Move a saved line head with a compare-and-swap guard; working files are unchanged.
+    Reset {
+        #[arg(default_value = DEFAULT_LINE)]
+        line: String,
+        #[arg(long)]
+        to: String,
+        #[arg(long)]
+        expected_head: String,
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
     /// List lines visible to an actor.
     List {
         /// Actor whose permissioned view should be used.
@@ -591,6 +611,16 @@ struct Operation {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum OperationKind {
+    CreateLine {
+        line: String,
+        source_line: String,
+        snapshot_id: Option<String>,
+    },
+    ResetLine {
+        line: String,
+        previous_snapshot: String,
+        snapshot_id: String,
+    },
     BindGitIdentity {
         snapshot_id: String,
         object_id: String,
@@ -778,6 +808,17 @@ fn main() -> Result<()> {
             AccessCommand::List => list_path_policies(&repo),
         },
         Command::Line { command } => match command {
+            LineCommand::Create {
+                name,
+                from,
+                as_actor,
+            } => lines::create(&repo, &name, &from, &as_actor),
+            LineCommand::Reset {
+                line,
+                to,
+                expected_head,
+                as_actor,
+            } => lines::reset(&repo, &line, &to, &expected_head, &as_actor),
             LineCommand::List { as_actor } => list_lines(&repo, &as_actor),
             LineCommand::Integrate { line, as_actor } => integrate_line(&repo, &line, &as_actor),
             LineCommand::View { line, as_actor } => view_line(&repo, &line, &as_actor),
@@ -2627,6 +2668,8 @@ fn hash_bytes(bytes: &[u8]) -> String {
 fn operation_kind(kind: &OperationKind) -> &'static str {
     match kind {
         OperationKind::InitRepo => "init_repo",
+        OperationKind::CreateLine { .. } => "create_line",
+        OperationKind::ResetLine { .. } => "reset_line",
         OperationKind::BindGitIdentity { .. } => "bind_git_identity",
         OperationKind::RetargetChange { .. } => "retarget_change",
         OperationKind::ImportGit { .. } => "import_git",

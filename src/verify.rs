@@ -172,6 +172,26 @@ fn verify_with_output(repo: &Repo, actor_name: &str, report: bool) -> Result<()>
     for (key, operation) in &operations {
         identity(key, &operation.id, "op_")?;
         match &operation.kind {
+            OperationKind::CreateLine {
+                line,
+                source_line,
+                snapshot_id,
+            } => {
+                require(
+                    lines.contains_key(line) && lines.contains_key(source_line),
+                    "create line operation",
+                )?;
+                snapshot_reference(snapshot_id.as_deref(), &snapshots)?;
+            }
+            OperationKind::ResetLine {
+                line,
+                previous_snapshot,
+                snapshot_id,
+            } => {
+                require(lines.contains_key(line), "reset line operation")?;
+                snapshot_reference(Some(previous_snapshot), &snapshots)?;
+                snapshot_reference(Some(snapshot_id), &snapshots)?;
+            }
             OperationKind::BindGitIdentity {
                 snapshot_id,
                 object_id,
