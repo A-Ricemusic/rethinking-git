@@ -37,7 +37,53 @@ pub(super) fn resolve_conflict(
     {
         bail!("conflict sources changed; integrate again to obtain current conflicts");
     }
-    resolved_file(repo, &actor, &conflict, &decision)?;
+    // Recheck every source grant before reading any working content.
+    resolved_file(repo, &actor, &conflict, &Resolution::Incoming)?;
+    conflict.replacement = if decision == Resolution::Custom {
+        let policy = policy_for_path(&conflict.path, &read_path_policies(repo)?);
+        if !can_access(&actor, &policy) {
+            return Err(CliFailure::OperationUnavailable.into());
+        }
+        let path = transaction::working_path(&repo.root, &conflict.path)?;
+        let bytes = transaction::read_working(&repo.root, &conflict.path)?.context(
+            "custom resolution file is missing; use --take delete to resolve a deletion",
+        )?;
+        let mut flags = transaction::working_flags(&path)?;
+        // Windows materializes logical symlinks/executable modes as regular files.
+        if !cfg!(unix) {
+            if let Some(file) = incoming.files.iter().find(|f| f.path == conflict.path) {
+                flags = file.flags();
+            }
+        }
+        if flags.symlink {
+            transaction::validate_link(&bytes)?;
+        }
+        let hash = hash_bytes(&bytes);
+        let blob = repo.path(&["blobs", &hash]);
+        if blob.try_exists()? {
+            if verify::read_blob(repo, &hash)? != bytes {
+                bail!("custom resolution blob failed verification");
+            }
+        } else {
+            transaction::publish_file(&blob, &bytes)?;
+        }
+        Some(FileEntry {
+            path: conflict.path.clone(),
+            hash,
+            bytes: bytes.len() as u64,
+            executable: flags.executable,
+            symlink: flags.symlink,
+            policy,
+        })
+    } else {
+        None
+    };
+    // Persist the conservative effective policy alongside the custom content.
+    if decision == Resolution::Custom {
+        conflict.replacement = resolved_file(repo, &actor, &conflict, &decision)?;
+    } else {
+        resolved_file(repo, &actor, &conflict, &decision)?;
+    }
     conflict.status = ConflictStatus::Resolved;
     conflict.resolution = Some(decision);
     write_json(repo, &conflict_path(repo, id)?, &conflict)?;
@@ -88,6 +134,20 @@ fn resolved_file(
         Resolution::Line => sides[1].clone(),
         Resolution::Incoming => sides[2].clone(),
         Resolution::Delete => None,
+        Resolution::Custom => {
+            let file = conflict
+                .replacement
+                .clone()
+                .context("custom resolution content missing")?;
+            verify::verify_file(repo, &file)?;
+            if file.path != conflict.path {
+                bail!("custom resolution path mismatch");
+            }
+            if !can_access(actor, &file.policy) {
+                return Err(CliFailure::OperationUnavailable.into());
+            }
+            Some(file)
+        }
     };
     Ok(chosen.map(|mut file| {
         // Choosing content must not silently undo a concurrent access restriction.

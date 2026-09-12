@@ -79,25 +79,8 @@ fn verify_with_output(repo: &Repo, actor_name: &str, report: bool) -> Result<()>
         )?;
         let mut paths = BTreeSet::new();
         for file in &snapshot.files {
-            transaction::validate_working_key(&file.path)?;
+            verify_file(repo, file)?;
             require(paths.insert(file.path.clone()), "unique snapshot path")?;
-            require(
-                file.hash.len() == 64
-                    && file
-                        .hash
-                        .bytes()
-                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
-                "blob identifier",
-            )?;
-            let bytes = read_blob(repo, &file.hash)?;
-            require(
-                bytes.len() as u64 == file.bytes && hash_bytes(&bytes) == file.hash,
-                "blob digest or length",
-            )?;
-            if file.symlink {
-                transaction::validate_link(&bytes)?;
-                require(!file.executable, "symlink mode")?;
-            }
             referenced_blobs.insert(file.hash.clone());
         }
         for path in &paths {
@@ -175,6 +158,15 @@ fn verify_with_output(repo: &Repo, actor_name: &str, report: bool) -> Result<()>
             (conflict.status == ConflictStatus::Resolved) == conflict.resolution.is_some(),
             "conflict resolution state",
         )?;
+        require(
+            (conflict.resolution == Some(Resolution::Custom)) == conflict.replacement.is_some(),
+            "custom resolution state",
+        )?;
+        if let Some(file) = &conflict.replacement {
+            require(file.path == conflict.path, "custom resolution path")?;
+            verify_file(repo, file)?;
+            referenced_blobs.insert(file.hash.clone());
+        }
     }
     let operations = records::<Operation>(repo, "operations")?;
     for (key, operation) in &operations {
@@ -279,7 +271,7 @@ fn verify_with_output(repo: &Repo, actor_name: &str, report: bool) -> Result<()>
     Ok(())
 }
 
-fn read_blob(repo: &Repo, hash: &str) -> Result<Vec<u8>> {
+pub(super) fn read_blob(repo: &Repo, hash: &str) -> Result<Vec<u8>> {
     let directory = repo.path(&["blobs"]);
     let metadata = fs::symlink_metadata(&directory)?;
     require(
@@ -293,4 +285,26 @@ fn read_blob(repo: &Repo, hash: &str) -> Result<Vec<u8>> {
         "regular blob file",
     )?;
     fs::read(path).context("failed to read blob")
+}
+
+pub(super) fn verify_file(repo: &Repo, file: &FileEntry) -> Result<()> {
+    transaction::validate_working_key(&file.path)?;
+    require(
+        file.hash.len() == 64
+            && file
+                .hash
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
+        "blob identifier",
+    )?;
+    let bytes = read_blob(repo, &file.hash)?;
+    require(
+        bytes.len() as u64 == file.bytes && hash_bytes(&bytes) == file.hash,
+        "blob digest or length",
+    )?;
+    if file.symlink {
+        transaction::validate_link(&bytes)?;
+        require(!file.executable, "symlink mode")?;
+    }
+    Ok(())
 }
