@@ -22,3 +22,17 @@ impl fmt::Display for CliFailure {
 }
 
 impl Error for CliFailure {}
+
+/// Missing direct read targets and restricted targets have the same public outcome.
+/// Preserve parse, I/O and integrity failures instead of turning corruption into absence.
+pub(crate) fn unavailable_if_missing(error: anyhow::Error) -> anyhow::Error {
+    if error.chain().any(|cause| {
+        cause
+            .downcast_ref::<std::io::Error>()
+            .is_some_and(|io| io.kind() == std::io::ErrorKind::NotFound)
+    }) {
+        CliFailure::OperationUnavailable.into()
+    } else {
+        error
+    }
+}

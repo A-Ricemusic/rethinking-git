@@ -256,6 +256,16 @@ Conflict output is permission-aware. Actors only see conflicts where they can ac
 
 ### Exit status
 
+Successful commands return `0`; command refusals and repository errors return `1`;
+invalid CLI syntax returns `2`. Direct change, snapshot, conflict, and line reads
+return `1` with `Error: operation unavailable` on stderr and no stdout when the
+requested object is missing or restricted. Restricted workspace status/diff and
+snapshot comparisons use that same refusal. Parsing/corruption errors remain errors,
+not successful empty output. Empty visible lists and a workspace without a current
+change are successful inspections. This corrects earlier successful exit statuses for
+denied reads; automation must check the exit status before consuming output.
+
+
 `merge preview` and `line integrate` return exit code `1` when authorization
 prevents the operation. `line integrate` also returns `1` after it stores a merge
 conflict and leaves the line unchanged. Successful previews and integrations return

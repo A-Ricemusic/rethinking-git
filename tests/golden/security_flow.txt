@@ -20,7 +20,6 @@ $ rgit access list
 security domains:team/security
 $ rgit change list --as alice
 $ rgit change show <CHANGE> --as alice
-change `<CHANGE>` is hidden from actor `alice`
 $ rgit change list --as bob
 * <CHANGE> fix-token-replay snapshot:<SNAP> domains:team/security
 $ rgit snapshot-info list --as bob
@@ -79,7 +78,6 @@ snapshot: <SNAP>
 security/repro.test 14 bytes
 src/auth.txt 16 bytes
 $ rgit diff workspace --as alice
-change is hidden from actor `alice`
 $ rgit line history main --as alice
 $ rgit line history main --as bob
 $ rgit line history main --as admin

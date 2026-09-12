@@ -371,7 +371,10 @@ fn permissioned_security_flow_matches_golden_transcript() {
     section(
         &mut transcript,
         "change show <CHANGE> --as alice",
-        &repo.run(&["change", "show", &change, "--as", "alice"]),
+        &repo.run_refused(
+            &["change", "show", &change, "--as", "alice"],
+            "operation unavailable",
+        ),
     );
     section(
         &mut transcript,
@@ -452,7 +455,10 @@ fn permissioned_security_flow_matches_golden_transcript() {
     section(
         &mut transcript,
         "diff workspace --as alice",
-        &repo.run(&["diff", "workspace", "--as", "alice"]),
+        &repo.run_refused(
+            &["diff", "workspace", "--as", "alice"],
+            "operation unavailable",
+        ),
     );
     section(
         &mut transcript,
