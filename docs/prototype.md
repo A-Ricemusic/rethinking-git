@@ -415,8 +415,8 @@ bases (criss-cross history) are refused pending recursive merge support.
 `rgit git export /outside/path/new.git --line main --author 'Name <email>' --as admin`
 creates a new bare Git repository containing the selected line's saved ancestry,
 messages, regular-file bytes, executable modes and merge parents. Git must be installed.
-The explicit identity is required because historical native snapshots did not record
-per-snapshot authors. The result is checked with `git fsck --full --strict` and can
+The explicit identity is required for native snapshots because they did not record
+per-snapshot authors; untouched imported commits retain their original identities. The result is checked with `git fsck --full --strict` and can
 be cloned with Git after export succeeds.
 
 Restricted history is refused unless `--allow-restricted` explicitly authorizes
@@ -425,6 +425,31 @@ The exporter never overwrites an existing destination and removes ambient `GIT_*
 repository variables so they cannot redirect writes. An interrupted export bearing
 `RGIT_EXPORT_INCOMPLETE` must not be used; preserve the source and retry elsewhere.
 
-This is export of native history, not yet lossless Git import/export: original Git
-commit identities/signatures, tags, other refs, symlinks and submodules require further
-work. The stream follows Git's [fast-import interface](https://git-scm.com/docs/git-fast-import).
+Export writes verified Git objects through Git's [hash-object interface](https://git-scm.com/docs/git-hash-object).
+This preserves raw imported commit metadata rather than regenerating signatures or
+author headers. Tags, additional refs, symlinks and submodules still require support.
+
+
+### Importing Git history
+
+`rgit git import /local/git/repository --revision main --into main --as admin`
+imports the selected revision's complete commit ancestry into an empty native line.
+Imports default to the admin domain; add `--domain public` only when that is the
+intended visibility. The source is checked with Git before import, and native
+metadata publishes as one command transaction. Working files remain unchanged until
+you switch or explicitly restore. Unsupported trees fail without advancing native
+references; failed imports can leave verified unreferenced blobs.
+
+For supported regular-file histories, untouched commits round-trip with their exact
+Git IDs, raw metadata, authors, timestamps, signatures, modes and parent order. SHA-1
+and SHA-256 repositories are supported; an export cannot mix object formats. Native
+edits can extend imported history, with `--author` supplying identity for new native
+snapshots. `repo verify` checks imported commit digests and correspondence between
+raw metadata, native files, parents, display messages and timestamps. Signature bytes
+are preserved, but trust in signing keys remains Git's responsibility.
+
+Import currently requires a local repository and an empty target line. Tags and
+additional named refs are not imported. Symlinks, submodules, non-UTF-8 names, empty
+Git tree entries, unsupported reserved paths and excessive nesting are refused,
+not silently rewritten. This is a bounded compatibility path, not complete Git
+repository migration or native authenticated synchronization.

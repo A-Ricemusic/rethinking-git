@@ -17,6 +17,7 @@ mod backup;
 mod checkout;
 mod cli_failure;
 mod git_bridge;
+mod git_objects;
 mod resolution;
 mod transaction;
 mod verify;
@@ -120,6 +121,18 @@ enum Command {
 
 #[derive(Subcommand)]
 enum GitCommand {
+    /// Import a local Git revision and its complete ancestry into an empty line.
+    Import {
+        source: PathBuf,
+        #[arg(long, default_value = "HEAD")]
+        revision: String,
+        #[arg(long, default_value = DEFAULT_LINE)]
+        into: String,
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+        #[arg(long = "domain", default_value = ADMIN_DOMAIN)]
+        domains: Vec<String>,
+    },
     /// Export a line and its ancestry to a new bare Git repository.
     Export {
         destination: PathBuf,
@@ -127,7 +140,7 @@ enum GitCommand {
         line: String,
         /// Identity for native snapshots, e.g. Name <email@example.com>.
         #[arg(long)]
-        author: String,
+        author: Option<String>,
         #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
         as_actor: String,
         /// Explicitly export restricted contents without their rgit access policies.
@@ -422,6 +435,8 @@ impl Change {
 
 #[derive(Clone, Serialize, Deserialize)]
 struct Snapshot {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    git: Option<git_objects::CommitMetadata>,
     id: String,
     change_id: String,
     parent_snapshot: Option<String>,
@@ -516,6 +531,11 @@ struct Operation {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum OperationKind {
+    ImportGit {
+        line: String,
+        change_id: String,
+        snapshot_id: String,
+    },
     SwitchWorkspace {
         change_id: String,
     },
@@ -592,6 +612,23 @@ fn main() -> Result<()> {
         Command::Init => unreachable!(),
         Command::Git {
             command:
+                GitCommand::Import {
+                    source,
+                    revision,
+                    into,
+                    as_actor,
+                    domains,
+                },
+        } => git_bridge::import(
+            &repo,
+            &source,
+            &revision,
+            &into,
+            &as_actor,
+            policy_from_domains(domains),
+        ),
+        Command::Git {
+            command:
                 GitCommand::Export {
                     destination,
                     line,
@@ -603,7 +640,7 @@ fn main() -> Result<()> {
             &repo,
             &destination,
             &line,
-            &author,
+            author.as_deref(),
             &as_actor,
             allow_restricted,
         ),
@@ -1028,6 +1065,7 @@ fn create_snapshot(repo: &Repo, message: &str, requested_policy: AccessPolicy) -
     let files = scan_working_tree(repo, true)?;
     let manifest_hash = manifest_hash(&files)?;
     let snapshot = Snapshot {
+        git: None,
         id: format!("snap_{}", new_id_suffix()),
         change_id: change.id.clone(),
         parent_snapshot: change.workspace_base_snapshot_id().map(str::to_string),
@@ -1491,6 +1529,7 @@ fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> 
         None
     };
     let integrated_snapshot = Snapshot {
+        git: None,
         id: format!("snap_{}", new_id_suffix()),
         change_id: change.id.clone(),
         parent_snapshot: line.head_snapshot.clone(),
@@ -2458,6 +2497,7 @@ fn hash_bytes(bytes: &[u8]) -> String {
 fn operation_kind(kind: &OperationKind) -> &'static str {
     match kind {
         OperationKind::InitRepo => "init_repo",
+        OperationKind::ImportGit { .. } => "import_git",
         OperationKind::SwitchWorkspace { .. } => "switch_workspace",
         OperationKind::RestoreWorkspace { .. } => "restore_workspace",
         OperationKind::SetActor { .. } => "set_actor",

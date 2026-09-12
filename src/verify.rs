@@ -124,6 +124,31 @@ pub(super) fn verify(repo: &Repo, actor_name: &str) -> Result<()> {
         require(changes.contains_key(&id), "workspace change")?;
     }
     ancestry::validate_graph(&snapshots)?;
+    for snapshot in snapshots.values() {
+        if let Some(metadata) = &snapshot.git {
+            let parsed = metadata.parse()?;
+            require(
+                snapshot.message == String::from_utf8_lossy(&parsed.message),
+                "Git provenance message",
+            )?;
+            require(
+                parsed.timestamp.checked_mul(1000) == Some(snapshot.created_at),
+                "Git provenance timestamp",
+            )?;
+            let (tree, _) = git_objects::tree(repo, &snapshot.files, &metadata.object_format)?;
+            require(tree == parsed.tree, "Git provenance tree")?;
+            let parents = ancestry::parents(snapshot)
+                .map(|id| {
+                    snapshots[id]
+                        .git
+                        .as_ref()
+                        .map(|m| m.object_id.clone())
+                        .context("Git parent provenance missing")
+                })
+                .collect::<Result<Vec<_>>>()?;
+            require(parents == parsed.parents, "Git provenance parents")?;
+        }
+    }
     let conflicts: BTreeMap<String, Conflict> = records::<Conflict>(repo, "conflicts")?
         .into_iter()
         .collect();
@@ -157,6 +182,11 @@ pub(super) fn verify(repo: &Repo, actor_name: &str) -> Result<()> {
                 change_id,
                 snapshot_id,
             }
+            | OperationKind::ImportGit {
+                change_id,
+                snapshot_id,
+                ..
+            }
             | OperationKind::IntegrateLine {
                 change_id,
                 snapshot_id,
@@ -168,7 +198,9 @@ pub(super) fn verify(repo: &Repo, actor_name: &str) -> Result<()> {
                     snapshots[snapshot_id].change_id == *change_id,
                     "operation snapshot owner",
                 )?;
-                if let OperationKind::IntegrateLine { line, .. } = &operation.kind {
+                if let OperationKind::IntegrateLine { line, .. }
+                | OperationKind::ImportGit { line, .. } = &operation.kind
+                {
                     require(lines.contains_key(line), "operation line")?;
                 }
             }
