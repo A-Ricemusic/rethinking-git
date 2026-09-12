@@ -37,3 +37,16 @@ filesystem locking are not supported guarantees.
 Validation covers existing CLI behavior, rollback without publication, staged
 read/list visibility, replay after partial publication, invalid recovery paths,
 and concurrent commands observing their committed predecessor.
+
+## Working-file publication extension (journal schema 2)
+
+A second journal table stores each working path's expected previous bytes and
+intended replacement (NULL denotes absence). The command validates every blob,
+path and current file before committing both metadata and working updates. Recovery
+accepts only the expected old or intended new bytes, applies working changes first,
+then publishes metadata. Clearing both tables is one SQLite transaction. An edit
+made after interruption stops recovery without removing the committed journal.
+Symlink traversal, special files, untracked collisions, and unsupported path shapes
+are refused. Snapshot file modes and symlinks require a later format extension.
+Subprocess tests exercise exit after the first replacement and preservation of edits
+made before recovery. Readers still need to participate in repository locking.
