@@ -111,6 +111,11 @@ impl CommandTransaction {
         if self.pending.borrow().is_empty() && self.working.borrow().is_empty() {
             return Ok(());
         }
+        super::checkout_paths::validate(self.working.borrow().keys().map(String::as_str))?;
+        super::checkout_paths::validate_existing(
+            &self.workspace_root()?,
+            self.working.borrow().keys().map(String::as_str),
+        )?;
         for (key, update) in self.working.borrow().iter() {
             let current = read_working(&self.workspace_root()?, key)?;
             if current != update.before
@@ -183,6 +188,11 @@ impl CommandTransaction {
             })?;
             rows.collect::<std::result::Result<Vec<_>, _>>()?
         };
+        super::checkout_paths::validate(working.iter().map(|(key, _)| key.as_str()))?;
+        super::checkout_paths::validate_existing(
+            &self.workspace_root()?,
+            working.iter().map(|(key, _)| key.as_str()),
+        )?;
         for (key, update) in &working {
             if update.after_symlink == Some(true) {
                 validate_link(
@@ -624,6 +634,38 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn aliased_recovery_rows_are_refused_before_any_publication() {
+        let repository = Repository::new();
+        let meta = repository.0.join(".rgit");
+        fs::create_dir(&meta).unwrap();
+        {
+            let command = CommandTransaction::open(&meta).unwrap();
+            command
+                .journal
+                .execute(
+                    "INSERT INTO working(path,after_bytes) VALUES ('README',?1), ('readme',?2)",
+                    rusqlite::params![b"first", b"second"],
+                )
+                .unwrap();
+            command
+                .journal
+                .execute(
+                    "INSERT INTO pending VALUES ('record.json',?1)",
+                    [b"saved".as_slice()],
+                )
+                .unwrap();
+        }
+        assert!(CommandTransaction::open(&meta).is_err());
+        assert_eq!(fs::read_dir(&repository.0).unwrap().count(), 1);
+        assert!(!meta.join("record.json").exists());
+        let db = Connection::open(meta.join("command-journal.sqlite3")).unwrap();
+        let count: i64 = db
+            .query_row("SELECT count(*) FROM working", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 2);
     }
 
     #[test]
