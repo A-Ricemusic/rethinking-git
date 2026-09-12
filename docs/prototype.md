@@ -396,3 +396,16 @@ then `rgit workspace restore --discard-changes --as admin` to materialize its cu
 snapshot. An interrupted backup without a published `.rgit` is incomplete; keep the
 source and retry into a new destination. Backups remain plaintext and need the same
 storage protection as the repository. Windows power-loss qualification is pending.
+
+### Merge ancestry
+
+New snapshots record their change base as the first parent. Integrations retain
+both the previous line head and the incoming snapshot. Subsequent integrations use
+the most recent shared ancestor, so continuing an already-integrated change does
+not produce a false conflict against its original base. Reintegrating an ancestor
+already present in the line is a no-op. Verification checks all parent edges for
+missing records, duplicates and cycles.
+
+Older snapshots omitted some ancestry edges; their declared change base remains a
+compatibility fallback when no shared ancestor can be found. Multiple best merge
+bases (criss-cross history) are refused pending recursive merge support.

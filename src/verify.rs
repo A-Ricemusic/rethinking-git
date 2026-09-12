@@ -123,21 +123,7 @@ pub(super) fn verify(repo: &Repo, actor_name: &str) -> Result<()> {
     if let Some(id) = workspace.current_change {
         require(changes.contains_key(&id), "workspace change")?;
     }
-    // Each snapshot has one parent in the compatibility format; visit each once.
-    let mut finished = BTreeSet::new();
-    for id in snapshots.keys() {
-        let mut active = BTreeSet::new();
-        let mut next = Some(id.as_str());
-        while let Some(id) = next {
-            if finished.contains(id) {
-                break;
-            }
-            require(active.insert(id.to_string()), "acyclic snapshot ancestry")?;
-            let snapshot = snapshots.get(id).context("missing snapshot parent")?;
-            next = snapshot.parent_snapshot.as_deref();
-        }
-        finished.extend(active);
-    }
+    ancestry::validate_graph(&snapshots)?;
     let conflicts: BTreeMap<String, Conflict> = records::<Conflict>(repo, "conflicts")?
         .into_iter()
         .collect();

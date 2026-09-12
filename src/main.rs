@@ -12,6 +12,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use walkdir::WalkDir;
 
+mod ancestry;
 mod backup;
 mod checkout;
 mod cli_failure;
@@ -400,6 +401,8 @@ struct Snapshot {
     id: String,
     change_id: String,
     parent_snapshot: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    merge_parents: Vec<String>,
     message: String,
     manifest_hash: String,
     files: Vec<FileEntry>,
@@ -986,7 +989,8 @@ fn create_snapshot(repo: &Repo, message: &str, requested_policy: AccessPolicy) -
     let snapshot = Snapshot {
         id: format!("snap_{}", new_id_suffix()),
         change_id: change.id.clone(),
-        parent_snapshot: change.current_snapshot.clone(),
+        parent_snapshot: change.workspace_base_snapshot_id().map(str::to_string),
+        merge_parents: Vec::new(),
         message: message.to_string(),
         manifest_hash,
         files,
@@ -1199,7 +1203,7 @@ fn merge_preview(
             .current_change
             .ok_or_else(|| anyhow!("workspace has no current change"))?,
     };
-    let change = read_change(repo, &change_id)?;
+    let mut change = read_change(repo, &change_id)?;
     let line = read_line(repo, line_name)?;
 
     if !can_access(&actor, &line.policy) || !can_access(&actor, &change.policy) {
@@ -1220,7 +1224,13 @@ fn merge_preview(
         return Ok(());
     }
 
-    let base_snapshot = read_optional_snapshot(repo, change.base_snapshot.as_deref())?;
+    let base_snapshot = ancestry::merge_base(
+        repo,
+        line.head_snapshot.as_deref(),
+        &incoming,
+        change.base_snapshot.as_deref(),
+    )?;
+    change.base_snapshot = base_snapshot.as_ref().map(|snapshot| snapshot.id.clone());
     let line_snapshot = read_optional_snapshot(repo, line.head_snapshot.as_deref())?;
     let base_files = optional_snapshot_files(&base_snapshot);
     let line_files = optional_snapshot_files(&line_snapshot);
@@ -1356,7 +1366,7 @@ fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> 
     let change_id = workspace.current_change.as_deref().ok_or_else(|| {
         anyhow!("workspace has no current change; run `rgit change new <name>` first")
     })?;
-    let change = read_change(repo, change_id)?;
+    let mut change = read_change(repo, change_id)?;
     let mut line = read_line(repo, line_name)?;
 
     if !can_access(&actor, &line.policy) || !can_access(&actor, &change.policy) {
@@ -1377,7 +1387,13 @@ fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> 
         return Ok(());
     }
 
-    let base_snapshot = read_optional_snapshot(repo, change.base_snapshot.as_deref())?;
+    let base_snapshot = ancestry::merge_base(
+        repo,
+        line.head_snapshot.as_deref(),
+        &incoming,
+        change.base_snapshot.as_deref(),
+    )?;
+    change.base_snapshot = base_snapshot.as_ref().map(|snapshot| snapshot.id.clone());
     let line_snapshot = read_optional_snapshot(repo, line.head_snapshot.as_deref())?;
     let source_policy = merge_source_policy(
         &line.policy,
@@ -1399,6 +1415,13 @@ fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> 
         return Err(CliFailure::OperationUnavailable.into());
     }
 
+    if base_snapshot
+        .as_ref()
+        .is_some_and(|base| base.id == incoming.id)
+    {
+        println!("change is already integrated into {}", line.name);
+        return Ok(());
+    }
     let mut plan = plan_merge(base_files, line_files, incoming_files);
     resolution::apply_resolutions(repo, &actor, &line, &change, &incoming, &mut plan)?;
 
@@ -1430,6 +1453,11 @@ fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> 
         id: format!("snap_{}", new_id_suffix()),
         change_id: change.id.clone(),
         parent_snapshot: line.head_snapshot.clone(),
+        merge_parents: if line.head_snapshot.as_deref() == Some(incoming.id.as_str()) {
+            Vec::new()
+        } else {
+            vec![incoming.id.clone()]
+        },
         message: format!("merge {} into {}", change.name, line.name),
         manifest_hash: manifest_hash(&plan.merged_files)?,
         files: plan.merged_files,
