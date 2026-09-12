@@ -380,8 +380,8 @@ fallback described below. File/directory transitions use the journal recovery de
 Git checkout compatibility. Windows power-loss durability remains unqualified.
 
 Executable-aware recovery introduced journal schema 3, including expected and
-target execute bits so mode-only updates recover with file contents. Current schema
-4 additionally records symlink type, as described below.
+target execute bits so mode-only updates recover with file contents. Schema 4
+added symlink type; schema 5 is current, as described below.
 
 ### Checking repository integrity
 
@@ -732,3 +732,25 @@ collides with a target, in which case recovery stops for manual reconciliation.
 Subprocess tests terminate after six filesystem publication points in each direction.
 Case-only and Unicode-equivalent spelling transitions remain conservatively refused.
 These process interruption tests do not qualify power-loss or hostile filesystem races.
+
+### Conservative automatic text merges
+
+Merge preview and integration combine independent line edits within an existing
+regular UTF-8 text file. Identical edits apply once; overlapping edits and ambiguous
+insertion boundaries remain conflicts. All three source files must have identical
+policies and modes. Binary/control-bearing text, symlinks, additions/deletions, and
+concurrent policy or mode changes retain explicit resolution behavior.
+
+The implementation uses the pinned `similar` line diff with a 500 ms budget per
+side. Deadline fallback may report additional conflicts. Inputs and generated files
+are limited to 1 MiB each; generated content is limited to 64 MiB per command, with
+remaining files left conflicted. It preserves LF, CRLF, CR, and missing final newlines.
+This is a line merge, not semantic validation of the resulting program.
+
+Source blobs are verified before merging. Preview keeps generated content in memory
+and publishes nothing. Integration publishes verified content-addressed blobs only
+after all conflicts are resolved, then journals the new snapshot and line update.
+An interrupted publication can leave an unreferenced blob, which `repo verify`
+reports; it cannot advance the line without the referenced content. Saved explicit
+resolutions take precedence. Integration does not replace working files; restore the
+new line-head snapshot when ready to materialize and test the combined result.
