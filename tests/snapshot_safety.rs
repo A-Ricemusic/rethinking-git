@@ -181,3 +181,53 @@ fn path_policies_must_be_relative_nonempty_paths() {
             .unwrap();
     assert!(policies.as_array().unwrap().is_empty());
 }
+
+#[test]
+fn large_binary_capture_reuse_and_corruption_preserve_exact_bytes() {
+    use sha2::{Digest, Sha256};
+    use std::io::Write;
+    let repo = Repo::new();
+    repo.change();
+    let chunk: Vec<_> = (0..65_537).map(|i| (i % 251) as u8).collect();
+    let mut hash = Sha256::new();
+    let mut file = fs::File::create(repo.0.join("large.bin")).unwrap();
+    for _ in 0..33 {
+        file.write_all(&chunk).unwrap();
+        hash.update(&chunk);
+    }
+    drop(file);
+    fs::write(repo.0.join("empty"), []).unwrap();
+    repo.ok(&["snapshot"]);
+    let first = current_snapshot(&repo);
+    repo.ok(&["snapshot"]);
+    assert_eq!(first["files"], current_snapshot(&repo)["files"]);
+    let blob = repo
+        .0
+        .join(".rgit/blobs")
+        .join(hex::encode(hash.finalize()));
+    assert_eq!(
+        fs::read(&blob).unwrap(),
+        fs::read(repo.0.join("large.bin")).unwrap()
+    );
+    let names: Vec<_> = fs::read_dir(repo.0.join(".rgit/blobs"))
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert_eq!(names.len(), 2, "publication temporaries were not removed");
+    repo.ok(&["repo", "verify", "--as", "admin"]);
+    // A long matching prefix with one extra byte must not be admitted.
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&blob)
+        .unwrap()
+        .write_all(b"x")
+        .unwrap();
+    assert!(!repo.run(&["snapshot"]).status.success());
+    assert_eq!(fs::read_dir(repo.0.join(".rgit/blobs")).unwrap().count(), 2);
+    assert_eq!(
+        fs::read_dir(repo.0.join(".rgit/snapshots"))
+            .unwrap()
+            .count(),
+        2
+    );
+}

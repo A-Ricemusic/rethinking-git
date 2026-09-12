@@ -34,7 +34,9 @@ blob payloads. Native SHA-256, Git SHA-1/SHA-256, lengths and unsafe-blob checks
 validated. Short/interrupted reads and read failures have regression coverage;
 Git import/export and corruption suites validate interoperability.
 
-Memory still scales with repository metadata. Snapshot capture, symlink-content
+Memory still scales with repository metadata. At these recorded revisions, snapshot
+capture retained file contents; subsequent regular-file streaming capture has its
+own [snapshot measurement](snapshot-memory.md). Symlink-content
 validation, working-tree checkout journals, and Git export retain in-memory content
 paths. This result does not establish bounded memory for those operations or qualify
 large repositories generally.

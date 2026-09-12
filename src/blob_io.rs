@@ -1,14 +1,32 @@
 //! Streaming content identities for inspection paths that do not need file bytes.
 use super::*;
-use std::io::{ErrorKind, Read};
+use std::io::{ErrorKind, Read, Write};
 
 pub(super) fn digest(reader: impl Read) -> Result<(String, u64)> {
     digest_with(reader, |_| {})
 }
 
 pub(super) fn digest_with(
-    mut reader: impl Read,
+    reader: impl Read,
     mut visit: impl FnMut(&[u8]),
+) -> Result<(String, u64)> {
+    digest_fallible(reader, |bytes| {
+        visit(bytes);
+        Ok(())
+    })
+}
+
+pub(super) fn copy_digest(reader: impl Read, mut writer: impl Write) -> Result<(String, u64)> {
+    digest_fallible(reader, |bytes| {
+        writer
+            .write_all(bytes)
+            .context("failed to spool blob contents")
+    })
+}
+
+fn digest_fallible(
+    mut reader: impl Read,
+    mut visit: impl FnMut(&[u8]) -> Result<()>,
 ) -> Result<(String, u64)> {
     let mut hash = Sha256::new();
     let mut length = 0_u64;
@@ -24,7 +42,7 @@ pub(super) fn digest_with(
             .checked_add(count as u64)
             .context("file length overflow")?;
         hash.update(&buffer[..count]);
-        visit(&buffer[..count]);
+        visit(&buffer[..count])?;
     }
     Ok((hex::encode(hash.finalize()), length))
 }
@@ -83,5 +101,34 @@ mod tests {
             fail: true
         })
         .is_err());
+    }
+
+    #[test]
+    fn copying_handles_short_reads_and_reports_write_failures() {
+        let bytes = b"binary\0contents\xff".to_vec();
+        let mut written = Vec::new();
+        assert_eq!(
+            copy_digest(
+                ShortReads {
+                    remaining: bytes.clone(),
+                    interrupted: false,
+                    fail: false
+                },
+                &mut written
+            )
+            .unwrap(),
+            (hash_bytes(&bytes), bytes.len() as u64)
+        );
+        assert_eq!(written, bytes);
+        struct FailingWriter;
+        impl Write for FailingWriter {
+            fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+                Err(io::ErrorKind::WriteZero.into())
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        assert!(copy_digest(&bytes[..], FailingWriter).is_err());
     }
 }

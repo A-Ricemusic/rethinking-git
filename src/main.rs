@@ -15,6 +15,7 @@ use walkdir::WalkDir;
 mod ancestry;
 mod backup;
 mod blob_io;
+mod capture;
 mod checkout;
 mod checkout_paths;
 mod cli_failure;
@@ -2438,7 +2439,13 @@ fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
             || inherited_modes
                 .get(&relative_path)
                 .is_some_and(|f| f.symlink);
-        let (hash, byte_count) = if !store_blobs && !symlink {
+        let (hash, byte_count) = if store_blobs && !symlink {
+            capture::blob(
+                repo,
+                fs::File::open(path)
+                    .with_context(|| format!("failed to open {}", path.display()))?,
+            )?
+        } else if !store_blobs && !symlink {
             blob_io::digest(
                 fs::File::open(path)
                     .with_context(|| format!("failed to open {}", path.display()))?,
