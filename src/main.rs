@@ -16,6 +16,7 @@ mod ancestry;
 mod backup;
 mod checkout;
 mod cli_failure;
+mod git_bridge;
 mod resolution;
 mod transaction;
 mod verify;
@@ -38,6 +39,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Exchange saved history with Git (requires Git installed).
+    Git {
+        #[command(subcommand)]
+        command: GitCommand,
+    },
     /// Inspect repository integrity.
     Repo {
         #[command(subcommand)]
@@ -109,6 +115,24 @@ enum Command {
     Op {
         #[command(subcommand)]
         command: OpCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum GitCommand {
+    /// Export a line and its ancestry to a new bare Git repository.
+    Export {
+        destination: PathBuf,
+        #[arg(long, default_value = DEFAULT_LINE)]
+        line: String,
+        /// Identity for native snapshots, e.g. Name <email@example.com>.
+        #[arg(long)]
+        author: String,
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+        /// Explicitly export restricted contents without their rgit access policies.
+        #[arg(long)]
+        allow_restricted: bool,
     },
 }
 
@@ -566,6 +590,23 @@ fn main() -> Result<()> {
     let repo = Repo::discover()?;
     let result = match cli.command {
         Command::Init => unreachable!(),
+        Command::Git {
+            command:
+                GitCommand::Export {
+                    destination,
+                    line,
+                    author,
+                    as_actor,
+                    allow_restricted,
+                },
+        } => git_bridge::export(
+            &repo,
+            &destination,
+            &line,
+            &author,
+            &as_actor,
+            allow_restricted,
+        ),
         Command::Repo {
             command:
                 RepoCommand::Backup {
