@@ -417,10 +417,7 @@ pub(crate) fn validate_working_key(key: &str) -> Result<()> {
             part.is_empty()
                 || part == "."
                 || part == ".."
-                || matches!(
-                    part.to_ascii_lowercase().as_str(),
-                    ".git" | ".rgit" | "target" | "node_modules"
-                )
+                || matches!(part.to_ascii_lowercase().as_str(), ".git" | ".rgit")
         })
     {
         bail!("unsafe snapshot path");

@@ -2423,7 +2423,9 @@ fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
 
 fn should_scan(path: &Path) -> bool {
     let name = path.file_name().and_then(|name| name.to_str());
-    !matches!(name, Some(".git" | META_DIR | "target" | "node_modules"))
+    !name.is_some_and(|name| {
+        name.eq_ignore_ascii_case(".git") || name.eq_ignore_ascii_case(META_DIR)
+    })
 }
 
 fn visible_files_with_hidden(files: Vec<FileEntry>, actor: &Actor) -> (Vec<FileEntry>, usize) {
@@ -3316,11 +3318,13 @@ mod tests {
     }
 
     #[test]
-    fn should_scan_ignores_source_control_and_dependency_directories() {
+    fn should_scan_protects_metadata_and_leaves_user_directories_to_ignore_rules() {
         assert!(!should_scan(Path::new(".git")));
         assert!(!should_scan(Path::new(".rgit")));
-        assert!(!should_scan(Path::new("target")));
-        assert!(!should_scan(Path::new("node_modules")));
+        assert!(should_scan(Path::new("target")));
+        assert!(should_scan(Path::new("node_modules")));
+        assert!(!should_scan(Path::new(".GIT")));
+        assert!(!should_scan(Path::new(".RGIT")));
         assert!(should_scan(Path::new("src")));
     }
 }

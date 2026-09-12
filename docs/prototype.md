@@ -464,9 +464,11 @@ removals. Malformed, unreadable or symlinked ignore files fail capture rather th
 silently changing what is saved.
 
 Rules use the [ignore crate's Git matcher](https://docs.rs/ignore/0.4.25/ignore/gitignore/struct.Gitignore.html).
-Machine-global excludes and `.git/info/exclude` are not yet loaded. The existing
-control/build-directory exclusions still apply, so this is not complete Git ignore
-configuration parity.
+Machine-global excludes and `.git/info/exclude` are not yet loaded. Repository
+metadata directories (`.git` and `.rgit`, including case aliases) are always protected.
+Other names, including `target` and `node_modules`, follow ignore rules; there are no
+implicit build-directory exclusions. Add project rules before capturing generated
+files. This is not complete Git ignore configuration parity.
 
 ### Git-backed collaboration
 
