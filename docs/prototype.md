@@ -592,9 +592,10 @@ new directory with `.rgit/clone-request.json`; rerun the same command with `--re
 after fixing the cause. The remote, branch and domains must match. Resume replays any
 committed journal first, then compares checkout against the pre-fetch workspace so
 later edits and newly created colliding files are preserved. Move conflicting files
-aside intentionally before retrying. Initial repository creation still has the
-initialization-interruption limitation described above; resume requires its completed
-configuration and recorded clone request. This is selected-branch cloning, not all-ref
+aside intentionally before retrying. Clone resume requires completed initialization
+and its recorded clone request. If interrupted before that request exists, finish
+initialization with `rgit init --resume` in the destination, then use `git fetch` and
+workspace commands to finish manually. This is selected-branch cloning, not all-ref
 migration or resumable network transfer.
 
 
@@ -614,3 +615,23 @@ metadata agrees. Native authors are configured metadata, not authenticated princ
 or signatures. Git transport credentials remain separate; imported signature bytes
 are preserved as before. Configure the identity again when a restored backup changes
 owners, since backups retain repository configuration.
+
+
+### Recovering interrupted initialization
+
+If `rgit init` is interrupted, run `rgit init --resume` in the same directory.
+Initialization records its repository identity before staging defaults, and replays
+committed command writes before deciding whether anything remains to initialize.
+Retrying a completed initialization verifies it without replacing history or adding
+another initialization operation. Existing working files are preserved.
+
+Resume refuses unknown control entries, symlinked control directories, incompatible
+formats, and saved history whose configuration is missing. It is not a repair command
+for a damaged repository. Ordinary repository discovery checks the configuration
+format before opening writable command databases, and a malformed nested `.rgit`
+stops discovery instead of falling back to a parent repository.
+
+Tests terminate real initialization subprocesses after directory creation, identity
+publication, staging, and commit. The command journal has separate publication crash
+tests. These cover process interruption; they do not qualify every filesystem or
+hardware power-loss behavior.

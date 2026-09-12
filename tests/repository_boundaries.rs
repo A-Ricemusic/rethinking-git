@@ -52,6 +52,10 @@ fn unsupported_repository_formats_are_rejected_without_mutation() {
         let mut config: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         config["format_version"] = json!(version);
         fs::write(&path, serde_json::to_vec(&config).unwrap()).unwrap();
+        // A refused format must not even create/upgrade command databases.
+        for name in ["command-lock.sqlite3", "command-journal.sqlite3"] {
+            fs::remove_file(repo.0.join(".rgit").join(name)).unwrap();
+        }
         let workspace = fs::read(repo.0.join(".rgit/workspace.json")).unwrap();
         let result = repo.run(&["change", "new", "must-not-exist"]);
         assert!(!result.status.success(), "accepted format {version}");
@@ -64,6 +68,8 @@ fn unsupported_repository_formats_are_rejected_without_mutation() {
             fs::read_dir(repo.0.join(".rgit/changes")).unwrap().count(),
             0
         );
+        assert!(!repo.0.join(".rgit/command-lock.sqlite3").exists());
+        assert!(!repo.0.join(".rgit/command-journal.sqlite3").exists());
     }
 }
 
@@ -188,4 +194,49 @@ fn new_identifiers_keep_full_uuid_entropy_and_legacy_changes_remain_readable() {
     let snapshot = updated["current_snapshot"].as_str().unwrap();
     assert_eq!(snapshot.strip_prefix("snap_").unwrap().len(), 32);
     repo.ok(&["snapshot-info", "show", snapshot]);
+}
+
+#[test]
+fn malformed_nested_control_file_never_falls_back_to_a_parent_repository() {
+    let parent = Repo::new();
+    let nested = Repo(parent.0.join("nested"));
+    fs::create_dir(&nested.0).unwrap();
+    fs::write(nested.0.join(".rgit"), b"not a directory").unwrap();
+    assert!(!nested
+        .run(&["change", "new", "must not reach parent"])
+        .status
+        .success());
+    assert_eq!(
+        fs::read_dir(parent.0.join(".rgit/changes"))
+            .unwrap()
+            .count(),
+        0
+    );
+    assert_eq!(
+        fs::read(nested.0.join(".rgit")).unwrap(),
+        b"not a directory"
+    );
+}
+
+#[test]
+fn initialization_resume_refuses_to_replace_history_with_missing_configuration() {
+    let repo = Repo::new();
+    repo.change();
+    fs::write(repo.0.join("saved.txt"), b"saved work").unwrap();
+    repo.ok(&["snapshot"]);
+    let workspace = fs::read(repo.0.join(".rgit/workspace.json")).unwrap();
+    fs::remove_file(repo.0.join(".rgit/repo.json")).unwrap();
+    assert!(!repo.run(&["init", "--resume"]).status.success());
+    assert!(!repo.0.join(".rgit/repo.json").exists());
+    assert_eq!(
+        fs::read(repo.0.join(".rgit/workspace.json")).unwrap(),
+        workspace
+    );
+    assert_eq!(
+        fs::read_dir(repo.0.join(".rgit/snapshots"))
+            .unwrap()
+            .count(),
+        1
+    );
+    assert_eq!(fs::read(repo.0.join("saved.txt")).unwrap(), b"saved work");
 }
