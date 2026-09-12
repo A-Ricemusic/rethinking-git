@@ -1,25 +1,50 @@
 # Rethinking Git
 
-**Status: experimental; not yet a production Git replacement.** See the [production-readiness audit](docs/production-readiness.md) for verified fixes, remaining blockers, and acceptance criteria.
+An experimental source-control tool built around stable **changes**, saved
+**snapshots**, a working **workspace**, shared **lines**, and an **operation log**.
+Snapshots are captured explicitly with `rgit snapshot`; there is no background watcher.
 
-This repository is now centered on a `jj`-inspired model.
+The CLI now supports a local edit/snapshot/integrate workflow, workspace restore and
+switch, conflict resolution, verified backups, and selected-branch Git import,
+export, clone, fetch and push. Git interoperability and transport require installed Git.
 
-The first prototype starts from these ideas:
+**This remains experimental and is not qualified as a production Git replacement.**
+Local actor filtering is not authentication or encryption. The executable uses its
+format-2 compatibility store; the newer canonical object/storage libraries are separate.
+See the [readiness audit](docs/production-readiness.md) for remaining release blockers.
 
-- a human works on a stable `change`
-- the filesystem is continuously captured as immutable `snapshots`
-- a `workspace` is the local editable view of a change
-- every source-control action is recorded in an `operation log`
+## Try it
 
-Later versions can add protected `lines`, typed `markers`, permissioned materialization, and sync.
+With Rust 1.85 or newer, from this checkout:
 
-Start here:
+```sh
+cargo install --path . --locked
+rgit --help
+```
 
-- [docs/jj-primitives.md](docs/jj-primitives.md)
-- [docs/access-control.md](docs/access-control.md)
-- [docs/prototype.md](docs/prototype.md)
+The [working CLI guide](docs/getting-started.md) walks through saving a change,
+restoring a backup, and collaborating through Git. Use a disposable repository for
+evaluation and keep the original Git repository when trying an import.
+
+## Repository map
+
+| Location | Responsibility |
+| --- | --- |
+| `src/` | CLI, JSON compatibility records, command journal, working files, Git bridge and transport |
+| `crates/rgit-objects/` | Canonical object encoding, identifiers, schemas and reference roles |
+| `crates/rgit-graph/` | Pure graph traversal, manifest diffs and merge planning |
+| `crates/rgit-store/` | Verified object storage, atomic reference publication and SQLite metadata |
+| `tests/` | Executable workflows, refusal/corruption cases and Git round trips |
+| `spec/`, `docs/adr/` | Durable format specifications and architecture decisions |
+
+The [prototype reference](docs/prototype.md) describes current behavior and limits.
+[Primitives](docs/jj-primitives.md) and [access-control design](docs/access-control.md)
+explain the model; design documents may describe capabilities beyond the current CLI.
+
+Run `cargo test --workspace --locked` for the test suite. CI also checks formatting,
+strict Clippy, the minimum Rust version and dependency policy on the supported matrix.
 
 ## License
 
-Rethinking Git is dual-licensed under the [Apache License, Version 2.0](LICENSE-APACHE)
-or the [MIT License](LICENSE-MIT), at your option.
+Dual-licensed under the [Apache License, Version 2.0](LICENSE-APACHE) or
+[MIT License](LICENSE-MIT), at your option.
