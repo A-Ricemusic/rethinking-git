@@ -453,3 +453,17 @@ additional named refs are not imported. Symlinks, submodules, non-UTF-8 names, e
 Git tree entries, unsupported reserved paths and excessive nesting are refused,
 not silently rewritten. This is a bounded compatibility path, not complete Git
 repository migration or native authenticated synchronization.
+
+### Ignore rules
+
+Snapshots and workspace diffs honor repository `.gitignore` files, including nested
+rules and negation. Already-tracked files remain tracked when a new ignore rule
+matches them; ignored parents are traversed only to retain those tracked files, and
+untracked siblings stay excluded. Missing tracked files are still recorded as
+removals. Malformed, unreadable or symlinked ignore files fail capture rather than
+silently changing what is saved.
+
+Rules use the [ignore crate's Git matcher](https://docs.rs/ignore/0.4.25/ignore/gitignore/struct.Gitignore.html).
+Machine-global excludes and `.git/info/exclude` are not yet loaded. The existing
+control/build-directory exclusions still apply, so this is not complete Git ignore
+configuration parity.
