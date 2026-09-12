@@ -137,8 +137,23 @@ struct GitPushArgs {
     allow_restricted: bool,
 }
 
+#[derive(clap::Args)]
+struct GitCloneArgs {
+    remote: String,
+    destination: PathBuf,
+    #[arg(long, default_value = DEFAULT_LINE)]
+    branch: String,
+    #[arg(long = "domain", default_value = ADMIN_DOMAIN)]
+    domains: Vec<String>,
+    /// Resume the matching incomplete clone, preserving later working edits.
+    #[arg(long)]
+    resume: bool,
+}
+
 #[derive(Subcommand)]
 enum GitCommand {
+    /// Clone a Git branch into a new native repository and working directory.
+    Clone(GitCloneArgs),
     /// Fetch a Git branch using configured Git/SSH credentials.
     Fetch {
         remote: String,
@@ -708,9 +723,18 @@ fn main() -> Result<()> {
     if matches!(cli.command, Command::Init) {
         return init_repo();
     }
+    if let Command::Git {
+        command: GitCommand::Clone(args),
+    } = &cli.command
+    {
+        return git_remotes::clone_repository(args);
+    }
     let repo = Repo::discover()?;
     let result = match cli.command {
-        Command::Init => unreachable!(),
+        Command::Init
+        | Command::Git {
+            command: GitCommand::Clone(_),
+        } => unreachable!(),
         Command::Git {
             command:
                 GitCommand::Fetch {
@@ -895,8 +919,10 @@ fn main() -> Result<()> {
 
 impl Repo {
     fn discover() -> Result<Self> {
-        let mut dir = std::env::current_dir().context("failed to read current directory")?;
+        Self::discover_from(std::env::current_dir().context("failed to read current directory")?)
+    }
 
+    fn discover_from(mut dir: PathBuf) -> Result<Self> {
         loop {
             let meta = dir.join(META_DIR);
             if meta.is_dir() {
@@ -952,7 +978,11 @@ impl FileDiff {
 }
 
 fn init_repo() -> Result<()> {
-    let root = std::env::current_dir().context("failed to read current directory")?;
+    initialize_repo(std::env::current_dir().context("failed to read current directory")?)
+        .map(|_| ())
+}
+
+fn initialize_repo(root: PathBuf) -> Result<Repo> {
     let meta = root.join(META_DIR);
 
     if meta.exists() {
@@ -1024,7 +1054,7 @@ fn init_repo() -> Result<()> {
     println!("initialized rgit repository");
     println!("default line: {DEFAULT_LINE}");
     println!("default actors: public, admin");
-    Ok(())
+    Ok(repo)
 }
 
 fn set_actor(repo: &Repo, name: &str, domains: Vec<String>) -> Result<()> {
