@@ -336,9 +336,28 @@ pub(super) fn import(
         &["rev-list", "--reverse", "--topo-order", &tip],
     )?)?;
     let mut mapped = BTreeMap::new();
+    for snapshot in read_dir_json::<Snapshot>(repo, &repo.path(&["snapshots"]))? {
+        if let Some(metadata) = &snapshot.git {
+            if metadata.object_format == format {
+                if mapped
+                    .insert(metadata.object_id.clone(), snapshot.id)
+                    .is_some()
+                {
+                    bail!("duplicate Git provenance requires reconciliation before import");
+                }
+            }
+        }
+    }
+    let mut imported = 0;
     let mut tip_change = None;
     for oid in revisions.lines() {
         git_objects::parse_id(oid.as_bytes(), &format)?;
+        if let Some(id) = mapped.get(oid) {
+            if oid == tip {
+                tip_change = Some(read_snapshot(repo, id)?.change_id);
+            }
+            continue;
+        }
         let metadata = git_objects::CommitMetadata {
             object_id: oid.to_string(),
             object_format: format.clone(),
@@ -393,6 +412,7 @@ pub(super) fn import(
         write_json(repo, &change_path(repo, &change_id)?, &change)?;
         write_json(repo, &snapshot_path(repo, &snapshot_id)?, &snapshot)?;
         mapped.insert(oid.to_string(), snapshot_id);
+        imported += 1;
         if oid == tip {
             tip_change = Some(change_id);
         }
@@ -424,7 +444,7 @@ pub(super) fn import(
     verify::verify(repo, actor_name)?;
     println!(
         "imported {} Git commits into {into}; working files are unchanged",
-        mapped.len()
+        imported
     );
     println!("use workspace switch or workspace restore --discard-changes --as {actor_name} to materialize saved files");
     Ok(())
