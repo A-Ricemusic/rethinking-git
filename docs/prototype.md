@@ -294,3 +294,7 @@ Operations record how state changed over time.
 Actors and path policies decide which objects are visible in commands that accept `--as`.
 
 This is not cryptographic security yet. It is the local policy and view model that real encrypted sync would enforce later.
+
+## Policy changes in merges and diffs
+
+File equality includes policy metadata and recorded byte length as well as the content hash. A policy-only change appears as modified and survives integration. Concurrent content and policy edits to the same path produce a conflict instead of silently discarding the restriction. Changes to hidden policies contribute only to the restricted-file count, without disclosing paths or domains.
