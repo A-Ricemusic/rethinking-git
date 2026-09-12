@@ -2416,7 +2416,8 @@ fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
                 .try_exists()
                 .context("failed to inspect stored blob")?
             {
-                let stored = fs::read(&blob_path).context("failed to read stored blob")?;
+                let stored =
+                    verify::read_blob(repo, &hash).context("failed to verify stored blob")?;
                 if stored != bytes {
                     bail!("stored blob failed verification; snapshot was not published");
                 }

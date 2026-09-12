@@ -240,3 +240,55 @@ fn initialization_resume_refuses_to_replace_history_with_missing_configuration()
     );
     assert_eq!(fs::read(repo.0.join("saved.txt")).unwrap(), b"saved work");
 }
+
+#[cfg(unix)]
+#[test]
+fn snapshot_refuses_symlinked_blob_reuse_even_when_target_bytes_match() {
+    use std::os::unix::fs::symlink;
+    let repo = Repo::new();
+    let change = repo.change();
+    fs::write(repo.0.join("file"), "saved bytes").unwrap();
+    repo.ok(&["snapshot"]);
+    let change_path = repo.0.join(format!(".rgit/changes/{change}.json"));
+    let before = fs::read(&change_path).unwrap();
+    let value: Value = serde_json::from_slice(&before).unwrap();
+    let snapshot: Value = serde_json::from_slice(
+        &fs::read(repo.0.join(format!(
+            ".rgit/snapshots/{}.json",
+            value["current_snapshot"].as_str().unwrap()
+        )))
+        .unwrap(),
+    )
+    .unwrap();
+    let blob = repo
+        .0
+        .join(".rgit/blobs")
+        .join(snapshot["files"][0]["hash"].as_str().unwrap());
+    let referent = repo.0.join(".rgit/link-referent");
+    fs::rename(&blob, &referent).unwrap();
+    symlink(&referent, &blob).unwrap();
+    let operations = fs::read_dir(repo.0.join(".rgit/operations"))
+        .unwrap()
+        .count();
+    let result = repo.run(&["snapshot"]);
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("regular blob file"));
+    assert_eq!(fs::read(&change_path).unwrap(), before);
+    assert_eq!(
+        fs::read_dir(repo.0.join(".rgit/snapshots"))
+            .unwrap()
+            .count(),
+        1
+    );
+    assert_eq!(
+        fs::read_dir(repo.0.join(".rgit/operations"))
+            .unwrap()
+            .count(),
+        operations
+    );
+    assert_eq!(fs::read(&referent).unwrap(), b"saved bytes");
+    assert!(fs::symlink_metadata(&blob)
+        .unwrap()
+        .file_type()
+        .is_symlink());
+}
