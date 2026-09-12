@@ -302,3 +302,13 @@ Snapshots preserve UTF-8 filenames exactly, including spaces and literal Unix ba
 The JSON prototype cannot represent symlinks, special files, or non-UTF-8 names faithfully, so scanning now refuses them instead of publishing an incomplete snapshot. This is a temporary safety boundary until those entry types are implemented. File modes, ignore rules, and cross-platform filename collision checks are still pending.
 
 Before reusing an existing blob, snapshot creation verifies its contents against the captured bytes and refuses a mismatch without advancing the change. This detects preexisting corruption; it does not make the legacy multi-file write sequence transactional or safe against concurrent hostile filesystem changes.
+
+## Policy changes in merges and diffs
+
+File equality includes policy metadata and recorded byte length as well as the content hash. A policy-only change appears as modified and survives integration. Concurrent content and policy edits to the same path produce a conflict instead of silently discarding the restriction. Changes to hidden policies contribute only to the restricted-file count, without disclosing paths or domains.
+
+## Repository validation
+
+The CLI accepts only repository format 2 and refuses missing, malformed, older, or newer configuration before running commands. There is no automatic migration. Object IDs must use the expected object-kind prefix and a lowercase hexadecimal suffix. Stored object identities must match the requested identity.
+
+Actor and line keys use nonempty slash-separated components. Control characters, platform path syntax, trailing dots/spaces, and reserved Windows device names are rejected; valid Unicode names remain supported. Encoded keys are limited to 200 bytes. The legacy filename encoding is retained, but an alias such as `team__alice` cannot read or replace `team/alice`. Existing nonconforming actor or line names must be repaired explicitly; this is not an authentication mechanism.
