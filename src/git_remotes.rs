@@ -88,6 +88,18 @@ fn transport(root: &Path, hooks: &Path) -> ProcessCommand {
     command
         .args([
             "-c",
+            "protocol.allow=never",
+            "-c",
+            "protocol.https.allow=always",
+            "-c",
+            "protocol.ssh.allow=always",
+            "-c",
+            "protocol.file.allow=always",
+            "-c",
+            "protocol.http.allow=never",
+            "-c",
+            "protocol.git.allow=never",
+            "-c",
             "protocol.ext.allow=never",
             "-c",
             "http.sslVerify=true",
