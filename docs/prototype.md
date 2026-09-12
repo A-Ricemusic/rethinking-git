@@ -371,3 +371,13 @@ Git checkout compatibility. Windows power-loss durability remains unqualified.
 Executable-aware recovery uses journal schema 3. It includes expected and target
 execute bits so mode-only updates are recovered with file contents. Schema 1/2
 journals upgrade under the command lock; older clients refuse schema 3.
+
+### Checking repository integrity
+
+Run `rgit repo verify --as admin` to validate format-2 record identities, references,
+snapshot manifest hashes, blob digests/lengths, parent cycles, conflict state, and
+operation links. It reports valid unreferenced blobs without deleting them and
+returns a nonzero exit on corruption. Verification does not repair saved records.
+Opening the repository still performs normal committed-journal recovery first.
+The command requires the admin view because findings concern the complete repository;
+this is not a replacement for authenticated identity or signature verification.
