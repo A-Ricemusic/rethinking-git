@@ -468,3 +468,102 @@ fn tracked_build_directory_names_survive_import_restore_and_capture() {
     assert_eq!(git(&exported, &["rev-parse", "HEAD"]), original);
     native.ok(&["repo", "verify", "--as", "admin"]);
 }
+
+#[test]
+fn restoring_another_snapshot_preserves_its_modes_when_captured_on_a_new_change() {
+    let source = Repo(destination());
+    fs::create_dir(&source.0).unwrap();
+    git(&source, &["init", "-b", "main"]);
+    fs::write(source.0.join("target-bytes"), "../target").unwrap();
+    let blob = String::from_utf8(git(&source, &["hash-object", "-w", "target-bytes"])).unwrap();
+    for mode in ["100755", "120000"] {
+        git(
+            &source,
+            &[
+                "update-index",
+                "--add",
+                "--cacheinfo",
+                &format!("{mode},{},item", blob.trim()),
+            ],
+        );
+        git(
+            &source,
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.test",
+                "commit",
+                "-m",
+                mode,
+            ],
+        );
+    }
+    let native = Repo::new();
+    native.ok(&[
+        "git",
+        "import",
+        source.0.to_str().unwrap(),
+        "--as",
+        "admin",
+        "--domain",
+        "public",
+    ]);
+    let read = |path: &str| -> serde_json::Value {
+        serde_json::from_slice(&fs::read(native.0.join(".rgit").join(path)).unwrap()).unwrap()
+    };
+    let line = read("lines/main.json");
+    let link = line["head_snapshot"].as_str().unwrap();
+    let snapshot = read(&format!("snapshots/{link}.json"));
+    let executable = snapshot["parent_snapshot"].as_str().unwrap();
+    native.ok(&[
+        "workspace",
+        "restore",
+        "--from",
+        executable,
+        "--discard-changes",
+        "--as",
+        "admin",
+    ]);
+    let current = read("workspace.json");
+    assert!(
+        !native
+            .run(&[
+                "workspace",
+                "switch",
+                current["current_change"].as_str().unwrap(),
+                "--as",
+                "admin"
+            ])
+            .status
+            .success(),
+        "mode-only unsaved change must prevent switching"
+    );
+    native.ok(&["change", "new", "restored regular mode"]);
+    native.ok(&["snapshot"]);
+    let workspace = read("workspace.json");
+    let captured = read(&format!(
+        "snapshots/{}.json",
+        workspace["mode_snapshot"].as_str().unwrap()
+    ));
+    assert_eq!(captured["files"][0]["executable"], true);
+    assert_ne!(captured["files"][0]["symlink"], true);
+    native.ok(&[
+        "workspace",
+        "restore",
+        "--from",
+        link,
+        "--discard-changes",
+        "--as",
+        "admin",
+    ]);
+    native.ok(&["snapshot"]);
+    let workspace = read("workspace.json");
+    let captured = read(&format!(
+        "snapshots/{}.json",
+        workspace["mode_snapshot"].as_str().unwrap()
+    ));
+    assert_eq!(captured["files"][0]["symlink"], true);
+    assert_ne!(captured["files"][0]["executable"], true);
+    native.ok(&["repo", "verify", "--as", "admin"]);
+}

@@ -51,7 +51,10 @@ pub(super) fn resolve_conflict(
         let mut flags = transaction::working_flags(&path)?;
         // Windows materializes logical symlinks/executable modes as regular files.
         if !cfg!(unix) {
-            if let Some(file) = incoming.files.iter().find(|f| f.path == conflict.path) {
+            let workspace = read_workspace(repo)?;
+            let modes = read_optional_snapshot(repo, workspace.mode_snapshot.as_deref())?;
+            let modes = modes.as_ref().unwrap_or(&incoming);
+            if let Some(file) = modes.files.iter().find(|f| f.path == conflict.path) {
                 flags = file.flags();
             }
         }
