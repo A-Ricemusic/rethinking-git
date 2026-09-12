@@ -32,3 +32,7 @@ publication/review record. No Git index or `git commit` is used for these change
 This is an observed development workflow, not a release certification, independent
 security review, power-loss test, or proof of complete Git feature parity. The
 [production audit](../production-readiness.md) retains the remaining limitations.
+
+[Recorded receipt](native-pr-workflow-2026-09-12.json) includes the source and binary
+digests, completed native phases, and the first published Git identity. Local logs
+were retained separately; their digests are provenance, not an attestation.
