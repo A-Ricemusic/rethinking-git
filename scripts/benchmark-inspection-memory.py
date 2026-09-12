@@ -13,8 +13,11 @@ import time
 
 
 def sha256(path):
+    digest = hashlib.sha256()
     with path.open("rb") as source:
-        return hashlib.file_digest(source, "sha256").hexdigest()
+        for block in iter(lambda: source.read(1048576), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def main():
@@ -75,7 +78,7 @@ def main():
         for side in binaries:
             rows = [row for row in results if row["command"] == name and row["side"] == side]
             summary[name][side] = {"median_peak_rss_bytes": statistics.median(row["peak_rss_bytes"] for row in rows), "median_elapsed_seconds": statistics.median(row["elapsed_seconds"] for row in rows)}
-    report = {"schema_version": 1, "platform": platform.platform(), "machine": platform.machine(), "runner_sha256": sha256(pathlib.Path(__file__)), "file_bytes": args.file_mib * 1048576, "cache": "warm; commands warmed before measurement, binary order alternated", "binaries": binaries, "results": results, "summary": summary}
+    report = {"schema_version": 1, "platform": platform.platform(), "machine": platform.machine(), "runner_sha256": sha256(pathlib.Path(__file__)), "file_bytes": args.file_mib * 1048576, "cache": "warm; commands warmed before measurement, binary order alternated", "binaries": {side: {key: value for key, value in binary.items() if key != "path"} for side, binary in binaries.items()}, "results": results, "summary": summary}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("x") as output:
         json.dump(report, output, indent=2)
