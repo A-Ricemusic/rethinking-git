@@ -18,6 +18,7 @@ mod checkout;
 mod cli_failure;
 mod git_bridge;
 mod git_objects;
+mod ignore_rules;
 mod resolution;
 mod transaction;
 mod verify;
@@ -2179,28 +2180,40 @@ fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
     let path_policies = read_path_policies(repo)?;
     let mut files = Vec::new();
 
+    let workspace = read_workspace(repo)?;
+    let baseline = workspace
+        .current_change
+        .as_deref()
+        .map(|id| read_change(repo, id))
+        .transpose()?
+        .map(|change| read_optional_snapshot(repo, change.workspace_base_snapshot_id()))
+        .transpose()?
+        .flatten();
+    let mut rules = ignore_rules::Rules::new(
+        &repo.root,
+        baseline
+            .as_ref()
+            .map(|s| s.files.iter().map(|f| f.path.clone()).collect())
+            .unwrap_or_default(),
+    );
     #[cfg(not(unix))]
-    let inherited_modes: BTreeMap<String, bool> = {
-        let workspace = read_workspace(repo)?;
-        let snapshot = workspace
-            .current_change
-            .as_deref()
-            .map(|id| read_change(repo, id))
-            .transpose()?
-            .map(|change| read_optional_snapshot(repo, change.workspace_base_snapshot_id()))
-            .transpose()?
-            .flatten();
-        snapshot
-            .into_iter()
-            .flat_map(|s| s.files)
-            .map(|f| (f.path, f.executable))
-            .collect()
-    };
-    for entry in WalkDir::new(&repo.root)
+    let inherited_modes: BTreeMap<String, bool> = baseline
         .into_iter()
-        .filter_entry(|entry| should_scan(entry.path()))
-    {
+        .flat_map(|s| s.files)
+        .map(|f| (f.path, f.executable))
+        .collect();
+    let mut walker = WalkDir::new(&repo.root).into_iter();
+    while let Some(entry) = walker.next() {
         let entry = entry.context("failed to read directory entry")?;
+        if entry.depth() > 0
+            && (!should_scan(entry.path())
+                || !rules.includes(entry.path(), entry.file_type().is_dir())?)
+        {
+            if entry.file_type().is_dir() {
+                walker.skip_current_dir();
+            }
+            continue;
+        }
         if entry.file_type().is_dir() {
             continue;
         }
