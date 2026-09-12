@@ -36,7 +36,7 @@ Git import/export and corruption suites validate interoperability.
 
 Memory still scales with repository metadata. At these recorded revisions, snapshot
 capture retained file contents; subsequent regular-file streaming capture has its
-own benchmark runner, `scripts/benchmark-snapshot-memory.py`. Symlink-content
+own [snapshot measurement](snapshot-memory.md). Symlink-content
 validation, working-tree checkout journals, and Git export retain in-memory content
 paths. This result does not establish bounded memory for those operations or qualify
 large repositories generally.

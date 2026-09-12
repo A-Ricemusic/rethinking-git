@@ -50,7 +50,9 @@ records its exact source and binary; it is not qualification of every later comm
 PRs #37–#41 add recoverable file/directory checkout, synthesized-tree validation,
 complete-subtree conflict resolution, conservative automatic text merges and refusal
 of symlinked blob reuse. [Inspection memory measurements](benchmarks/inspection-memory.md)
-record the streaming inspection change separately from capture/export/checkout limits.
+record the streaming inspection change separately from export/checkout limits.
+[Snapshot memory measurements](benchmarks/snapshot-memory.md) now cover streaming
+regular-file capture and exact blob reuse; symlink capture remains separate.
 
 ## Remaining release blockers
 
