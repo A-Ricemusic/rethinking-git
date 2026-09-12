@@ -140,43 +140,51 @@ fn verifier_detects_cycles_through_merge_parents() {
 }
 
 #[test]
-fn integration_refuses_file_directory_collisions_without_publishing_records() {
-    let repo = Repo::new();
-    let file_change = repo.change();
-    repo.change();
-    fs::create_dir(repo.0.join("a")).unwrap();
-    fs::write(repo.0.join("a/b"), "nested").unwrap();
-    repo.ok(&["snapshot"]);
-    repo.ok(&["line", "integrate", "main"]);
-    repo.ok(&["workspace", "switch", &file_change]);
-    fs::remove_dir(repo.0.join("a")).unwrap();
-    fs::write(repo.0.join("a"), "file").unwrap();
-    repo.ok(&["snapshot"]);
-    let head = repo.head();
-    let records = |directory: &str| {
-        fs::read_dir(repo.0.join(".rgit").join(directory))
-            .unwrap()
-            .count()
-    };
-    let snapshots = records("snapshots");
-    let operations = records("operations");
-    for args in [
-        &["merge", "preview"][..],
-        &["line", "integrate", "main"][..],
-    ] {
-        let output = repo.run(args);
-        assert!(!output.status.success(), "{args:?}");
-        assert!(
-            String::from_utf8_lossy(&output.stderr).contains("file/directory collision"),
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        assert!(!String::from_utf8_lossy(&output.stdout).contains("result: clean"));
+fn file_directory_conflicts_select_complete_subtrees() {
+    for decision in ["base", "line", "incoming", "delete"] {
+        let repo = Repo::new();
+        let file_change = repo.change();
+        repo.change();
+        fs::create_dir_all(repo.0.join("a/nested")).unwrap();
+        fs::write(repo.0.join("a/b"), "nested").unwrap();
+        fs::write(repo.0.join("a/nested/c"), "deep").unwrap();
+        fs::write(repo.0.join("a-other"), "unrelated").unwrap();
+        repo.ok(&["snapshot"]);
+        repo.ok(&["line", "integrate"]);
+        repo.ok(&["workspace", "switch", &file_change]);
+        fs::remove_dir_all(repo.0.join("a")).unwrap();
+        fs::write(repo.0.join("a"), "file").unwrap();
+        repo.ok(&["snapshot"]);
+        let head = repo.head();
+        let preview = repo.ok(&["merge", "preview"]);
+        assert!(preview.contains("file_directory a"));
+        assert!(!repo.run(&["line", "integrate"]).status.success());
         assert_eq!(repo.head(), head);
-        assert_eq!(records("snapshots"), snapshots);
-        assert_eq!(records("operations"), operations);
+        let conflicts = repo.ok(&["conflict", "list"]);
+        assert_eq!(conflicts.lines().count(), 1);
+        let id = conflicts.split_whitespace().next().unwrap();
+        assert!(!repo
+            .run(&["conflict", "resolve", id, "--from-working"])
+            .status
+            .success());
+        repo.ok(&["conflict", "resolve", id, "--take", decision]);
+        assert!(repo.ok(&["merge", "preview"]).contains("result: clean"));
+        repo.ok(&["line", "integrate"]);
+        let snapshot = repo.json(&format!("snapshots/{}.json", repo.head()));
+        let paths: Vec<_> = snapshot["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|file| file["path"].as_str().unwrap())
+            .collect();
+        let expected = match decision {
+            "line" => vec!["a-other", "a/b", "a/nested/c"],
+            "incoming" => vec!["a", "a-other"],
+            _ => vec!["a-other"],
+        };
+        assert_eq!(paths, expected);
+        repo.ok(&["repo", "verify", "--as", "admin"]);
     }
-    repo.ok(&["repo", "verify", "--as", "admin"]);
 }
 
 #[test]
@@ -193,4 +201,58 @@ fn integration_refuses_a_corrupt_selected_blob_without_advancing_the_line() {
         assert!(!repo.run(args).status.success());
         assert_eq!(repo.json("lines/main.json"), before);
     }
+}
+
+#[test]
+fn structural_resolution_preserves_descendant_restrictions_and_rejects_stale_sources() {
+    let repo = Repo::new();
+    let file_change = repo.change();
+    repo.change();
+    fs::create_dir(repo.0.join("a")).unwrap();
+    fs::write(repo.0.join("a/private"), "secret").unwrap();
+    repo.ok(&["access", "path", "a/private", "--domain", "admin"]);
+    repo.ok(&["snapshot"]);
+    repo.ok(&["line", "integrate", "--as", "admin"]);
+    repo.ok(&["workspace", "switch", &file_change, "--as", "admin"]);
+    fs::remove_dir(repo.0.join("a")).unwrap();
+    fs::write(repo.0.join("a"), "public replacement").unwrap();
+    repo.ok(&["snapshot"]);
+    assert!(!repo
+        .run(&["line", "integrate", "--as", "admin"])
+        .status
+        .success());
+    let conflicts = repo.ok(&["conflict", "list", "--as", "admin"]);
+    let id = conflicts.split_whitespace().next().unwrap();
+    assert!(repo.ok(&["conflict", "list"]).is_empty());
+    let denied = repo.run(&["conflict", "resolve", id, "--take", "incoming"]);
+    assert!(!denied.status.success());
+    assert!(denied.stdout.is_empty());
+    repo.ok(&[
+        "conflict", "resolve", id, "--take", "incoming", "--as", "admin",
+    ]);
+    fs::write(repo.0.join("a"), "updated replacement").unwrap();
+    repo.ok(&["snapshot"]);
+    let stale = repo.run(&[
+        "conflict", "resolve", id, "--take", "incoming", "--as", "admin",
+    ]);
+    assert!(!stale.status.success());
+    assert!(String::from_utf8_lossy(&stale.stderr).contains("sources changed"));
+    assert!(!repo
+        .run(&["line", "integrate", "--as", "admin"])
+        .status
+        .success());
+    let conflicts = repo.ok(&["conflict", "list", "--as", "admin"]);
+    let updated = conflicts.split_whitespace().next().unwrap();
+    assert_ne!(id, updated);
+    repo.ok(&[
+        "conflict", "resolve", updated, "--take", "incoming", "--as", "admin",
+    ]);
+    repo.ok(&["line", "integrate", "--as", "admin"]);
+    let snapshot = repo.json(&format!("snapshots/{}.json", repo.head()));
+    assert_eq!(snapshot["files"][0]["path"], "a");
+    assert_eq!(
+        snapshot["files"][0]["policy"]["domains"],
+        serde_json::json!(["admin"])
+    );
+    repo.ok(&["repo", "verify", "--as", "admin"]);
 }

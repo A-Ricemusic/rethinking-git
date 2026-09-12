@@ -38,7 +38,10 @@ pub(super) fn resolve_conflict(
         bail!("conflict sources changed; integrate again to obtain current conflicts");
     }
     // Recheck every source grant before reading any working content.
-    resolved_file(repo, &actor, &conflict, &Resolution::Incoming)?;
+    resolved_files(repo, &actor, &conflict, &Resolution::Incoming)?;
+    if conflict.kind == ConflictKind::FileDirectory && decision == Resolution::Custom {
+        bail!("file/directory conflicts require --take base, line, incoming, or delete; edit and snapshot a side for custom content");
+    }
     conflict.replacement = if decision == Resolution::Custom {
         let policy = policy_for_path(&conflict.path, &read_path_policies(repo)?);
         if !can_access(&actor, &policy) {
@@ -85,7 +88,7 @@ pub(super) fn resolve_conflict(
     if decision == Resolution::Custom {
         conflict.replacement = resolved_file(repo, &actor, &conflict, &decision)?;
     } else {
-        resolved_file(repo, &actor, &conflict, &decision)?;
+        resolved_files(repo, &actor, &conflict, &decision)?;
     }
     conflict.status = ConflictStatus::Resolved;
     conflict.resolution = Some(decision);
@@ -101,6 +104,21 @@ pub(super) fn resolve_conflict(
     )?;
     println!("resolved {id}; run line integrate to publish the merge");
     Ok(())
+}
+
+fn resolved_files(
+    repo: &Repo,
+    actor: &Actor,
+    conflict: &Conflict,
+    decision: &Resolution,
+) -> Result<Vec<FileEntry>> {
+    if conflict.kind == ConflictKind::FileDirectory {
+        tree_conflicts::resolved_files(repo, actor, conflict, decision)
+    } else {
+        Ok(resolved_file(repo, actor, conflict, decision)?
+            .into_iter()
+            .collect())
+    }
 }
 
 fn resolved_file(
@@ -184,6 +202,7 @@ pub(super) fn apply_resolutions(
             .filter(|conflict| {
                 conflict.status == ConflictStatus::Resolved
                     && conflict.path == pending.path
+                    && conflict.kind == pending.kind
                     && matches_sources(conflict, line, change, incoming)
             })
             .collect();
@@ -198,9 +217,8 @@ pub(super) fn apply_resolutions(
                 .resolution
                 .as_ref()
                 .context("resolved conflict has no decision")?;
-            if let Some(file) = resolved_file(repo, actor, conflict, decision)? {
-                plan.merged_files.push(file);
-            }
+            plan.merged_files
+                .extend(resolved_files(repo, actor, conflict, decision)?);
         } else {
             unresolved.push(pending);
         }

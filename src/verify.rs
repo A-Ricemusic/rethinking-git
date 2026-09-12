@@ -161,6 +161,12 @@ fn verify_with_output(repo: &Repo, actor_name: &str, report: bool) -> Result<()>
             (conflict.resolution == Some(Resolution::Custom)) == conflict.replacement.is_some(),
             "custom resolution state",
         )?;
+        transaction::validate_working_key(&conflict.path)?;
+        require(
+            conflict.kind != ConflictKind::FileDirectory
+                || conflict.resolution != Some(Resolution::Custom),
+            "file/directory resolution kind",
+        )?;
         if let Some(file) = &conflict.replacement {
             require(file.path == conflict.path, "custom resolution path")?;
             verify_file(repo, file)?;
