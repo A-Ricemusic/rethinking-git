@@ -270,8 +270,11 @@ enum ConflictCommand {
 
 #[derive(Subcommand)]
 enum WorkspaceCommand {
-    /// Show the current workspace state.
-    Info,
+    /// Show the current workspace state visible to an actor.
+    Info {
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -577,7 +580,7 @@ fn main() -> Result<()> {
         Command::Workspace { command } => {
             let repo = Repo::discover()?;
             match command {
-                WorkspaceCommand::Info => workspace_info(&repo),
+                WorkspaceCommand::Info { as_actor } => workspace_info(&repo, &as_actor),
             }
         }
         Command::Op { command } => {
@@ -847,7 +850,7 @@ fn list_changes(repo: &Repo, actor_name: &str) -> Result<()> {
             "{marker} {} {} snapshot:{} domains:{}",
             change.id,
             change.name,
-            change.current_snapshot.as_deref().unwrap_or("none"),
+            visible_snapshot_id(repo, change.current_snapshot.as_deref(), &actor)?,
             change.policy.domains.join(",")
         );
     }
@@ -869,12 +872,12 @@ fn show_change(repo: &Repo, change_id: &str, actor_name: &str) -> Result<()> {
     println!("domains: {}", change.policy.domains.join(","));
     println!(
         "current snapshot: {}",
-        change.current_snapshot.as_deref().unwrap_or("none")
+        visible_snapshot_id(repo, change.current_snapshot.as_deref(), &actor)?
     );
 
     if let Some(snapshot_id) = change.current_snapshot.as_deref() {
         let snapshot = read_snapshot(repo, snapshot_id)?;
-        print_snapshot_summary(&snapshot, &actor);
+        print_snapshot_summary(repo, &snapshot, &actor)?;
     }
 
     Ok(())
@@ -938,7 +941,7 @@ fn list_snapshots(repo: &Repo, actor_name: &str) -> Result<()> {
         println!(
             "{} change:{} files:{} hidden:{} domains:{} message:{}",
             snapshot.id,
-            snapshot.change_id,
+            visible_change_id(repo, &snapshot.change_id, &actor)?,
             visible.len(),
             hidden,
             snapshot.policy.domains.join(","),
@@ -961,7 +964,7 @@ fn show_snapshot(repo: &Repo, snapshot_id: &str, actor_name: &str) -> Result<()>
         return Ok(());
     }
 
-    print_snapshot_summary(&snapshot, &actor);
+    print_snapshot_summary(repo, &snapshot, &actor)?;
     let (visible, hidden) = visible_files_with_hidden(snapshot.files, &actor);
 
     for file in visible {
@@ -999,7 +1002,7 @@ fn status(repo: &Repo, actor_name: &str) -> Result<()> {
     println!("change: {} ({})", change.name, change.id);
     println!(
         "snapshot: {}",
-        change.current_snapshot.as_deref().unwrap_or("none")
+        visible_snapshot_id(repo, change.current_snapshot.as_deref(), &actor)?
     );
     diff.print();
 
@@ -1030,7 +1033,7 @@ fn diff_workspace(repo: &Repo, actor_name: &str) -> Result<()> {
     println!("diff: workspace");
     println!(
         "base snapshot: {}",
-        change.workspace_base_snapshot_id().unwrap_or("none")
+        visible_snapshot_id(repo, change.workspace_base_snapshot_id(), &actor)?
     );
     diff.print();
     Ok(())
@@ -1084,10 +1087,13 @@ fn diff_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> {
 
     println!("actor: {}", actor.name);
     println!("diff: line {line_name}");
-    println!("head snapshot: {head_snapshot_id}");
+    println!(
+        "head snapshot: {}",
+        visible_snapshot_id(repo, Some(head_snapshot_id), &actor)?
+    );
     println!(
         "parent snapshot: {}",
-        head.parent_snapshot.as_deref().unwrap_or("none")
+        visible_snapshot_id(repo, head.parent_snapshot.as_deref(), &actor)?
     );
     diff.print();
     Ok(())
@@ -1152,7 +1158,7 @@ fn merge_preview(
     );
     println!(
         "line head: {}",
-        line.head_snapshot.as_deref().unwrap_or("none")
+        visible_snapshot_id(repo, line.head_snapshot.as_deref(), &actor)?
     );
     println!("incoming snapshot: {incoming_snapshot_id}");
 
@@ -1248,7 +1254,7 @@ fn list_lines(repo: &Repo, actor_name: &str) -> Result<()> {
         println!(
             "{} head:{} domains:{}",
             line.name,
-            line.head_snapshot.as_deref().unwrap_or("none"),
+            visible_snapshot_id(repo, line.head_snapshot.as_deref(), &actor)?,
             line.policy.domains.join(",")
         );
     }
@@ -1451,31 +1457,67 @@ fn integration_history_message(repo: &Repo, operation: &Operation) -> Result<Str
     ))
 }
 
-fn print_snapshot_summary(snapshot: &Snapshot, actor: &Actor) {
+fn print_snapshot_summary(repo: &Repo, snapshot: &Snapshot, actor: &Actor) -> Result<()> {
+    if !can_access(actor, &snapshot.policy) {
+        println!("snapshot: restricted");
+        return Ok(());
+    }
     let (_, hidden) = visible_files_with_hidden(snapshot.files.clone(), actor);
 
     println!("snapshot: {}", snapshot.id);
-    println!("change: {}", snapshot.change_id);
+    println!(
+        "change: {}",
+        visible_change_id(repo, &snapshot.change_id, actor)?
+    );
     println!(
         "parent: {}",
-        snapshot.parent_snapshot.as_deref().unwrap_or("none")
+        visible_snapshot_id(repo, snapshot.parent_snapshot.as_deref(), actor)?
     );
     println!("domains: {}", snapshot.policy.domains.join(","));
     println!("message: {}", snapshot.message);
     println!("hidden files: {hidden}");
+    Ok(())
 }
 
-fn workspace_info(repo: &Repo) -> Result<()> {
+fn visible_snapshot_id(repo: &Repo, id: Option<&str>, actor: &Actor) -> Result<String> {
+    let Some(id) = id else {
+        return Ok("none".into());
+    };
+    let snapshot = read_snapshot(repo, id)?;
+    Ok(if can_access(actor, &snapshot.policy) {
+        id
+    } else {
+        "restricted"
+    }
+    .into())
+}
+
+fn visible_change_id(repo: &Repo, id: &str, actor: &Actor) -> Result<String> {
+    let change = read_change(repo, id)?;
+    Ok(if can_access(actor, &change.policy) {
+        id
+    } else {
+        "restricted"
+    }
+    .into())
+}
+
+fn workspace_info(repo: &Repo, actor_name: &str) -> Result<()> {
+    let actor = read_actor(repo, actor_name)?;
     let workspace = read_workspace(repo)?;
 
     match workspace.current_change {
         Some(change_id) => {
             let change = read_change(repo, &change_id)?;
+            if !can_access(&actor, &change.policy) {
+                println!("change is hidden from actor `{}`", actor.name);
+                return Ok(());
+            }
             println!("current change: {} ({})", change.name, change.id);
             println!("domains: {}", change.policy.domains.join(","));
             println!(
                 "current snapshot: {}",
-                change.current_snapshot.as_deref().unwrap_or("none")
+                visible_snapshot_id(repo, change.current_snapshot.as_deref(), &actor)?
             );
         }
         None => {
