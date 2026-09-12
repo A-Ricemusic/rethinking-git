@@ -25,6 +25,7 @@ def main():
     for side in ("baseline", "candidate"):
         parser.add_argument(f"--{side}-binary", type=pathlib.Path, required=True)
         parser.add_argument(f"--{side}-revision", required=True)
+    parser.add_argument("--git-provenance", action="store_true", help="bind saved history to Git identities before measuring (requires Git)")
     parser.add_argument("--file-mib", type=int, default=512)
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--output", type=pathlib.Path, required=True)
@@ -56,6 +57,11 @@ def main():
             for _ in range(args.file_mib):
                 destination.write(block)
         run(baseline, ["snapshot", "--message", "large deterministic binary"])
+        if args.git_provenance:
+            run(baseline, ["line", "integrate"])
+            # A sibling destination is outside the native repository.
+            with tempfile.TemporaryDirectory(prefix="rgit-inspection-export-") as export_parent:
+                run(baseline, ["git", "export", str(pathlib.Path(export_parent) / "export.git"), "--author", "Memory Benchmark <benchmark@example.invalid>", "--as", "admin"])
         expected = {}
         for name, command in commands.items():
             expected[name] = run(baseline, command).stdout
@@ -78,7 +84,7 @@ def main():
         for side in binaries:
             rows = [row for row in results if row["command"] == name and row["side"] == side]
             summary[name][side] = {"median_peak_rss_bytes": statistics.median(row["peak_rss_bytes"] for row in rows), "median_elapsed_seconds": statistics.median(row["elapsed_seconds"] for row in rows)}
-    report = {"schema_version": 1, "platform": platform.platform(), "machine": platform.machine(), "runner_sha256": sha256(pathlib.Path(__file__)), "file_bytes": args.file_mib * 1048576, "cache": "warm; commands warmed before measurement, binary order alternated", "binaries": {side: {key: value for key, value in binary.items() if key != "path"} for side, binary in binaries.items()}, "results": results, "summary": summary}
+    report = {"schema_version": 1, "platform": platform.platform(), "machine": platform.machine(), "runner_sha256": sha256(pathlib.Path(__file__)), "file_bytes": args.file_mib * 1048576, "git_provenance": args.git_provenance, "git_version": subprocess.check_output(["git", "--version"], text=True).strip() if args.git_provenance else None, "cache": "warm; commands warmed before measurement, binary order alternated", "binaries": {side: {key: value for key, value in binary.items() if key != "path"} for side, binary in binaries.items()}, "results": results, "summary": summary}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("x") as output:
         json.dump(report, output, indent=2)

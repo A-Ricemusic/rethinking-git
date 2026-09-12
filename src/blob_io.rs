@@ -2,7 +2,14 @@
 use super::*;
 use std::io::{ErrorKind, Read};
 
-pub(super) fn digest(mut reader: impl Read) -> Result<(String, u64)> {
+pub(super) fn digest(reader: impl Read) -> Result<(String, u64)> {
+    digest_with(reader, |_| {})
+}
+
+pub(super) fn digest_with(
+    mut reader: impl Read,
+    mut visit: impl FnMut(&[u8]),
+) -> Result<(String, u64)> {
     let mut hash = Sha256::new();
     let mut length = 0_u64;
     let mut buffer = [0_u8; 65_536];
@@ -17,6 +24,7 @@ pub(super) fn digest(mut reader: impl Read) -> Result<(String, u64)> {
             .checked_add(count as u64)
             .context("file length overflow")?;
         hash.update(&buffer[..count]);
+        visit(&buffer[..count]);
     }
     Ok((hex::encode(hash.finalize()), length))
 }

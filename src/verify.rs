@@ -127,7 +127,7 @@ fn verify_with_output(repo: &Repo, actor_name: &str, report: bool) -> Result<()>
                 parsed.timestamp == snapshot.created_at / 1000,
                 "Git provenance timestamp",
             )?;
-            let (tree, _) = git_objects::tree(repo, &snapshot.files, &metadata.object_format)?;
+            let tree = git_objects::tree_id(repo, &snapshot.files, &metadata.object_format)?;
             require(tree == parsed.tree, "Git provenance tree")?;
             let parents = ancestry::parents(snapshot)
                 .map(|id| {
