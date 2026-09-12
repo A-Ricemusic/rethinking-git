@@ -21,6 +21,7 @@ mod git_objects;
 mod git_remotes;
 mod identity;
 mod ignore_rules;
+mod initialization;
 mod lines;
 mod resolution;
 mod transaction;
@@ -60,7 +61,11 @@ enum Command {
         command: RepoCommand,
     },
     /// Initialize source control in the current directory.
-    Init,
+    Init {
+        /// Continue an interrupted initialization without replacing saved history.
+        #[arg(long)]
+        resume: bool,
+    },
     /// Show changed files since the current change's latest snapshot.
     Status {
         /// Actor whose permissioned view should be used.
@@ -737,8 +742,8 @@ struct PendingConflict {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    if matches!(cli.command, Command::Init) {
-        return init_repo();
+    if let Command::Init { resume } = &cli.command {
+        return initialization::initialize(std::env::current_dir()?, *resume).map(|_| ());
     }
     if let Command::Git {
         command: GitCommand::Clone(args),
@@ -754,7 +759,7 @@ fn main() -> Result<()> {
         Command::Identity {
             command: IdentityCommand::Show,
         } => identity::show(&repo),
-        Command::Init
+        Command::Init { .. }
         | Command::Git {
             command: GitCommand::Clone(_),
         } => unreachable!(),
@@ -948,7 +953,13 @@ impl Repo {
     fn discover_from(mut dir: PathBuf) -> Result<Self> {
         loop {
             let meta = dir.join(META_DIR);
-            if meta.is_dir() {
+            let exists = match fs::symlink_metadata(&meta) {
+                Ok(_) => true,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+                Err(error) => return Err(error.into()),
+            };
+            if exists {
+                initialization::preflight(&meta)?;
                 let transaction = transaction::CommandTransaction::open(&meta)?;
                 let repo = Self {
                     root: dir,
@@ -1000,85 +1011,8 @@ impl FileDiff {
     }
 }
 
-fn init_repo() -> Result<()> {
-    initialize_repo(std::env::current_dir().context("failed to read current directory")?)
-        .map(|_| ())
-}
-
 fn initialize_repo(root: PathBuf) -> Result<Repo> {
-    let meta = root.join(META_DIR);
-
-    if meta.exists() {
-        bail!("repository already exists at {}", meta.display());
-    }
-
-    fs::create_dir(&meta).context("failed to create .rgit directory")?;
-    for dir in [
-        "actors",
-        "blobs",
-        "changes",
-        "conflicts",
-        "lines",
-        "operations",
-        "snapshots",
-    ] {
-        fs::create_dir_all(meta.join(dir)).with_context(|| format!("failed to create {dir}"))?;
-    }
-
-    let transaction = transaction::CommandTransaction::open(&meta)?;
-    let repo = Repo {
-        root,
-        meta,
-        transaction,
-    };
-    let config = RepoConfig {
-        author: None,
-        format_version: FORMAT_VERSION,
-        repo_id: format!("repo_{}", new_id_suffix()),
-        created_at: now()?,
-    };
-    let workspace = Workspace {
-        mode_snapshot: None,
-        current_change: None,
-    };
-    let public_actor = Actor {
-        name: PUBLIC_DOMAIN.to_string(),
-        domains: vec![PUBLIC_DOMAIN.to_string()],
-    };
-    let admin_actor = Actor {
-        name: ADMIN_DOMAIN.to_string(),
-        domains: vec![PUBLIC_DOMAIN.to_string(), ADMIN_DOMAIN.to_string()],
-    };
-    let main_line = Line {
-        name: DEFAULT_LINE.to_string(),
-        head_snapshot: None,
-        policy: public_policy(),
-        created_at: now()?,
-    };
-
-    write_json(&repo, &repo.path(&["repo.json"]), &config)?;
-    write_json(&repo, &repo.path(&["workspace.json"]), &workspace)?;
-    write_json(
-        &repo,
-        &repo.path(&["path-policies.json"]),
-        &Vec::<PathPolicy>::new(),
-    )?;
-    write_json(&repo, &actor_path(&repo, PUBLIC_DOMAIN)?, &public_actor)?;
-    write_json(&repo, &actor_path(&repo, ADMIN_DOMAIN)?, &admin_actor)?;
-    write_json(&repo, &line_path(&repo, DEFAULT_LINE)?, &main_line)?;
-    record_operation(
-        &repo,
-        OperationKind::InitRepo,
-        public_policy(),
-        "initialized repository".to_string(),
-        None,
-    )?;
-
-    repo.transaction.commit()?;
-    println!("initialized rgit repository");
-    println!("default line: {DEFAULT_LINE}");
-    println!("default actors: public, admin");
-    Ok(repo)
+    initialization::initialize(root, false)
 }
 
 fn set_actor(repo: &Repo, name: &str, domains: Vec<String>) -> Result<()> {
