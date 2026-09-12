@@ -212,9 +212,23 @@ pub(crate) fn open_lock_file_at(parent: &DirectoryHandle, name: &str) -> io::Res
         let flags = 0x0002 | 0x0200 | 0x0000_0100 | 0x0100_0000;
         #[cfg(not(target_os = "macos"))]
         let flags = 0x0002 | 0x0040 | 0x0002_0000 | 0x0008_0000;
-        let fd = unsafe { openat(parent.0.as_raw_fd(), name.as_ptr(), flags, 0o600_u32) };
+        let mut fd = unsafe { openat(parent.0.as_raw_fd(), name.as_ptr(), flags, 0o600_u32) };
         if fd < 0 {
-            return Err(io::Error::last_os_error());
+            let error = io::Error::last_os_error();
+            if error.kind() != io::ErrorKind::NotFound {
+                return Err(error);
+            }
+            // Concurrent O_CREAT opens can return ENOENT on APFS when another
+            // opener wins creation. Open that existing entry without creating,
+            // retaining descriptor-relative lookup and no-follow protections.
+            #[cfg(target_os = "macos")]
+            let create_flag = 0x0200;
+            #[cfg(not(target_os = "macos"))]
+            let create_flag = 0x0040;
+            fd = unsafe { openat(parent.0.as_raw_fd(), name.as_ptr(), flags & !create_flag) };
+            if fd < 0 {
+                return Err(io::Error::last_os_error());
+            }
         }
         let file = unsafe { File::from_raw_fd(fd) };
         use std::os::unix::fs::MetadataExt;
