@@ -36,6 +36,8 @@ name = "rgit"
 path = "src/main.rs"
 
 [dependencies]
+unicode-normalization.workspace = true
+unicode-casefold.workspace = true
 # Later ignore releases use let-chains despite declaring Rust 1.85 support.
 ignore = "=0.4.25"
 sha1 = "0.10"
