@@ -381,3 +381,18 @@ returns a nonzero exit on corruption. Verification does not repair saved records
 Opening the repository still performs normal committed-journal recovery first.
 The command requires the admin view because findings concern the complete repository;
 this is not a replacement for authenticated identity or signature verification.
+
+### Backing up and recovering saved history
+
+`rgit repo backup /outside/path/new-backup --as admin` verifies the source, copies
+saved records and blobs while holding the command lock, and verifies the copy before
+publishing its `.rgit` directory. The destination must be new and outside the source
+working tree. It gets an independent empty transaction journal. On Unix its root is
+private (0700). Existing destinations are never overwritten.
+
+This is a saved-history backup: unsnapshotted edits and untracked files are not
+included. To recover, enter the new backup directory, run `rgit repo verify --as admin`,
+then `rgit workspace restore --discard-changes --as admin` to materialize its current
+snapshot. An interrupted backup without a published `.rgit` is incomplete; keep the
+source and retry into a new destination. Backups remain plaintext and need the same
+storage protection as the repository. Windows power-loss qualification is pending.
