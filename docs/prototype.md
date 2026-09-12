@@ -669,3 +669,29 @@ currently refused rather than journaled as a special rename operation. Saved Git
 history with colliding paths remains importable, verifiable and exportable; checkout
 refuses to materialize it. This check does not qualify hostile concurrent filesystem
 changes or every platform-specific filename alias such as Windows short names.
+
+
+### Reviewing changed text
+
+Add `--patch` to `diff workspace`, `diff snapshot OLD NEW`, or `diff line NAME` for
+unified text hunks with three context lines. This is implemented in Rust and does
+not invoke Git or external diff/textconv tools. Default filename summaries remain
+unchanged. Headers quote unusual path bytes; executable/symlink mode changes are
+shown, and symlink previews use target text without following referents.
+
+The preview applies the same file visibility rules as summary diffs. Hidden changed
+paths contribute only a count. Saved text is read through validated blob paths and
+checked against its recorded digest/length; working bytes are rechecked against the
+scan. A read or verification failure returns nonzero, potentially after earlier
+files were printed.
+
+This is a review preview, not complete interchange: binary/non-UTF-8/control-bearing
+content and files over 1 MiB are labeled as omitted. Access-policy changes are noted
+but cannot be encoded in Git text hunks. Use Git export for complete supported saved
+history interchange. Ordinary unrestricted text hunks are tested by applying them
+with Git, including additions, deletions, modes and missing final newlines.
+
+Each file's diff uses a 500 ms algorithm deadline; on difficult inputs the library
+may produce a less minimal valid diff. This is not a hard command runtime limit:
+scanning, reading and rendering still take time. See the pinned library's
+[deadline semantics](https://docs.rs/similar/2.7.0/similar/struct.TextDiffConfig.html#method.timeout).
