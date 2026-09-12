@@ -388,6 +388,8 @@ struct Snapshot {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct FileEntry {
     path: String,
+    #[serde(default, skip_serializing_if = "is_false")]
+    executable: bool,
     hash: String,
     bytes: u64,
     policy: AccessPolicy,
@@ -2037,6 +2039,23 @@ fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
     let path_policies = read_path_policies(repo)?;
     let mut files = Vec::new();
 
+    #[cfg(not(unix))]
+    let inherited_modes: BTreeMap<String, bool> = {
+        let workspace = read_workspace(repo)?;
+        let snapshot = workspace
+            .current_change
+            .as_deref()
+            .map(|id| read_change(repo, id))
+            .transpose()?
+            .map(|change| read_optional_snapshot(repo, change.workspace_base_snapshot_id()))
+            .transpose()?
+            .flatten();
+        snapshot
+            .into_iter()
+            .flat_map(|s| s.files)
+            .map(|f| (f.path, f.executable))
+            .collect()
+    };
     for entry in WalkDir::new(&repo.root)
         .into_iter()
         .filter_entry(|entry| should_scan(entry.path()))
@@ -2073,6 +2092,13 @@ fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
         }
 
         files.push(FileEntry {
+            #[cfg(unix)]
+            executable: transaction::is_executable(path)?,
+            #[cfg(not(unix))]
+            executable: inherited_modes
+                .get(&relative_path)
+                .copied()
+                .unwrap_or(false),
             policy: policy_for_path(&relative_path, &path_policies),
             path: relative_path,
             hash,
@@ -2320,6 +2346,10 @@ fn write_json<T: Serialize>(repo: &Repo, path: &Path, value: &T) -> Result<()> {
         .stage(path, format!("{json}\n").into_bytes())
 }
 
+fn is_false(value: &bool) -> bool {
+    !value
+}
+
 fn hash_bytes(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
@@ -2440,6 +2470,7 @@ mod tests {
 
     fn file(path: &str, hash: &str, domains: &[&str]) -> FileEntry {
         FileEntry {
+            executable: false,
             path: path.to_string(),
             hash: hash.to_string(),
             bytes: 1,

@@ -28,6 +28,14 @@ impl CommandTransaction {
         let journal = open_database(&root.join("command-journal.sqlite3"))?;
         journal.execute_batch("CREATE TABLE IF NOT EXISTS pending (path TEXT PRIMARY KEY NOT NULL, bytes BLOB NOT NULL)")?;
         journal.execute_batch("CREATE TABLE IF NOT EXISTS working (path TEXT PRIMARY KEY NOT NULL, before_bytes BLOB, after_bytes BLOB)")?;
+        let columns: i64 = journal.query_row(
+            "SELECT count(*) FROM pragma_table_info('working') WHERE name='before_executable'",
+            [],
+            |r| r.get(0),
+        )?;
+        if columns == 0 {
+            journal.execute_batch("BEGIN IMMEDIATE; ALTER TABLE working ADD COLUMN before_executable INTEGER; ALTER TABLE working ADD COLUMN after_executable INTEGER; COMMIT;")?;
+        }
         let result = Self {
             root: root.to_path_buf(),
             _lock: lock,
@@ -97,15 +105,23 @@ impl CommandTransaction {
         }
         for (key, update) in self.working.borrow().iter() {
             let current = read_working(&self.workspace_root()?, key)?;
-            if current != update.before {
+            if current != update.before
+                || !matches_mode(&self.workspace_root()?.join(key), update.before_executable)?
+            {
                 bail!("working file changed during command: {key}");
             }
         }
         let transaction = self.journal.unchecked_transaction()?;
         for (key, update) in self.working.borrow().iter() {
             transaction.execute(
-                "INSERT INTO working VALUES (?1, ?2, ?3)",
-                rusqlite::params![key, update.before, update.after],
+                "INSERT INTO working VALUES (?1, ?2, ?3, ?4, ?5)",
+                rusqlite::params![
+                    key,
+                    update.before,
+                    update.after,
+                    update.before_executable,
+                    update.after_executable
+                ],
             )?;
         }
         for (path, bytes) in self.pending.borrow().iter() {
@@ -137,13 +153,15 @@ impl CommandTransaction {
         let working = {
             let mut query = self
                 .journal
-                .prepare("SELECT path, before_bytes, after_bytes FROM working ORDER BY path")?;
+                .prepare("SELECT path, before_bytes, after_bytes, before_executable, after_executable FROM working ORDER BY path")?;
             let rows = query.query_map([], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     WorkingUpdate {
                         before: row.get(1)?,
                         after: row.get(2)?,
+                        before_executable: row.get(3)?,
+                        after_executable: row.get(4)?,
                     },
                 ))
             })?;
@@ -151,7 +169,11 @@ impl CommandTransaction {
         };
         for (key, update) in &working {
             let current = read_working(&self.workspace_root()?, key)?;
-            if current != update.before && current != update.after {
+            if (current != update.before
+                || !matches_mode(&self.workspace_root()?.join(key), update.before_executable)?)
+                && (current != update.after
+                    || !matches_mode(&self.workspace_root()?.join(key), update.after_executable)?)
+            {
                 bail!("recovery stopped: working file was edited after interrupted command: {key}");
             }
         }
@@ -200,12 +222,12 @@ fn open_database(path: &Path) -> Result<Connection> {
             if tables != 0 {
                 bail!("unrecognized command transaction database");
             }
-            connection.execute_batch("PRAGMA application_id=1380402004; PRAGMA user_version=2;")?;
+            connection.execute_batch("PRAGMA application_id=1380402004; PRAGMA user_version=3;")?;
         }
-        (1380402004, 1) => {
-            connection.execute_batch("PRAGMA user_version=2;")?;
+        (1380402004, 1 | 2) => {
+            connection.execute_batch("PRAGMA user_version=3;")?;
         }
-        (1380402004, 2) => {}
+        (1380402004, 3) => {}
         _ => bail!("unsupported command transaction database format"),
     }
     connection.execute_batch("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;")?;
@@ -247,6 +269,10 @@ fn check_path(root: &Path, path: &Path) -> Result<()> {
 
 /// Publish complete bytes before references can point to them.
 pub(crate) fn publish_file(path: &Path, bytes: &[u8]) -> Result<()> {
+    publish_file_with_mode(path, bytes, None)
+}
+
+fn publish_file_with_mode(path: &Path, bytes: &[u8], executable: Option<bool>) -> Result<()> {
     let parent = path.parent().context("file has no parent")?;
     ensure_directory(parent)?;
     let permissions = match fs::symlink_metadata(path) {
@@ -266,6 +292,19 @@ pub(crate) fn publish_file(path: &Path, bytes: &[u8]) -> Result<()> {
         if let Some(permissions) = permissions {
             file.set_permissions(permissions)?;
         }
+        #[cfg(unix)]
+        if let Some(executable) = executable {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = file.metadata()?.permissions().mode();
+            let mode = if executable {
+                mode | ((mode & 0o444) >> 2)
+            } else {
+                mode & !0o111
+            };
+            file.set_permissions(fs::Permissions::from_mode(mode))?;
+        }
+        #[cfg(not(unix))]
+        let _ = executable;
         file.write_all(bytes)?;
         file.sync_all()?;
         drop(file);
@@ -283,6 +322,8 @@ pub(crate) fn publish_file(path: &Path, bytes: &[u8]) -> Result<()> {
 struct WorkingUpdate {
     before: Option<Vec<u8>>,
     after: Option<Vec<u8>>,
+    before_executable: Option<bool>,
+    after_executable: Option<bool>,
 }
 
 impl CommandTransaction {
@@ -299,11 +340,19 @@ impl CommandTransaction {
         key: &str,
         before: Option<Vec<u8>>,
         after: Option<Vec<u8>>,
+        before_executable: bool,
+        after_executable: bool,
     ) -> Result<()> {
         working_path(&self.workspace_root()?, key)?;
-        self.working
-            .borrow_mut()
-            .insert(key.to_string(), WorkingUpdate { before, after });
+        self.working.borrow_mut().insert(
+            key.to_string(),
+            WorkingUpdate {
+                before,
+                after,
+                before_executable: Some(before_executable),
+                after_executable: Some(after_executable),
+            },
+        );
         Ok(())
     }
 }
@@ -361,10 +410,12 @@ pub(crate) fn read_working(root: &Path, key: &str) -> Result<Option<Vec<u8>>> {
 fn publish_working(root: &Path, key: &str, update: &WorkingUpdate) -> Result<()> {
     let path = working_path(root, key)?;
     let current = read_working(root, key)?;
-    if current == update.after {
+    if current == update.after && matches_mode(&path, update.after_executable)? {
         return Ok(());
     }
-    if current != update.before {
+    if (current != update.before || !matches_mode(&path, update.before_executable)?)
+        && current != update.after
+    {
         bail!("working file changed during recovery: {key}");
     }
     if let Some(bytes) = &update.after {
@@ -379,13 +430,42 @@ fn publish_working(root: &Path, key: &str, update: &WorkingUpdate) -> Result<()>
             }
             ensure_directory(&directory)?;
         }
-        publish_file(&path, bytes)?;
+        publish_file_with_mode(&path, bytes, update.after_executable)?;
     } else {
         fs::remove_file(&path)?;
         #[cfg(unix)]
         fs::File::open(path.parent().unwrap())?.sync_all()?;
     }
     Ok(())
+}
+
+pub(crate) fn is_executable(path: &Path) -> Result<bool> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        Ok(fs::metadata(path)?.permissions().mode() & 0o111 != 0)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        Ok(false)
+    }
+}
+
+fn matches_mode(path: &Path, expected: Option<bool>) -> Result<bool> {
+    #[cfg(unix)]
+    {
+        if !path.exists() {
+            return Ok(true);
+        }
+        Ok(expected
+            .is_none_or(|expected| is_executable(path).is_ok_and(|actual| actual == expected)))
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (path, expected);
+        Ok(true)
+    }
 }
 
 #[cfg(test)]
@@ -498,7 +578,7 @@ mod tests {
         let transaction = command.journal.unchecked_transaction().unwrap();
         transaction
             .execute(
-                "INSERT INTO working VALUES ('first.txt', ?1, ?2), ('second.txt', ?1, ?2)",
+                "INSERT INTO working(path, before_bytes, after_bytes) VALUES ('first.txt', ?1, ?2), ('second.txt', ?1, ?2)",
                 rusqlite::params![b"old", b"new"],
             )
             .unwrap();

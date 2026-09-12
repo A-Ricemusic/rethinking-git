@@ -151,3 +151,57 @@ fn restore_refuses_symlink_traversal() {
         .success());
     assert_eq!(fs::read(external.join("new.txt")).unwrap(), b"outside");
 }
+
+#[cfg(unix)]
+#[test]
+fn executable_changes_are_snapshotted_diffed_and_restored_after_deletion() {
+    use std::os::unix::fs::PermissionsExt;
+    let repo = Repo::new();
+    let first = repo.change();
+    let script = repo.0.join("script.sh");
+    fs::write(&script, "#!/bin/sh\nexit 0\n").unwrap();
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o644)).unwrap();
+    repo.ok(&["snapshot"]);
+    repo.ok(&["line", "integrate"]);
+    let executable = repo.change();
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(repo.ok(&["diff", "workspace"]).contains("script.sh"));
+    repo.ok(&["snapshot"]);
+    repo.ok(&["workspace", "switch", &first]);
+    assert_eq!(
+        fs::metadata(&script).unwrap().permissions().mode() & 0o111,
+        0
+    );
+    repo.ok(&["workspace", "switch", &executable]);
+    assert_ne!(
+        fs::metadata(&script).unwrap().permissions().mode() & 0o111,
+        0
+    );
+    fs::remove_file(&script).unwrap();
+    repo.ok(&["workspace", "restore", "--discard-changes"]);
+    assert_ne!(
+        fs::metadata(&script).unwrap().permissions().mode() & 0o111,
+        0
+    );
+    assert!(Command::new(&script).status().unwrap().success());
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o644)).unwrap();
+    assert!(!repo.run(&["workspace", "switch", &first]).status.success());
+}
+
+#[cfg(unix)]
+#[test]
+fn restore_preserves_private_read_write_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+    let repo = Repo::new();
+    repo.change();
+    let path = repo.0.join("private.txt");
+    fs::write(&path, "saved").unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+    repo.ok(&["snapshot"]);
+    fs::write(&path, "edited").unwrap();
+    repo.ok(&["workspace", "restore", "--discard-changes"]);
+    assert_eq!(
+        fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+        0o600
+    );
+}
