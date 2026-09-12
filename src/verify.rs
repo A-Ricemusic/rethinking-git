@@ -50,6 +50,9 @@ fn verify_with_output(repo: &Repo, actor_name: &str, report: bool) -> Result<()>
     }
     let config: RepoConfig = read_json(repo, &repo.path(&["repo.json"]))?;
     validate_object_id(&config.repo_id, "repo_")?;
+    if let Some(author) = &config.author {
+        git_bridge::validate_author(author)?;
+    }
     let mut changes = BTreeMap::new();
     for (key, change) in records::<Change>(repo, "changes")? {
         identity(&key, &change.id, "chg_")?;
@@ -69,6 +72,9 @@ fn verify_with_output(repo: &Repo, actor_name: &str, report: bool) -> Result<()>
     let mut referenced_blobs = BTreeSet::new();
     for (key, snapshot) in records::<Snapshot>(repo, "snapshots")? {
         identity(&key, &snapshot.id, "snap_")?;
+        if let Some(author) = &snapshot.author {
+            git_bridge::validate_author(author)?;
+        }
         require(
             changes.contains_key(&snapshot.change_id),
             "snapshot owning change",
@@ -121,6 +127,12 @@ fn verify_with_output(repo: &Repo, actor_name: &str, report: bool) -> Result<()>
     for snapshot in snapshots.values() {
         if let Some(metadata) = &snapshot.git {
             let parsed = metadata.parse()?;
+            if let Some(author) = &snapshot.author {
+                require(
+                    parsed.author_identity.as_deref() == Some(author.as_bytes()),
+                    "Git provenance author",
+                )?;
+            }
             require(
                 snapshot.message == String::from_utf8_lossy(&parsed.message),
                 "Git provenance message",
@@ -212,7 +224,9 @@ fn verify_with_output(repo: &Repo, actor_name: &str, report: bool) -> Result<()>
                     "retarget operation source",
                 )?;
             }
-            OperationKind::InitRepo | OperationKind::SetPathPolicy { .. } => {}
+            OperationKind::InitRepo
+            | OperationKind::SetIdentity
+            | OperationKind::SetPathPolicy { .. } => {}
             OperationKind::SetActor { actor } => {
                 read_actor(repo, actor)?;
             }

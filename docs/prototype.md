@@ -415,8 +415,9 @@ bases (criss-cross history) are refused pending recursive merge support.
 `rgit git export /outside/path/new.git --line main --author 'Name <email>' --as admin`
 creates a new bare Git repository containing the selected line's saved ancestry,
 messages, file bytes, symlink targets, executable modes and merge parents. Git must be installed.
-The explicit identity is required for native snapshots because they did not record
-per-snapshot authors; untouched imported commits retain their original identities. The result is checked with `git fsck --full --strict` and can
+Native snapshots capture the configured repository identity. Legacy snapshots without
+recorded authors require the explicit export identity; untouched imported commits
+retain their original identities. The result is checked with `git fsck --full --strict` and can
 be cloned with Git after export succeeds.
 
 Restricted history is refused unless `--allow-restricted` explicitly authorizes
@@ -443,8 +444,8 @@ references; failed imports can leave verified unreferenced blobs.
 For supported regular-file and symlink histories, untouched commits round-trip with their exact
 Git IDs, raw metadata, authors, timestamps, signatures, modes and parent order. SHA-1
 and SHA-256 repositories are supported; an export cannot mix object formats. Native
-edits can extend imported history, with `--author` supplying identity for new native
-snapshots. `repo verify` checks imported commit digests and correspondence between
+edits can extend imported history, with `identity set` capturing authors on new native snapshots and `--author` supplying
+a fallback for legacy snapshots without recorded authors. `repo verify` checks imported commit digests and correspondence between
 raw metadata, native files, parents, display messages and timestamps. Signature bytes
 are preserved, but trust in signing keys remains Git's responsibility.
 
@@ -496,7 +497,7 @@ restore its resulting snapshot explicitly before editing the merged working tree
 
 The first export of a native snapshot records its Git identity transactionally and
 adds its native UUID to the commit header. Later exports preserve that identity;
-`--author` applies only to previously unbound native snapshots. A fetch can reconcile
+`--author` applies only to previously unbound native snapshots without recorded authors. A fetch can reconcile
 an acknowledged remote push whose local identity publication was interrupted, but
 only when the UUID, content tree, parents, message and timestamp match. Remote
 publication and local publication are separate transactions: after an ambiguous
@@ -595,3 +596,21 @@ aside intentionally before retrying. Initial repository creation still has the
 initialization-interruption limitation described above; resume requires its completed
 configuration and recorded clone request. This is selected-branch cloning, not all-ref
 migration or resumable network transfer.
+
+
+### Recording native authors
+
+Run `rgit identity set "Name" "email@example.com"` before creating snapshots.
+Each new snapshot and integration captures that configured author at creation time;
+changing the configuration affects only future snapshots. `identity show` displays
+the current setting, and snapshot summaries display recorded/imported author metadata.
+Git export uses each recorded author instead of assigning one author to the entire
+native history. Its `--author` option remains an explicit fallback for older snapshots
+that never recorded an identity. Merely setting an identity does not rewrite those
+older snapshots or existing bound Git commits.
+
+Repository verification validates recorded identities and checks that bound Git author
+metadata agrees. Native authors are configured metadata, not authenticated principals
+or signatures. Git transport credentials remain separate; imported signature bytes
+are preserved as before. Configure the identity again when a restored backup changes
+owners, since backups retain repository configuration.

@@ -13,7 +13,8 @@ native repositories. Each result is verified and its snapshot count checked.
 
 The final measurement is about 10.2 times faster on this fixture. Raw reports include
 individual samples, fixture Git head, measured source revision, binary checksum,
-platform and Git version. The final formatting/lint fix does not change the measured
+platform and Git version. These historical source revisions were recorded alongside
+the measurements; the harness now requires that provenance explicitly. The final formatting/lint fix does not change the measured
 algorithm. Import still verifies object identities, native blobs, trees, graph
 closure and publication; cache entries hold only per-import verified blob metadata.
 A regular blob reused as a symlink is still checked for a valid target.
@@ -22,10 +23,12 @@ Reproduce from the implementation being measured, using the committed harness:
 
 ```sh
 cargo build --release --locked
-python3 scripts/benchmark-git-import.py target/release/rgit --output /tmp/import-timing.json
+python3 scripts/benchmark-git-import.py target/release/rgit --source-revision FULL_SOURCE_COMMIT --output /tmp/import-timing.json
 ```
 
-Use the same harness with an earlier built binary to compare revisions. File count,
+Replace `FULL_SOURCE_COMMIT` with the full commit used to build that binary; do not
+substitute the current checkout revision when timing an older binary. Use the same
+harness with an earlier built binary to compare revisions. File count,
 commit count, bytes and run count are configurable. Timings cover the import command,
 including its integrity checks and metadata publication; fixture generation and the
 extra post-import verification are excluded.
