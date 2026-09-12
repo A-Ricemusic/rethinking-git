@@ -48,13 +48,14 @@ phases = []
 
 def run(label, command, cwd):
     print("Running " + label, flush=True)
-    result = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True)
-    (logs / (label + ".stdout.log")).write_text(result.stdout)
-    (logs / (label + ".stderr.log")).write_text(result.stderr)
+    stdout = logs / (label + ".stdout.log")
+    stderr = logs / (label + ".stderr.log")
+    with stdout.open("w", encoding="utf-8") as out, stderr.open("w", encoding="utf-8") as err:
+        result = subprocess.run(command, cwd=cwd, env=env, stdout=out, stderr=err)
     phases.append({"phase": label, "exit_code": result.returncode})
     if result.returncode:
         raise RuntimeError(label + " failed; inspect " + str(logs))
-    return result.stdout
+    return stdout.read_text(encoding="utf-8")
 
 
 def rgit(label, *command, cwd=None):
