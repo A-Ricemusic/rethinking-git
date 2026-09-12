@@ -13,6 +13,7 @@ use uuid::Uuid;
 use walkdir::WalkDir;
 
 mod cli_failure;
+mod transaction;
 
 use cli_failure::CliFailure;
 
@@ -455,6 +456,7 @@ enum OperationKind {
 struct Repo {
     root: PathBuf,
     meta: PathBuf,
+    transaction: transaction::CommandTransaction,
 }
 
 struct FileDiff {
@@ -485,111 +487,89 @@ struct PendingConflict {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    match cli.command {
-        Command::Init => init_repo(),
-        Command::Status { as_actor } => {
-            let repo = Repo::discover()?;
-            status(&repo, &as_actor)
-        }
+    if matches!(cli.command, Command::Init) {
+        return init_repo();
+    }
+    let repo = Repo::discover()?;
+    let result = match cli.command {
+        Command::Init => unreachable!(),
+        Command::Status { as_actor } => status(&repo, &as_actor),
         Command::Snapshot { message, domains } => {
-            let repo = Repo::discover()?;
             create_snapshot(&repo, &message, policy_from_domains(domains))
         }
-        Command::SnapshotInfo { command } => {
-            let repo = Repo::discover()?;
-            match command {
-                SnapshotCommand::List { as_actor } => list_snapshots(&repo, &as_actor),
-                SnapshotCommand::Show {
-                    snapshot_id,
-                    as_actor,
-                } => show_snapshot(&repo, &snapshot_id, &as_actor),
-            }
-        }
-        Command::Change { command } => {
-            let repo = Repo::discover()?;
-            match command {
-                ChangeCommand::New {
-                    name,
-                    target,
-                    domains,
-                } => create_change(&repo, &name, &target, policy_from_domains(domains)),
-                ChangeCommand::List { as_actor } => list_changes(&repo, &as_actor),
-                ChangeCommand::Show {
-                    change_id,
-                    as_actor,
-                } => show_change(&repo, &change_id, &as_actor),
-            }
-        }
-        Command::Actor { command } => {
-            let repo = Repo::discover()?;
-            match command {
-                ActorCommand::Set { name, domains } => set_actor(&repo, &name, domains),
-                ActorCommand::List => list_actors(&repo),
-            }
-        }
-        Command::Access { command } => {
-            let repo = Repo::discover()?;
-            match command {
-                AccessCommand::Path { path, domains } => set_path_policy(&repo, &path, domains),
-                AccessCommand::List => list_path_policies(&repo),
-            }
-        }
-        Command::Line { command } => {
-            let repo = Repo::discover()?;
-            match command {
-                LineCommand::List { as_actor } => list_lines(&repo, &as_actor),
-                LineCommand::Integrate { line, as_actor } => {
-                    integrate_line(&repo, &line, &as_actor)
-                }
-                LineCommand::View { line, as_actor } => view_line(&repo, &line, &as_actor),
-                LineCommand::History { line, as_actor } => line_history(&repo, &line, &as_actor),
-            }
-        }
-        Command::Diff { command } => {
-            let repo = Repo::discover()?;
-            match command {
-                DiffCommand::Workspace { as_actor } => diff_workspace(&repo, &as_actor),
-                DiffCommand::Snapshot {
-                    old_snapshot,
-                    new_snapshot,
-                    as_actor,
-                } => diff_snapshots(&repo, &old_snapshot, &new_snapshot, &as_actor),
-                DiffCommand::Line { line, as_actor } => diff_line(&repo, &line, &as_actor),
-            }
-        }
-        Command::Merge { command } => {
-            let repo = Repo::discover()?;
-            match command {
-                MergeCommand::Preview {
-                    change_id,
-                    line,
-                    as_actor,
-                } => merge_preview(&repo, change_id.as_deref(), &line, &as_actor),
-            }
-        }
-        Command::Conflict { command } => {
-            let repo = Repo::discover()?;
-            match command {
-                ConflictCommand::List { as_actor } => list_conflicts(&repo, &as_actor),
-                ConflictCommand::Show {
-                    conflict_id,
-                    as_actor,
-                } => show_conflict(&repo, &conflict_id, &as_actor),
-            }
-        }
-        Command::Workspace { command } => {
-            let repo = Repo::discover()?;
-            match command {
-                WorkspaceCommand::Info { as_actor } => workspace_info(&repo, &as_actor),
-            }
-        }
-        Command::Op { command } => {
-            let repo = Repo::discover()?;
-            match command {
-                OpCommand::Log { as_actor } => op_log(&repo, &as_actor),
-            }
-        }
+        Command::SnapshotInfo { command } => match command {
+            SnapshotCommand::List { as_actor } => list_snapshots(&repo, &as_actor),
+            SnapshotCommand::Show {
+                snapshot_id,
+                as_actor,
+            } => show_snapshot(&repo, &snapshot_id, &as_actor),
+        },
+        Command::Change { command } => match command {
+            ChangeCommand::New {
+                name,
+                target,
+                domains,
+            } => create_change(&repo, &name, &target, policy_from_domains(domains)),
+            ChangeCommand::List { as_actor } => list_changes(&repo, &as_actor),
+            ChangeCommand::Show {
+                change_id,
+                as_actor,
+            } => show_change(&repo, &change_id, &as_actor),
+        },
+        Command::Actor { command } => match command {
+            ActorCommand::Set { name, domains } => set_actor(&repo, &name, domains),
+            ActorCommand::List => list_actors(&repo),
+        },
+        Command::Access { command } => match command {
+            AccessCommand::Path { path, domains } => set_path_policy(&repo, &path, domains),
+            AccessCommand::List => list_path_policies(&repo),
+        },
+        Command::Line { command } => match command {
+            LineCommand::List { as_actor } => list_lines(&repo, &as_actor),
+            LineCommand::Integrate { line, as_actor } => integrate_line(&repo, &line, &as_actor),
+            LineCommand::View { line, as_actor } => view_line(&repo, &line, &as_actor),
+            LineCommand::History { line, as_actor } => line_history(&repo, &line, &as_actor),
+        },
+        Command::Diff { command } => match command {
+            DiffCommand::Workspace { as_actor } => diff_workspace(&repo, &as_actor),
+            DiffCommand::Snapshot {
+                old_snapshot,
+                new_snapshot,
+                as_actor,
+            } => diff_snapshots(&repo, &old_snapshot, &new_snapshot, &as_actor),
+            DiffCommand::Line { line, as_actor } => diff_line(&repo, &line, &as_actor),
+        },
+        Command::Merge { command } => match command {
+            MergeCommand::Preview {
+                change_id,
+                line,
+                as_actor,
+            } => merge_preview(&repo, change_id.as_deref(), &line, &as_actor),
+        },
+        Command::Conflict { command } => match command {
+            ConflictCommand::List { as_actor } => list_conflicts(&repo, &as_actor),
+            ConflictCommand::Show {
+                conflict_id,
+                as_actor,
+            } => show_conflict(&repo, &conflict_id, &as_actor),
+        },
+        Command::Workspace { command } => match command {
+            WorkspaceCommand::Info { as_actor } => workspace_info(&repo, &as_actor),
+        },
+        Command::Op { command } => match command {
+            OpCommand::Log { as_actor } => op_log(&repo, &as_actor),
+        },
+    };
+    if result.is_ok()
+        || result
+            .as_ref()
+            .err()
+            .and_then(|e| e.downcast_ref::<CliFailure>())
+            == Some(&CliFailure::IntegrationConflicted)
+    {
+        repo.transaction.commit()?;
     }
+    result
 }
 
 impl Repo {
@@ -599,7 +579,13 @@ impl Repo {
         loop {
             let meta = dir.join(META_DIR);
             if meta.is_dir() {
-                let config: RepoConfig = read_json(&meta.join("repo.json"))
+                let transaction = transaction::CommandTransaction::open(&meta)?;
+                let repo = Self {
+                    root: dir,
+                    meta,
+                    transaction,
+                };
+                let config: RepoConfig = read_json(&repo, &repo.meta.join("repo.json"))
                     .context("repository configuration is missing or invalid")?;
                 if config.format_version != FORMAT_VERSION {
                     bail!(
@@ -608,7 +594,7 @@ impl Repo {
                         FORMAT_VERSION
                     );
                 }
-                return Ok(Self { root: dir, meta });
+                return Ok(repo);
             }
 
             if !dir.pop() {
@@ -665,7 +651,12 @@ fn init_repo() -> Result<()> {
         fs::create_dir_all(meta.join(dir)).with_context(|| format!("failed to create {dir}"))?;
     }
 
-    let repo = Repo { root, meta };
+    let transaction = transaction::CommandTransaction::open(&meta)?;
+    let repo = Repo {
+        root,
+        meta,
+        transaction,
+    };
     let config = RepoConfig {
         format_version: FORMAT_VERSION,
         repo_id: format!("repo_{}", new_id_suffix()),
@@ -689,15 +680,16 @@ fn init_repo() -> Result<()> {
         created_at: now()?,
     };
 
-    write_json(&repo.path(&["repo.json"]), &config)?;
-    write_json(&repo.path(&["workspace.json"]), &workspace)?;
+    write_json(&repo, &repo.path(&["repo.json"]), &config)?;
+    write_json(&repo, &repo.path(&["workspace.json"]), &workspace)?;
     write_json(
+        &repo,
         &repo.path(&["path-policies.json"]),
         &Vec::<PathPolicy>::new(),
     )?;
-    write_json(&actor_path(&repo, PUBLIC_DOMAIN)?, &public_actor)?;
-    write_json(&actor_path(&repo, ADMIN_DOMAIN)?, &admin_actor)?;
-    write_json(&line_path(&repo, DEFAULT_LINE)?, &main_line)?;
+    write_json(&repo, &actor_path(&repo, PUBLIC_DOMAIN)?, &public_actor)?;
+    write_json(&repo, &actor_path(&repo, ADMIN_DOMAIN)?, &admin_actor)?;
+    write_json(&repo, &line_path(&repo, DEFAULT_LINE)?, &main_line)?;
     record_operation(
         &repo,
         OperationKind::InitRepo,
@@ -706,6 +698,7 @@ fn init_repo() -> Result<()> {
         None,
     )?;
 
+    repo.transaction.commit()?;
     println!("initialized rgit repository");
     println!("default line: {DEFAULT_LINE}");
     println!("default actors: public, admin");
@@ -724,7 +717,7 @@ fn set_actor(repo: &Repo, name: &str, domains: Vec<String>) -> Result<()> {
         domains: normalize_domains(domains),
     };
 
-    write_json(&actor_path(repo, name)?, &actor)?;
+    write_json(repo, &actor_path(repo, name)?, &actor)?;
     record_operation(
         repo,
         OperationKind::SetActor {
@@ -741,7 +734,7 @@ fn set_actor(repo: &Repo, name: &str, domains: Vec<String>) -> Result<()> {
 }
 
 fn list_actors(repo: &Repo) -> Result<()> {
-    let mut actors = read_dir_json::<Actor>(&repo.path(&["actors"]))?;
+    let mut actors = read_dir_json::<Actor>(repo, &repo.path(&["actors"]))?;
     actors.sort_by(|a, b| a.name.cmp(&b.name));
 
     for actor in actors {
@@ -766,7 +759,7 @@ fn set_path_policy(repo: &Repo, prefix: &str, domains: Vec<String>) -> Result<()
     });
     policies.sort_by(|a, b| a.prefix.cmp(&b.prefix));
 
-    write_json(&repo.path(&["path-policies.json"]), &policies)?;
+    write_json(repo, &repo.path(&["path-policies.json"]), &policies)?;
     record_operation(
         repo,
         OperationKind::SetPathPolicy {
@@ -812,8 +805,8 @@ fn create_change(repo: &Repo, name: &str, target_line: &str, policy: AccessPolic
         current_change: Some(change.id.clone()),
     };
 
-    write_json(&change_path(repo, &change.id)?, &change)?;
-    write_json(&repo.path(&["workspace.json"]), &workspace)?;
+    write_json(repo, &change_path(repo, &change.id)?, &change)?;
+    write_json(repo, &repo.path(&["workspace.json"]), &workspace)?;
     record_operation(
         repo,
         OperationKind::CreateChange {
@@ -833,7 +826,7 @@ fn create_change(repo: &Repo, name: &str, target_line: &str, policy: AccessPolic
 fn list_changes(repo: &Repo, actor_name: &str) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
     let workspace = read_workspace(repo)?;
-    let mut changes = read_dir_json::<Change>(&repo.path(&["changes"]))?;
+    let mut changes = read_dir_json::<Change>(repo, &repo.path(&["changes"]))?;
     changes.sort_by_key(|change| change.created_at);
 
     for change in changes {
@@ -909,8 +902,8 @@ fn create_snapshot(repo: &Repo, message: &str, requested_policy: AccessPolicy) -
 
     change.current_snapshot = Some(snapshot.id.clone());
 
-    write_json(&snapshot_path(repo, &snapshot.id)?, &snapshot)?;
-    write_json(&change_path(repo, &change.id)?, &change)?;
+    write_json(repo, &snapshot_path(repo, &snapshot.id)?, &snapshot)?;
+    write_json(repo, &change_path(repo, &change.id)?, &change)?;
     record_operation(
         repo,
         OperationKind::CreateSnapshot {
@@ -929,7 +922,7 @@ fn create_snapshot(repo: &Repo, message: &str, requested_policy: AccessPolicy) -
 
 fn list_snapshots(repo: &Repo, actor_name: &str) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
-    let mut snapshots = read_dir_json::<Snapshot>(&repo.path(&["snapshots"]))?;
+    let mut snapshots = read_dir_json::<Snapshot>(repo, &repo.path(&["snapshots"]))?;
     snapshots.sort_by_key(|snapshot| snapshot.created_at);
 
     for snapshot in snapshots {
@@ -1179,7 +1172,7 @@ fn merge_preview(
 
 fn list_conflicts(repo: &Repo, actor_name: &str) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
-    let mut conflicts = read_dir_json::<Conflict>(&repo.path(&["conflicts"]))?;
+    let mut conflicts = read_dir_json::<Conflict>(repo, &repo.path(&["conflicts"]))?;
     conflicts.sort_by(|a, b| a.created_at.cmp(&b.created_at).then(a.id.cmp(&b.id)));
 
     for conflict in conflicts {
@@ -1243,7 +1236,7 @@ fn print_conflict_for_actor(conflict: &Conflict, actor: &Actor) {
 
 fn list_lines(repo: &Repo, actor_name: &str) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
-    let mut lines = read_dir_json::<Line>(&repo.path(&["lines"]))?;
+    let mut lines = read_dir_json::<Line>(repo, &repo.path(&["lines"]))?;
     lines.sort_by(|a, b| a.name.cmp(&b.name));
 
     for line in lines {
@@ -1348,12 +1341,13 @@ fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> 
         created_at: now()?,
     };
     write_json(
+        repo,
         &snapshot_path(repo, &integrated_snapshot.id)?,
         &integrated_snapshot,
     )?;
 
     line.head_snapshot = Some(integrated_snapshot.id.clone());
-    write_json(&line_path(repo, &line.name)?, &line)?;
+    write_json(repo, &line_path(repo, &line.name)?, &line)?;
     record_operation(
         repo,
         OperationKind::IntegrateLine {
@@ -1418,7 +1412,7 @@ fn line_history(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> {
         return Ok(());
     }
 
-    let mut operations = read_dir_json::<Operation>(&repo.path(&["operations"]))?;
+    let mut operations = read_dir_json::<Operation>(repo, &repo.path(&["operations"]))?;
     operations.sort_by(|a, b| a.created_at.cmp(&b.created_at).then(a.id.cmp(&b.id)));
 
     for operation in operations {
@@ -1530,7 +1524,7 @@ fn workspace_info(repo: &Repo, actor_name: &str) -> Result<()> {
 
 fn op_log(repo: &Repo, actor_name: &str) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
-    let mut operations = read_dir_json::<Operation>(&repo.path(&["operations"]))?;
+    let mut operations = read_dir_json::<Operation>(repo, &repo.path(&["operations"]))?;
     operations.sort_by(|a, b| a.created_at.cmp(&b.created_at).then(a.id.cmp(&b.id)));
 
     for operation in operations {
@@ -1564,7 +1558,7 @@ fn record_operation(
         public_message,
         created_at: now()?,
     };
-    write_json(&operation_path(repo, &operation.id)?, &operation)
+    write_json(repo, &operation_path(repo, &operation.id)?, &operation)
 }
 
 #[cfg(test)]
@@ -1808,7 +1802,7 @@ fn store_conflicts(
         {
             let refreshed =
                 refresh_conflict(existing, change, incoming, source_policy.clone(), pending);
-            write_json(&conflict_path(repo, &refreshed.id)?, &refreshed)?;
+            write_json(repo, &conflict_path(repo, &refreshed.id)?, &refreshed)?;
             stored.push(refreshed);
             continue;
         }
@@ -1836,7 +1830,7 @@ fn store_conflicts(
             status: ConflictStatus::Unresolved,
             created_at: now()?,
         };
-        write_json(&conflict_path(repo, &conflict.id)?, &conflict)?;
+        write_json(repo, &conflict_path(repo, &conflict.id)?, &conflict)?;
         record_operation(
             repo,
             OperationKind::CreateConflict {
@@ -1881,7 +1875,7 @@ fn find_existing_unresolved_conflict(
     _incoming: &Snapshot,
     path: &str,
 ) -> Result<Option<Conflict>> {
-    let conflicts = read_dir_json::<Conflict>(&repo.path(&["conflicts"]))?;
+    let conflicts = read_dir_json::<Conflict>(repo, &repo.path(&["conflicts"]))?;
 
     Ok(conflicts.into_iter().find(|conflict| {
         conflict.status == ConflictStatus::Unresolved
@@ -1894,12 +1888,12 @@ fn find_existing_unresolved_conflict(
 }
 
 fn read_workspace(repo: &Repo) -> Result<Workspace> {
-    read_json(&repo.path(&["workspace.json"]))
+    read_json(repo, &repo.path(&["workspace.json"]))
 }
 
 fn read_actor(repo: &Repo, name: &str) -> Result<Actor> {
-    let value: Actor =
-        read_json(&actor_path(repo, name)?).with_context(|| format!("actor `{name}` not found"))?;
+    let value: Actor = read_json(repo, &actor_path(repo, name)?)
+        .with_context(|| format!("actor `{name}` not found"))?;
     if value.name != name {
         bail!("stored actor identity does not match requested identity");
     }
@@ -1907,8 +1901,8 @@ fn read_actor(repo: &Repo, name: &str) -> Result<Actor> {
 }
 
 fn read_change(repo: &Repo, id: &str) -> Result<Change> {
-    let value: Change =
-        read_json(&change_path(repo, id)?).with_context(|| format!("change `{id}` not found"))?;
+    let value: Change = read_json(repo, &change_path(repo, id)?)
+        .with_context(|| format!("change `{id}` not found"))?;
     if value.id != id {
         bail!("stored change identity does not match requested identity");
     }
@@ -1916,7 +1910,7 @@ fn read_change(repo: &Repo, id: &str) -> Result<Change> {
 }
 
 fn read_snapshot(repo: &Repo, id: &str) -> Result<Snapshot> {
-    let value: Snapshot = read_json(&snapshot_path(repo, id)?)
+    let value: Snapshot = read_json(repo, &snapshot_path(repo, id)?)
         .with_context(|| format!("snapshot `{id}` not found"))?;
     if value.id != id {
         bail!("stored snapshot identity does not match requested identity");
@@ -1925,8 +1919,8 @@ fn read_snapshot(repo: &Repo, id: &str) -> Result<Snapshot> {
 }
 
 fn read_line(repo: &Repo, name: &str) -> Result<Line> {
-    let value: Line =
-        read_json(&line_path(repo, name)?).with_context(|| format!("line `{name}` not found"))?;
+    let value: Line = read_json(repo, &line_path(repo, name)?)
+        .with_context(|| format!("line `{name}` not found"))?;
     if value.name != name {
         bail!("stored line identity does not match requested identity");
     }
@@ -1934,7 +1928,7 @@ fn read_line(repo: &Repo, name: &str) -> Result<Line> {
 }
 
 fn read_conflict(repo: &Repo, id: &str) -> Result<Conflict> {
-    let value: Conflict = read_json(&conflict_path(repo, id)?)
+    let value: Conflict = read_json(repo, &conflict_path(repo, id)?)
         .with_context(|| format!("conflict `{id}` not found"))?;
     if value.id != id {
         bail!("stored conflict identity does not match requested identity");
@@ -1943,7 +1937,7 @@ fn read_conflict(repo: &Repo, id: &str) -> Result<Conflict> {
 }
 
 fn read_path_policies(repo: &Repo) -> Result<Vec<PathPolicy>> {
-    read_json(&repo.path(&["path-policies.json"]))
+    read_json(repo, &repo.path(&["path-policies.json"]))
 }
 
 fn actor_path(repo: &Repo, name: &str) -> Result<PathBuf> {
@@ -2011,8 +2005,7 @@ fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
                     bail!("stored blob failed verification; snapshot was not published");
                 }
             } else {
-                fs::write(&blob_path, &bytes)
-                    .with_context(|| format!("failed to write {}", blob_path.display()))?;
+                transaction::publish_file(&blob_path, &bytes)?;
             }
         }
 
@@ -2245,38 +2238,23 @@ fn print_paths(label: &str, paths: &[String]) {
     }
 }
 
-fn read_dir_json<T: DeserializeOwned>(dir: &Path) -> Result<Vec<T>> {
-    let mut values = Vec::new();
-
-    if !dir.exists() {
-        return Ok(values);
-    }
-
-    for entry in fs::read_dir(dir).with_context(|| format!("failed to read {}", dir.display()))? {
-        let path = entry?.path();
-        if path.extension().and_then(|ext| ext.to_str()) == Some("json") {
-            values.push(read_json(&path)?);
-        }
-    }
-
-    Ok(values)
+fn read_dir_json<T: DeserializeOwned>(repo: &Repo, dir: &Path) -> Result<Vec<T>> {
+    repo.transaction
+        .list(dir)?
+        .iter()
+        .map(|path| read_json(repo, path))
+        .collect()
 }
 
-fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T> {
-    let text =
-        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
-    serde_json::from_str(&text).with_context(|| format!("failed to parse {}", path.display()))
+fn read_json<T: DeserializeOwned>(repo: &Repo, path: &Path) -> Result<T> {
+    let bytes = repo.transaction.read(path)?;
+    serde_json::from_slice(&bytes).with_context(|| format!("failed to parse {}", path.display()))
 }
 
-fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("failed to create {}", parent.display()))?;
-    }
-
+fn write_json<T: Serialize>(repo: &Repo, path: &Path, value: &T) -> Result<()> {
     let json = serde_json::to_string_pretty(value).context("failed to serialize json")?;
-    fs::write(path, format!("{json}\n"))
-        .with_context(|| format!("failed to write {}", path.display()))
+    repo.transaction
+        .stage(path, format!("{json}\n").into_bytes())
 }
 
 fn hash_bytes(bytes: &[u8]) -> String {
