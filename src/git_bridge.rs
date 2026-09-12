@@ -702,7 +702,7 @@ fn read_object_response(reader: &mut impl BufRead, oid: &str, kind: &str) -> Res
     reader.read_exact(&mut bytes)?;
     let mut trailer = [0];
     reader.read_exact(&mut trailer)?;
-    if trailer != [b'\n'] {
+    if trailer != *b"\n" {
         bail!("invalid Git object response terminator");
     }
     Ok(bytes)
