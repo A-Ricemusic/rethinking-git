@@ -322,3 +322,20 @@ Actor and line keys use nonempty slash-separated components. Control characters,
 ## Identifier compatibility
 
 New repository, change, snapshot, conflict, and operation identifiers retain the full 32 hexadecimal characters of their UUID v4 suffix. Earlier 12-character identifiers remain readable without rewriting history. CLI output may therefore contain longer IDs; the prefix still identifies the object kind.
+
+### Resolving recorded conflicts
+
+After an integration reports conflicts, inspect `rgit conflict list` and
+`rgit conflict show <id>`, then record a decision with
+`rgit conflict resolve <id> --take incoming` (or `line`, `base`, `delete`).
+Use `--as <actor>` consistently for restricted sources. Run `rgit merge preview`
+and `rgit line integrate` to publish the resolved merge. Resolution alone does
+not change the line or working files.
+
+A decision applies only to its recorded base, line head, and incoming snapshot.
+Changing those sources requires a new integration and resolution. Every source
+must be visible to the resolver. If the file sides have different access policies,
+selected content conservatively becomes admin-only; choosing public content does
+not silently remove a concurrent restriction. Resolution operation records are
+admin-only. This remains the prototype actor model, not authenticated identity.
+Custom merged content and external merge-tool integration are not yet supported.
