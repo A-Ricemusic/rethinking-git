@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -463,7 +463,7 @@ struct FileDiff {
 
 struct DiffInput {
     visible: Vec<FileEntry>,
-    hidden_by_path: BTreeMap<String, String>,
+    hidden_by_path: BTreeMap<String, FileEntry>,
 }
 
 struct MergePlan {
@@ -596,6 +596,15 @@ impl Repo {
         loop {
             let meta = dir.join(META_DIR);
             if meta.is_dir() {
+                let config: RepoConfig = read_json(&meta.join("repo.json"))
+                    .context("repository configuration is missing or invalid")?;
+                if config.format_version != FORMAT_VERSION {
+                    bail!(
+                        "unsupported repository format {}; expected {}; migration is required",
+                        config.format_version,
+                        FORMAT_VERSION
+                    );
+                }
                 return Ok(Self { root: dir, meta });
             }
 
@@ -683,9 +692,9 @@ fn init_repo() -> Result<()> {
         &repo.path(&["path-policies.json"]),
         &Vec::<PathPolicy>::new(),
     )?;
-    write_json(&actor_path(&repo, PUBLIC_DOMAIN), &public_actor)?;
-    write_json(&actor_path(&repo, ADMIN_DOMAIN), &admin_actor)?;
-    write_json(&line_path(&repo, DEFAULT_LINE), &main_line)?;
+    write_json(&actor_path(&repo, PUBLIC_DOMAIN)?, &public_actor)?;
+    write_json(&actor_path(&repo, ADMIN_DOMAIN)?, &admin_actor)?;
+    write_json(&line_path(&repo, DEFAULT_LINE)?, &main_line)?;
     record_operation(
         &repo,
         OperationKind::InitRepo,
@@ -701,12 +710,18 @@ fn init_repo() -> Result<()> {
 }
 
 fn set_actor(repo: &Repo, name: &str, domains: Vec<String>) -> Result<()> {
+    let path = actor_path(repo, name)?;
+    if path.try_exists().context("failed to inspect actor entry")? {
+        // The legacy slash-to-double-underscore encoding is not injective.
+        // Preserve its on-disk compatibility without allowing aliases to overwrite grants.
+        read_actor(repo, name)?;
+    }
     let actor = Actor {
         name: name.to_string(),
         domains: normalize_domains(domains),
     };
 
-    write_json(&actor_path(repo, name), &actor)?;
+    write_json(&actor_path(repo, name)?, &actor)?;
     record_operation(
         repo,
         OperationKind::SetActor {
@@ -735,7 +750,7 @@ fn list_actors(repo: &Repo) -> Result<()> {
 
 fn set_path_policy(repo: &Repo, prefix: &str, domains: Vec<String>) -> Result<()> {
     let mut policies = read_path_policies(repo)?;
-    let normalized_prefix = normalize_path(prefix);
+    let normalized_prefix = repository_relative_path(Path::new(prefix))?;
     let policy = AccessPolicy {
         domains: normalize_domains(domains),
         redaction: Redaction::Placeholder,
@@ -794,7 +809,7 @@ fn create_change(repo: &Repo, name: &str, target_line: &str, policy: AccessPolic
         current_change: Some(change.id.clone()),
     };
 
-    write_json(&change_path(repo, &change.id), &change)?;
+    write_json(&change_path(repo, &change.id)?, &change)?;
     write_json(&repo.path(&["workspace.json"]), &workspace)?;
     record_operation(
         repo,
@@ -891,8 +906,8 @@ fn create_snapshot(repo: &Repo, message: &str, requested_policy: AccessPolicy) -
 
     change.current_snapshot = Some(snapshot.id.clone());
 
-    write_json(&snapshot_path(repo, &snapshot.id), &snapshot)?;
-    write_json(&change_path(repo, &change.id), &change)?;
+    write_json(&snapshot_path(repo, &snapshot.id)?, &snapshot)?;
+    write_json(&change_path(repo, &change.id)?, &change)?;
     record_operation(
         repo,
         OperationKind::CreateSnapshot {
@@ -1327,12 +1342,12 @@ fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> 
         created_at: now()?,
     };
     write_json(
-        &snapshot_path(repo, &integrated_snapshot.id),
+        &snapshot_path(repo, &integrated_snapshot.id)?,
         &integrated_snapshot,
     )?;
 
     line.head_snapshot = Some(integrated_snapshot.id.clone());
-    write_json(&line_path(repo, &line.name), &line)?;
+    write_json(&line_path(repo, &line.name)?, &line)?;
     record_operation(
         repo,
         OperationKind::IntegrateLine {
@@ -1507,7 +1522,7 @@ fn record_operation(
         public_message,
         created_at: now()?,
     };
-    write_json(&operation_path(repo, &operation.id), &operation)
+    write_json(&operation_path(repo, &operation.id)?, &operation)
 }
 
 #[cfg(test)]
@@ -1537,7 +1552,7 @@ fn diff_files(previous: Vec<FileEntry>, current: Vec<FileEntry>, hidden: usize) 
         match (previous_map.get(&path), current_map.get(&path)) {
             (None, Some(_)) => added.push(path),
             (Some(_), None) => deleted.push(path),
-            (Some(before), Some(after)) if before.hash != after.hash => modified.push(path),
+            (Some(before), Some(after)) if before != after => modified.push(path),
             _ => {}
         }
     }
@@ -1566,7 +1581,7 @@ fn diff_input(files: Vec<FileEntry>, actor: &Actor) -> DiffInput {
         if can_access(actor, &file.policy) {
             visible.push(file);
         } else {
-            hidden_by_path.insert(file.path, file.hash);
+            hidden_by_path.insert(file.path.clone(), file);
         }
     }
 
@@ -1576,9 +1591,9 @@ fn diff_input(files: Vec<FileEntry>, actor: &Actor) -> DiffInput {
     }
 }
 
-fn hidden_changed_paths(
-    previous: &BTreeMap<String, String>,
-    current: &BTreeMap<String, String>,
+fn hidden_changed_paths<T: PartialEq>(
+    previous: &BTreeMap<String, T>,
+    current: &BTreeMap<String, T>,
 ) -> usize {
     let previous_paths = previous.keys().cloned().collect::<BTreeSet<_>>();
     let current_paths = current.keys().cloned().collect::<BTreeSet<_>>();
@@ -1664,7 +1679,7 @@ fn plan_merge(base: Vec<FileEntry>, line: Vec<FileEntry>, incoming: Vec<FileEntr
 fn same_file(left: Option<&FileEntry>, right: Option<&FileEntry>) -> bool {
     match (left, right) {
         (None, None) => true,
-        (Some(left), Some(right)) => left.hash == right.hash,
+        (Some(left), Some(right)) => left == right,
         _ => false,
     }
 }
@@ -1751,7 +1766,7 @@ fn store_conflicts(
         {
             let refreshed =
                 refresh_conflict(existing, change, incoming, source_policy.clone(), pending);
-            write_json(&conflict_path(repo, &refreshed.id), &refreshed)?;
+            write_json(&conflict_path(repo, &refreshed.id)?, &refreshed)?;
             stored.push(refreshed);
             continue;
         }
@@ -1779,7 +1794,7 @@ fn store_conflicts(
             status: ConflictStatus::Unresolved,
             created_at: now()?,
         };
-        write_json(&conflict_path(repo, &conflict.id), &conflict)?;
+        write_json(&conflict_path(repo, &conflict.id)?, &conflict)?;
         record_operation(
             repo,
             OperationKind::CreateConflict {
@@ -1841,51 +1856,82 @@ fn read_workspace(repo: &Repo) -> Result<Workspace> {
 }
 
 fn read_actor(repo: &Repo, name: &str) -> Result<Actor> {
-    read_json(&actor_path(repo, name)).with_context(|| format!("actor `{name}` not found"))
+    let value: Actor =
+        read_json(&actor_path(repo, name)?).with_context(|| format!("actor `{name}` not found"))?;
+    if value.name != name {
+        bail!("stored actor identity does not match requested identity");
+    }
+    Ok(value)
 }
 
 fn read_change(repo: &Repo, id: &str) -> Result<Change> {
-    read_json(&change_path(repo, id)).with_context(|| format!("change `{id}` not found"))
+    let value: Change =
+        read_json(&change_path(repo, id)?).with_context(|| format!("change `{id}` not found"))?;
+    if value.id != id {
+        bail!("stored change identity does not match requested identity");
+    }
+    Ok(value)
 }
 
 fn read_snapshot(repo: &Repo, id: &str) -> Result<Snapshot> {
-    read_json(&snapshot_path(repo, id)).with_context(|| format!("snapshot `{id}` not found"))
+    let value: Snapshot = read_json(&snapshot_path(repo, id)?)
+        .with_context(|| format!("snapshot `{id}` not found"))?;
+    if value.id != id {
+        bail!("stored snapshot identity does not match requested identity");
+    }
+    Ok(value)
 }
 
 fn read_line(repo: &Repo, name: &str) -> Result<Line> {
-    read_json(&line_path(repo, name)).with_context(|| format!("line `{name}` not found"))
+    let value: Line =
+        read_json(&line_path(repo, name)?).with_context(|| format!("line `{name}` not found"))?;
+    if value.name != name {
+        bail!("stored line identity does not match requested identity");
+    }
+    Ok(value)
 }
 
 fn read_conflict(repo: &Repo, id: &str) -> Result<Conflict> {
-    read_json(&conflict_path(repo, id)).with_context(|| format!("conflict `{id}` not found"))
+    let value: Conflict = read_json(&conflict_path(repo, id)?)
+        .with_context(|| format!("conflict `{id}` not found"))?;
+    if value.id != id {
+        bail!("stored conflict identity does not match requested identity");
+    }
+    Ok(value)
 }
 
 fn read_path_policies(repo: &Repo) -> Result<Vec<PathPolicy>> {
     read_json(&repo.path(&["path-policies.json"]))
 }
 
-fn actor_path(repo: &Repo, name: &str) -> PathBuf {
-    repo.path(&["actors", &format!("{}.json", file_name(name))])
+fn actor_path(repo: &Repo, name: &str) -> Result<PathBuf> {
+    validate_named_key(name)?;
+    Ok(repo.path(&["actors", &format!("{}.json", file_name(name))]))
 }
 
-fn change_path(repo: &Repo, id: &str) -> PathBuf {
-    repo.path(&["changes", &format!("{id}.json")])
+fn change_path(repo: &Repo, id: &str) -> Result<PathBuf> {
+    validate_object_id(id, "chg_")?;
+    Ok(repo.path(&["changes", &format!("{id}.json")]))
 }
 
-fn conflict_path(repo: &Repo, id: &str) -> PathBuf {
-    repo.path(&["conflicts", &format!("{id}.json")])
+fn conflict_path(repo: &Repo, id: &str) -> Result<PathBuf> {
+    validate_object_id(id, "conf_")?;
+    Ok(repo.path(&["conflicts", &format!("{id}.json")]))
 }
 
-fn line_path(repo: &Repo, name: &str) -> PathBuf {
-    repo.path(&["lines", &format!("{}.json", file_name(name))])
+fn line_path(repo: &Repo, name: &str) -> Result<PathBuf> {
+    validate_named_key(name)?;
+    Ok(repo.path(&["lines", &format!("{}.json", file_name(name))]))
 }
 
-fn snapshot_path(repo: &Repo, id: &str) -> PathBuf {
-    repo.path(&["snapshots", &format!("{id}.json")])
+fn snapshot_path(repo: &Repo, id: &str) -> Result<PathBuf> {
+    validate_object_id(id, "snap_")?;
+    Ok(repo.path(&["snapshots", &format!("{id}.json")]))
 }
 
-fn operation_path(repo: &Repo, id: &str) -> PathBuf {
-    repo.path(&["operations", &format!("{id}.json")])
+fn operation_path(repo: &Repo, id: &str) -> Result<PathBuf> {
+    validate_object_id(id, "op_")?;
+    Ok(repo.path(&["operations", &format!("{id}.json")]))
 }
 
 fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
@@ -1897,23 +1943,32 @@ fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
         .filter_entry(|entry| should_scan(entry.path()))
     {
         let entry = entry.context("failed to read directory entry")?;
-        if !entry.file_type().is_file() {
+        if entry.file_type().is_dir() {
             continue;
+        }
+        if !entry.file_type().is_file() {
+            bail!("unsupported filesystem entry; symlinks and special files cannot be captured by this prototype");
         }
 
         let path = entry.path();
         let bytes = fs::read(path).with_context(|| format!("failed to read {}", path.display()))?;
         let hash = hash_bytes(&bytes);
-        let relative_path = normalize_path(
-            &path
-                .strip_prefix(&repo.root)
-                .context("failed to compute relative path")?
-                .to_string_lossy(),
-        );
+        let relative_path = repository_relative_path(
+            path.strip_prefix(&repo.root)
+                .context("failed to compute relative path")?,
+        )?;
 
         if store_blobs {
             let blob_path = repo.path(&["blobs", &hash]);
-            if !blob_path.exists() {
+            if blob_path
+                .try_exists()
+                .context("failed to inspect stored blob")?
+            {
+                let stored = fs::read(&blob_path).context("failed to read stored blob")?;
+                if stored != bytes {
+                    bail!("stored blob failed verification; snapshot was not published");
+                }
+            } else {
                 fs::write(&blob_path, &bytes)
                     .with_context(|| format!("failed to write {}", blob_path.display()))?;
             }
@@ -2106,8 +2161,23 @@ fn normalize_domains(domains: Vec<String>) -> Vec<String> {
     normalized.into_iter().collect()
 }
 
-fn normalize_path(path: &str) -> String {
-    path.trim().trim_start_matches("./").replace('\\', "/")
+// Convert actual host path components; never trim names or reinterpret a Unix
+// backslash as a separator. The JSON prototype cannot losslessly encode non-UTF-8.
+fn repository_relative_path(path: &Path) -> Result<String> {
+    let mut segments = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::Normal(name) => {
+                segments.push(name.to_str().context("non-UTF-8 paths are not supported")?);
+            }
+            _ => bail!("path must be a nonempty repository-relative path without parent traversal"),
+        }
+    }
+    if segments.is_empty() {
+        bail!("path must be a nonempty repository-relative path without parent traversal");
+    }
+    Ok(segments.join("/"))
 }
 
 fn manifest_hash(files: &[FileEntry]) -> Result<String> {
@@ -2198,6 +2268,49 @@ fn conflict_status(status: &ConflictStatus) -> &'static str {
     }
 }
 
+fn validate_object_id(id: &str, prefix: &str) -> Result<()> {
+    let suffix = id.strip_prefix(prefix).unwrap_or("");
+    if !matches!(suffix.len(), 12 | 32)
+        || !suffix
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        bail!("invalid object identifier");
+    }
+    Ok(())
+}
+
+fn validate_named_key(name: &str) -> Result<()> {
+    if name.is_empty() || file_name(name).len() > 200 {
+        bail!("invalid actor or line name");
+    }
+    for component in name.split('/') {
+        let stem = component
+            .split('.')
+            .next()
+            .unwrap_or("")
+            .to_ascii_uppercase()
+            .replace('¹', "1")
+            .replace('²', "2")
+            .replace('³', "3");
+        let reserved = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+            || (stem.len() == 4
+                && (stem.starts_with("COM") || stem.starts_with("LPT"))
+                && matches!(stem.as_bytes()[3], b'1'..=b'9'));
+        if component.is_empty()
+            || component.ends_with(['.', ' '])
+            || reserved
+            || component.chars().any(|character| {
+                character.is_control()
+                    || matches!(character, '\\' | ':' | '<' | '>' | '"' | '|' | '?' | '*')
+            })
+        {
+            bail!("invalid actor or line name");
+        }
+    }
+    Ok(())
+}
+
 fn file_name(name: &str) -> String {
     name.replace('/', "__")
 }
@@ -2216,6 +2329,14 @@ fn now() -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn relative_paths_reject_non_utf8_without_lossy_replacement() {
+        use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+        let path = PathBuf::from(OsString::from_vec(vec![b'f', 0xff]));
+        assert!(repository_relative_path(&path).is_err());
+    }
 
     fn actor(name: &str, domains: &[&str]) -> Actor {
         Actor {
