@@ -181,7 +181,7 @@ fn write_history(
     for (index, snapshot) in history.iter().enumerate() {
         let mark = index + 1;
         writeln!(output, "reset {reference}\n")?;
-        writeln!(output, "commit {reference}\nmark :{mark}\nauthor {author} {} +0000\ncommitter {author} {} +0000", snapshot.created_at, snapshot.created_at)?;
+        writeln!(output, "commit {reference}\nmark :{mark}\nauthor {author} {} +0000\ncommitter {author} {} +0000", snapshot.created_at / 1000, snapshot.created_at / 1000)?;
         writeln!(output, "data {}", snapshot.message.len())?;
         output.write_all(snapshot.message.as_bytes())?;
         writeln!(output)?;

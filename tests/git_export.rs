@@ -79,6 +79,17 @@ fn exports_content_modes_messages_and_merge_parents_to_valid_git() {
     }
     source.ok(&["snapshot", "-m", "second message"]);
     source.ok(&["line", "integrate"]);
+    let line: Value =
+        serde_json::from_slice(&fs::read(source.0.join(".rgit/lines/main.json")).unwrap()).unwrap();
+    let head: Value = serde_json::from_slice(
+        &fs::read(source.0.join(format!(
+            ".rgit/snapshots/{}.json",
+            line["head_snapshot"].as_str().unwrap()
+        )))
+        .unwrap(),
+    )
+    .unwrap();
+    let expected_seconds = head["created_at"].as_u64().unwrap() / 1000;
     let path = destination();
     source.ok(&[
         "git",
@@ -91,6 +102,12 @@ fn exports_content_modes_messages_and_merge_parents_to_valid_git() {
     ]);
     let exported = Repo(path);
     git(&exported, &["fsck", "--full", "--strict"]);
+    assert_eq!(
+        String::from_utf8(git(&exported, &["show", "-s", "--format=%ct", "HEAD"]))
+            .unwrap()
+            .trim(),
+        expected_seconds.to_string()
+    );
     assert_eq!(
         git(&exported, &["show", "HEAD:file.txt"]),
         b"second\0binary\n"
