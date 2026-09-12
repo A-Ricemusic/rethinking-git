@@ -596,6 +596,15 @@ impl Repo {
         loop {
             let meta = dir.join(META_DIR);
             if meta.is_dir() {
+                let config: RepoConfig = read_json(&meta.join("repo.json"))
+                    .context("repository configuration is missing or invalid")?;
+                if config.format_version != FORMAT_VERSION {
+                    bail!(
+                        "unsupported repository format {}; expected {}; migration is required",
+                        config.format_version,
+                        FORMAT_VERSION
+                    );
+                }
                 return Ok(Self { root: dir, meta });
             }
 
@@ -683,9 +692,9 @@ fn init_repo() -> Result<()> {
         &repo.path(&["path-policies.json"]),
         &Vec::<PathPolicy>::new(),
     )?;
-    write_json(&actor_path(&repo, PUBLIC_DOMAIN), &public_actor)?;
-    write_json(&actor_path(&repo, ADMIN_DOMAIN), &admin_actor)?;
-    write_json(&line_path(&repo, DEFAULT_LINE), &main_line)?;
+    write_json(&actor_path(&repo, PUBLIC_DOMAIN)?, &public_actor)?;
+    write_json(&actor_path(&repo, ADMIN_DOMAIN)?, &admin_actor)?;
+    write_json(&line_path(&repo, DEFAULT_LINE)?, &main_line)?;
     record_operation(
         &repo,
         OperationKind::InitRepo,
@@ -701,12 +710,18 @@ fn init_repo() -> Result<()> {
 }
 
 fn set_actor(repo: &Repo, name: &str, domains: Vec<String>) -> Result<()> {
+    let path = actor_path(repo, name)?;
+    if path.try_exists().context("failed to inspect actor entry")? {
+        // The legacy slash-to-double-underscore encoding is not injective.
+        // Preserve its on-disk compatibility without allowing aliases to overwrite grants.
+        read_actor(repo, name)?;
+    }
     let actor = Actor {
         name: name.to_string(),
         domains: normalize_domains(domains),
     };
 
-    write_json(&actor_path(repo, name), &actor)?;
+    write_json(&actor_path(repo, name)?, &actor)?;
     record_operation(
         repo,
         OperationKind::SetActor {
@@ -794,7 +809,7 @@ fn create_change(repo: &Repo, name: &str, target_line: &str, policy: AccessPolic
         current_change: Some(change.id.clone()),
     };
 
-    write_json(&change_path(repo, &change.id), &change)?;
+    write_json(&change_path(repo, &change.id)?, &change)?;
     write_json(&repo.path(&["workspace.json"]), &workspace)?;
     record_operation(
         repo,
@@ -891,8 +906,8 @@ fn create_snapshot(repo: &Repo, message: &str, requested_policy: AccessPolicy) -
 
     change.current_snapshot = Some(snapshot.id.clone());
 
-    write_json(&snapshot_path(repo, &snapshot.id), &snapshot)?;
-    write_json(&change_path(repo, &change.id), &change)?;
+    write_json(&snapshot_path(repo, &snapshot.id)?, &snapshot)?;
+    write_json(&change_path(repo, &change.id)?, &change)?;
     record_operation(
         repo,
         OperationKind::CreateSnapshot {
@@ -1327,12 +1342,12 @@ fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> 
         created_at: now()?,
     };
     write_json(
-        &snapshot_path(repo, &integrated_snapshot.id),
+        &snapshot_path(repo, &integrated_snapshot.id)?,
         &integrated_snapshot,
     )?;
 
     line.head_snapshot = Some(integrated_snapshot.id.clone());
-    write_json(&line_path(repo, &line.name), &line)?;
+    write_json(&line_path(repo, &line.name)?, &line)?;
     record_operation(
         repo,
         OperationKind::IntegrateLine {
@@ -1507,7 +1522,7 @@ fn record_operation(
         public_message,
         created_at: now()?,
     };
-    write_json(&operation_path(repo, &operation.id), &operation)
+    write_json(&operation_path(repo, &operation.id)?, &operation)
 }
 
 #[cfg(test)]
@@ -1751,7 +1766,7 @@ fn store_conflicts(
         {
             let refreshed =
                 refresh_conflict(existing, change, incoming, source_policy.clone(), pending);
-            write_json(&conflict_path(repo, &refreshed.id), &refreshed)?;
+            write_json(&conflict_path(repo, &refreshed.id)?, &refreshed)?;
             stored.push(refreshed);
             continue;
         }
@@ -1779,7 +1794,7 @@ fn store_conflicts(
             status: ConflictStatus::Unresolved,
             created_at: now()?,
         };
-        write_json(&conflict_path(repo, &conflict.id), &conflict)?;
+        write_json(&conflict_path(repo, &conflict.id)?, &conflict)?;
         record_operation(
             repo,
             OperationKind::CreateConflict {
@@ -1841,51 +1856,82 @@ fn read_workspace(repo: &Repo) -> Result<Workspace> {
 }
 
 fn read_actor(repo: &Repo, name: &str) -> Result<Actor> {
-    read_json(&actor_path(repo, name)).with_context(|| format!("actor `{name}` not found"))
+    let value: Actor =
+        read_json(&actor_path(repo, name)?).with_context(|| format!("actor `{name}` not found"))?;
+    if value.name != name {
+        bail!("stored actor identity does not match requested identity");
+    }
+    Ok(value)
 }
 
 fn read_change(repo: &Repo, id: &str) -> Result<Change> {
-    read_json(&change_path(repo, id)).with_context(|| format!("change `{id}` not found"))
+    let value: Change =
+        read_json(&change_path(repo, id)?).with_context(|| format!("change `{id}` not found"))?;
+    if value.id != id {
+        bail!("stored change identity does not match requested identity");
+    }
+    Ok(value)
 }
 
 fn read_snapshot(repo: &Repo, id: &str) -> Result<Snapshot> {
-    read_json(&snapshot_path(repo, id)).with_context(|| format!("snapshot `{id}` not found"))
+    let value: Snapshot = read_json(&snapshot_path(repo, id)?)
+        .with_context(|| format!("snapshot `{id}` not found"))?;
+    if value.id != id {
+        bail!("stored snapshot identity does not match requested identity");
+    }
+    Ok(value)
 }
 
 fn read_line(repo: &Repo, name: &str) -> Result<Line> {
-    read_json(&line_path(repo, name)).with_context(|| format!("line `{name}` not found"))
+    let value: Line =
+        read_json(&line_path(repo, name)?).with_context(|| format!("line `{name}` not found"))?;
+    if value.name != name {
+        bail!("stored line identity does not match requested identity");
+    }
+    Ok(value)
 }
 
 fn read_conflict(repo: &Repo, id: &str) -> Result<Conflict> {
-    read_json(&conflict_path(repo, id)).with_context(|| format!("conflict `{id}` not found"))
+    let value: Conflict = read_json(&conflict_path(repo, id)?)
+        .with_context(|| format!("conflict `{id}` not found"))?;
+    if value.id != id {
+        bail!("stored conflict identity does not match requested identity");
+    }
+    Ok(value)
 }
 
 fn read_path_policies(repo: &Repo) -> Result<Vec<PathPolicy>> {
     read_json(&repo.path(&["path-policies.json"]))
 }
 
-fn actor_path(repo: &Repo, name: &str) -> PathBuf {
-    repo.path(&["actors", &format!("{}.json", file_name(name))])
+fn actor_path(repo: &Repo, name: &str) -> Result<PathBuf> {
+    validate_named_key(name)?;
+    Ok(repo.path(&["actors", &format!("{}.json", file_name(name))]))
 }
 
-fn change_path(repo: &Repo, id: &str) -> PathBuf {
-    repo.path(&["changes", &format!("{id}.json")])
+fn change_path(repo: &Repo, id: &str) -> Result<PathBuf> {
+    validate_object_id(id, "chg_")?;
+    Ok(repo.path(&["changes", &format!("{id}.json")]))
 }
 
-fn conflict_path(repo: &Repo, id: &str) -> PathBuf {
-    repo.path(&["conflicts", &format!("{id}.json")])
+fn conflict_path(repo: &Repo, id: &str) -> Result<PathBuf> {
+    validate_object_id(id, "conf_")?;
+    Ok(repo.path(&["conflicts", &format!("{id}.json")]))
 }
 
-fn line_path(repo: &Repo, name: &str) -> PathBuf {
-    repo.path(&["lines", &format!("{}.json", file_name(name))])
+fn line_path(repo: &Repo, name: &str) -> Result<PathBuf> {
+    validate_named_key(name)?;
+    Ok(repo.path(&["lines", &format!("{}.json", file_name(name))]))
 }
 
-fn snapshot_path(repo: &Repo, id: &str) -> PathBuf {
-    repo.path(&["snapshots", &format!("{id}.json")])
+fn snapshot_path(repo: &Repo, id: &str) -> Result<PathBuf> {
+    validate_object_id(id, "snap_")?;
+    Ok(repo.path(&["snapshots", &format!("{id}.json")]))
 }
 
-fn operation_path(repo: &Repo, id: &str) -> PathBuf {
-    repo.path(&["operations", &format!("{id}.json")])
+fn operation_path(repo: &Repo, id: &str) -> Result<PathBuf> {
+    validate_object_id(id, "op_")?;
+    Ok(repo.path(&["operations", &format!("{id}.json")]))
 }
 
 fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
@@ -2196,6 +2242,49 @@ fn conflict_status(status: &ConflictStatus) -> &'static str {
         ConflictStatus::Unresolved => "unresolved",
         ConflictStatus::Resolved => "resolved",
     }
+}
+
+fn validate_object_id(id: &str, prefix: &str) -> Result<()> {
+    let suffix = id.strip_prefix(prefix).unwrap_or("");
+    if !matches!(suffix.len(), 12 | 32)
+        || !suffix
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        bail!("invalid object identifier");
+    }
+    Ok(())
+}
+
+fn validate_named_key(name: &str) -> Result<()> {
+    if name.is_empty() || file_name(name).len() > 200 {
+        bail!("invalid actor or line name");
+    }
+    for component in name.split('/') {
+        let stem = component
+            .split('.')
+            .next()
+            .unwrap_or("")
+            .to_ascii_uppercase()
+            .replace('¹', "1")
+            .replace('²', "2")
+            .replace('³', "3");
+        let reserved = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+            || (stem.len() == 4
+                && (stem.starts_with("COM") || stem.starts_with("LPT"))
+                && matches!(stem.as_bytes()[3], b'1'..=b'9'));
+        if component.is_empty()
+            || component.ends_with(['.', ' '])
+            || reserved
+            || component.chars().any(|character| {
+                character.is_control()
+                    || matches!(character, '\\' | ':' | '<' | '>' | '"' | '|' | '?' | '*')
+            })
+        {
+            bail!("invalid actor or line name");
+        }
+    }
+    Ok(())
 }
 
 fn file_name(name: &str) -> String {
