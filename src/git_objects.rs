@@ -187,6 +187,19 @@ pub(super) fn tree(
     files: &[FileEntry],
     format: &str,
 ) -> Result<(String, Vec<Object>)> {
+    build_tree(repo, files, format, true)
+}
+
+pub(super) fn tree_id(repo: &Repo, files: &[FileEntry], format: &str) -> Result<String> {
+    Ok(build_tree(repo, files, format, false)?.0)
+}
+
+fn build_tree(
+    repo: &Repo,
+    files: &[FileEntry],
+    format: &str,
+    include_blobs: bool,
+) -> Result<(String, Vec<Object>)> {
     let mut directory = BTreeMap::new();
     let mut objects = Vec::new();
     for file in files {
@@ -195,16 +208,15 @@ pub(super) fn tree(
         if parts.len() > 256 {
             bail!("Git path nesting exceeds supported depth");
         }
-        let path = repo.path(&["blobs", &file.hash]);
-        let metadata = fs::symlink_metadata(&path)?;
-        if !metadata.is_file() || metadata.file_type().is_symlink() {
-            bail!("unsafe blob while building Git tree");
-        }
-        let bytes = fs::read(path)?;
-        if hash_bytes(&bytes) != file.hash || bytes.len() as u64 != file.bytes {
-            bail!("blob changed while building Git tree");
-        }
-        let id = object_id("blob", &bytes, format)?;
+        let (id, bytes) = if include_blobs {
+            let bytes = verify::read_blob(repo, &file.hash)?;
+            if hash_bytes(&bytes) != file.hash || bytes.len() as u64 != file.bytes {
+                bail!("blob changed while building Git tree");
+            }
+            (object_id("blob", &bytes, format)?, Some(bytes))
+        } else {
+            (blob_id(repo, file, format)?, None)
+        };
         insert(
             &mut directory,
             &parts,
@@ -217,12 +229,39 @@ pub(super) fn tree(
                 "100644"
             },
         )?;
-        objects.push(Object {
-            id,
-            kind: "blob",
-            bytes,
-        });
+        if let Some(bytes) = bytes {
+            objects.push(Object {
+                id,
+                kind: "blob",
+                bytes,
+            });
+        }
     }
     let tree = encode_tree(directory, format, &mut objects)?;
     Ok((tree, objects))
+}
+
+fn blob_id(repo: &Repo, file: &FileEntry, format: &str) -> Result<String> {
+    enum Hasher {
+        Sha1(sha1::Sha1),
+        Sha256(Sha256),
+    }
+    let mut git = match format {
+        "sha1" => Hasher::Sha1(sha1::Sha1::new()),
+        "sha256" => Hasher::Sha256(Sha256::new()),
+        _ => bail!("unsupported Git object format"),
+    };
+    let mut update = |bytes: &[u8]| match &mut git {
+        Hasher::Sha1(hash) => hash.update(bytes),
+        Hasher::Sha256(hash) => hash.update(bytes),
+    };
+    update(format!("blob {}\0", file.bytes).as_bytes());
+    let (hash, length) = blob_io::digest_with(verify::open_blob(repo, &file.hash)?, update)?;
+    if hash != file.hash || length != file.bytes {
+        bail!("blob changed while verifying Git tree");
+    }
+    Ok(match git {
+        Hasher::Sha1(hash) => hex::encode(hash.finalize()),
+        Hasher::Sha256(hash) => hex::encode(hash.finalize()),
+    })
 }
