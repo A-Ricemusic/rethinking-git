@@ -83,6 +83,16 @@ Create a snapshot:
 cargo run -- snapshot --message "add settings toggle"
 ```
 
+Regular-file capture streams through a 64 KiB buffer into a temporary blob, syncs
+it, and admits the complete object without replacing an existing path. Existing
+blobs must match exactly before reuse. This requires hard-link support on the
+repository filesystem; unsupported publication fails before snapshot metadata is
+saved. Capture temporarily needs additional disk space up to the current file's
+size, including when reusing a blob. Ordinary failures remove the temporary;
+process interruption can leave an ignored `.rgit-publish-*` temporary. Symlink
+validation, checkout and Git export still have separate in-memory content paths.
+
+
 Inspect the workspace:
 
 ```sh
