@@ -653,3 +653,19 @@ hardware power-loss behavior.
 `rgit status --json` exposes versioned, permission-filtered status for automation.
 See [the JSON contract](automation.md) for fields, empty/restricted states and exit
 semantics. Default text output remains unchanged.
+
+
+### Checkout filename aliases
+
+Checkout compares every source/target path prefix using full non-Turkic Unicode
+case folding (the pinned Unicode 9 table) followed by NFC normalization. Distinct
+spellings with the same key are refused before committing working updates, including
+`README`/`readme`, `Src/a`/`src/b`, and canonically equivalent Unicode spellings.
+Existing filesystem entries, including untracked directory aliases, are checked too.
+Commit and recovery revalidate the working update set before publication.
+
+This is a conservative portable rule on every host. Case-only switches/renames are
+currently refused rather than journaled as a special rename operation. Saved Git
+history with colliding paths remains importable, verifiable and exportable; checkout
+refuses to materialize it. This check does not qualify hostile concurrent filesystem
+changes or every platform-specific filename alias such as Windows short names.

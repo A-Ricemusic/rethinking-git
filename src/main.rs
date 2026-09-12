@@ -15,6 +15,7 @@ use walkdir::WalkDir;
 mod ancestry;
 mod backup;
 mod checkout;
+mod checkout_paths;
 mod cli_failure;
 mod git_bridge;
 mod git_objects;

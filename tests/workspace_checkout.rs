@@ -242,3 +242,152 @@ fn links_are_replaced_without_touching_referents_and_type_changes_are_dirty() {
         .is_symlink());
     assert_eq!(fs::read(repo.0.join("link")).unwrap(), b"other-target");
 }
+
+fn git_object(repo: &std::path::Path, args: &[&str], input: &[u8]) -> String {
+    use std::io::Write;
+    use std::process::Stdio;
+    let mut child = Command::new("git")
+        .args(["-c", "commit.gpgsign=false"])
+        .args(args)
+        .current_dir(repo)
+        .env("GIT_AUTHOR_NAME", "Fixture")
+        .env("GIT_AUTHOR_EMAIL", "fixture@example.com")
+        .env("GIT_COMMITTER_NAME", "Fixture")
+        .env("GIT_COMMITTER_EMAIL", "fixture@example.com")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(input).unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{args:?}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).unwrap().trim().to_string()
+}
+
+fn import_collision_fixture(repo: &Repo, directories: bool) {
+    let source = repo.0.join("fixture.git");
+    fs::create_dir(&source).unwrap();
+    git_object(&source, &["init", "--bare"], b"");
+    let a = git_object(&source, &["hash-object", "-w", "--stdin"], b"first");
+    let b = git_object(&source, &["hash-object", "-w", "--stdin"], b"second");
+    let tree = if directories {
+        let a = git_object(
+            &source,
+            &["mktree"],
+            format!("100644 blob {a}\ta\n").as_bytes(),
+        );
+        let b = git_object(
+            &source,
+            &["mktree"],
+            format!("100644 blob {b}\tb\n").as_bytes(),
+        );
+        git_object(
+            &source,
+            &["mktree"],
+            format!("040000 tree {a}\tSrc\n040000 tree {b}\tsrc\n").as_bytes(),
+        )
+    } else {
+        git_object(
+            &source,
+            &["mktree"],
+            format!("100644 blob {a}\tREADME\n100644 blob {b}\treadme\n").as_bytes(),
+        )
+    };
+    let commit = git_object(
+        &source,
+        &["commit-tree", &tree, "-m", "case collision"],
+        b"",
+    );
+    git_object(&source, &["update-ref", "refs/heads/main", &commit], b"");
+    repo.ok(&[
+        "git",
+        "import",
+        source.to_str().unwrap(),
+        "--revision",
+        "main",
+        "--domain",
+        "public",
+        "--as",
+        "admin",
+    ]);
+    fs::remove_dir_all(&source).unwrap();
+}
+
+#[test]
+fn aliased_git_paths_are_rejected_before_committing_checkout_on_every_platform() {
+    for directories in [false, true] {
+        let repo = Repo::new();
+        import_collision_fixture(&repo, directories);
+        let workspace = fs::read(repo.0.join(".rgit/workspace.json")).unwrap();
+        let result = repo.run(&["workspace", "restore", "--discard-changes", "--as", "admin"]);
+        assert!(!result.status.success());
+        assert!(String::from_utf8_lossy(&result.stderr).contains("alias"));
+        assert_eq!(
+            fs::read(repo.0.join(".rgit/workspace.json")).unwrap(),
+            workspace
+        );
+        assert_eq!(
+            fs::read_dir(&repo.0).unwrap().count(),
+            1,
+            "checkout published working files"
+        );
+        let db = rusqlite::Connection::open(repo.0.join(".rgit/command-journal.sqlite3")).unwrap();
+        for table in ["pending", "working"] {
+            let count: i64 = db
+                .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })
+                .unwrap();
+            assert_eq!(count, 0, "refused checkout committed recovery rows");
+        }
+        drop(db);
+        // Saved Git data remains verifiable/exportable even when not materializable.
+        repo.ok(&["repo", "verify", "--as", "admin"]);
+    }
+}
+
+#[test]
+fn untracked_directory_alias_is_preserved_before_any_checkout_write() {
+    let repo = Repo::new();
+    let first = repo.change();
+    repo.ok(&["snapshot"]);
+    fs::create_dir(repo.0.join("src")).unwrap();
+    fs::write(repo.0.join("src/tracked"), "saved").unwrap();
+    let second = repo.change();
+    repo.ok(&["snapshot"]);
+    repo.ok(&["workspace", "switch", &first]);
+    fs::remove_dir(repo.0.join("src")).unwrap();
+    fs::create_dir(repo.0.join("SRC")).unwrap();
+    fs::write(repo.0.join("SRC/untracked"), "keep").unwrap();
+    let result = repo.run(&["workspace", "switch", &second]);
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("alias"));
+    assert_eq!(repo.current(), first);
+    assert_eq!(fs::read(repo.0.join("SRC/untracked")).unwrap(), b"keep");
+    assert!(!repo.0.join("SRC/tracked").exists());
+    repo.ok(&["repo", "verify", "--as", "admin"]);
+}
+
+#[test]
+fn case_only_switch_is_refused_without_losing_the_saved_or_working_version() {
+    let repo = Repo::new();
+    let first = repo.change();
+    fs::write(repo.0.join("README"), "first").unwrap();
+    repo.ok(&["snapshot"]);
+    let second = repo.change();
+    fs::rename(repo.0.join("README"), repo.0.join("temporary-name")).unwrap();
+    fs::rename(repo.0.join("temporary-name"), repo.0.join("readme")).unwrap();
+    fs::write(repo.0.join("readme"), "second").unwrap();
+    repo.ok(&["snapshot"]);
+    let result = repo.run(&["workspace", "switch", &first]);
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("alias"));
+    assert_eq!(repo.current(), second);
+    assert_eq!(fs::read(repo.0.join("readme")).unwrap(), b"second");
+    repo.ok(&["repo", "verify", "--as", "admin"]);
+}

@@ -157,6 +157,8 @@ fn stage_checkout(
     let materialized =
         read_optional_snapshot(repo, read_workspace(repo)?.mode_snapshot.as_deref())?;
     let paths: BTreeSet<&String> = before.keys().chain(after.keys()).collect();
+    checkout_paths::validate(paths.iter().map(|path| path.as_str()))?;
+    checkout_paths::validate_existing(&repo.root, paths.iter().map(|path| path.as_str()))?;
     for path in paths {
         let current = transaction::read_working(&repo.root, path)?;
         let previous = before.get(path).map(|v| &v.0);
