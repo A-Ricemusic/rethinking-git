@@ -523,8 +523,8 @@ impl Store for SqliteStore {
         self.memory.get(id)
     }
 
-    fn presence(&self, id: &ObjectId) -> Option<ObjectPresence> {
-        self.refresh().ok()?;
+    fn presence(&self, id: &ObjectId) -> Result<Option<ObjectPresence>, StoreError> {
+        self.refresh()?;
         self.memory.presence(id)
     }
 
@@ -626,8 +626,8 @@ impl Store for SqliteStore {
         self.checkpoint()
     }
 
-    fn reference(&self, key: &ReferenceKey) -> Option<ReferenceState> {
-        self.refresh().ok()?;
+    fn reference(&self, key: &ReferenceKey) -> Result<Option<ReferenceState>, StoreError> {
+        self.refresh()?;
         self.memory.reference(key)
     }
 

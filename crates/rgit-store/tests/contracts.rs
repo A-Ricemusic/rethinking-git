@@ -22,7 +22,10 @@ fn deny(_: &PublicationCandidate<'_>) -> Result<(), StoreError> {
 struct ReentrantValidator<'a>(&'a MemoryStore);
 impl PublicationValidator for ReentrantValidator<'_> {
     fn validate(&self, candidate: &PublicationCandidate<'_>) -> Result<(), StoreError> {
-        let _ = self.0.presence(&candidate.publication().operation);
+        let _ = self
+            .0
+            .presence(&candidate.publication().operation)
+            .expect("lookup succeeds");
         Ok(())
     }
 }
@@ -177,7 +180,10 @@ fn put_is_verified_idempotent_and_deduplicated() {
     let (id, bytes) = encoded(&chunk);
     assert_eq!(store.put(id.clone(), bytes.clone()), Ok(PutOutcome::New));
     assert_eq!(store.put(id.clone(), bytes), Ok(PutOutcome::AlreadyPresent));
-    assert_eq!(store.presence(&id), Some(ObjectPresence::Present));
+    assert_eq!(
+        store.presence(&id).expect("lookup succeeds"),
+        Some(ObjectPresence::Present)
+    );
 }
 
 #[test]
@@ -254,7 +260,12 @@ fn compare_and_swap_uses_structural_and_pluggable_validation() {
         ),
         Err(StoreError::PublicationDenied)
     );
-    assert_eq!(store.reference(&ReferenceKey::OperationHead), None);
+    assert_eq!(
+        store
+            .reference(&ReferenceKey::OperationHead)
+            .expect("lookup succeeds"),
+        None
+    );
 }
 
 #[test]
@@ -368,7 +379,7 @@ fn publication_rejects_wrong_kind_and_rolls_back() {
         store.publish(publication, &allow),
         Err(StoreError::ReferenceKind)
     );
-    assert_eq!(store.presence(&id), None);
+    assert_eq!(store.presence(&id).expect("lookup succeeds"), None);
 }
 
 #[test]
@@ -415,7 +426,7 @@ fn line_publication_requires_matching_line_advance_action() {
         store.publish(publication, &allow),
         Err(StoreError::OperationMismatch)
     );
-    assert_eq!(store.presence(&line_state), None);
+    assert_eq!(store.presence(&line_state).expect("lookup succeeds"), None);
 }
 
 #[test]
@@ -470,7 +481,7 @@ fn publication_rejects_missing_transitive_target_and_rolls_back() {
         store.publish(publication, &allow),
         Err(StoreError::Closure(ClosureError::Missing))
     );
-    assert_eq!(store.presence(&marker_id), None);
+    assert_eq!(store.presence(&marker_id).expect("lookup succeeds"), None);
 }
 
 #[test]
@@ -536,7 +547,7 @@ fn promised_targets_and_validator_denials_roll_back() {
         store.publish(denied, &deny),
         Err(StoreError::PublicationDenied)
     );
-    assert_eq!(store.presence(&id), None);
+    assert_eq!(store.presence(&id).expect("lookup succeeds"), None);
 }
 
 #[test]
