@@ -600,6 +600,27 @@ mod tests {
     }
 
     #[test]
+    fn schema_four_upgrades_and_future_schema_is_refused() {
+        let repository = Repository::new();
+        let database = repository.0.join("journal.sqlite3");
+        {
+            let connection = Connection::open(&database).unwrap();
+            connection
+                .execute_batch("PRAGMA application_id=1380402004; PRAGMA user_version=4;")
+                .unwrap();
+        }
+        {
+            let connection = open_database(&database).unwrap();
+            let version: i64 = connection
+                .query_row("PRAGMA user_version", [], |row| row.get(0))
+                .unwrap();
+            assert_eq!(version, 5);
+            connection.execute_batch("PRAGMA user_version=6;").unwrap();
+        }
+        assert!(open_database(&database).is_err());
+    }
+
+    #[test]
     fn aliased_recovery_rows_are_refused_before_any_publication() {
         let repository = Repository::new();
         let meta = repository.0.join(".rgit");
