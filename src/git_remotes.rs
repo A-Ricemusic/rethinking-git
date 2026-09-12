@@ -54,11 +54,22 @@ fn resolve_remote(remote: &str) -> Result<String> {
         || remote.starts_with("./")
         || remote.starts_with("../")
     {
-        return Ok(fs::canonicalize(remote)
-            .context("local Git remote does not exist")?
+        let path = fs::canonicalize(remote)?;
+        let path = path
             .to_str()
             .context("local Git remote path must be UTF-8")?
-            .to_string());
+            .to_string();
+        // Rust canonicalization uses Win32 verbatim prefixes, which Git's
+        // remote parser can mistake for an scp-style host. Use Git path syntax.
+        #[cfg(windows)]
+        let path = if let Some(unc) = path.strip_prefix(r"\\?\UNC\") {
+            format!("//{unc}").replace('\\', "/")
+        } else {
+            path.strip_prefix(r"\\?\")
+                .unwrap_or(&path)
+                .replace('\\', "/")
+        };
+        return Ok(path);
     }
     Ok(remote.to_string())
 }
