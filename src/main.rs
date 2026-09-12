@@ -6,13 +6,14 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Context, Result};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use walkdir::WalkDir;
 
 mod cli_failure;
+mod resolution;
 mod transaction;
 
 use cli_failure::CliFailure;
@@ -254,6 +255,14 @@ enum MergeCommand {
 
 #[derive(Subcommand)]
 enum ConflictCommand {
+    /// Resolve against the exact recorded source snapshots.
+    Resolve {
+        conflict_id: String,
+        #[arg(long, value_enum)]
+        take: Resolution,
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
     /// List unresolved conflicts visible to an actor.
     List {
         /// Actor whose permissioned view should be used.
@@ -390,6 +399,15 @@ enum ConflictKind {
     AddAdd,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "snake_case")]
+enum Resolution {
+    Base,
+    Line,
+    Incoming,
+    Delete,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct Conflict {
     id: String,
@@ -412,6 +430,8 @@ struct Conflict {
     #[serde(default = "public_policy")]
     source_policy: AccessPolicy,
     status: ConflictStatus,
+    #[serde(default)]
+    resolution: Option<Resolution>,
     created_at: u64,
 }
 
@@ -428,6 +448,9 @@ struct Operation {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum OperationKind {
+    ResolveConflict {
+        conflict_id: String,
+    },
     InitRepo,
     SetActor {
         actor: String,
@@ -547,6 +570,11 @@ fn main() -> Result<()> {
             } => merge_preview(&repo, change_id.as_deref(), &line, &as_actor),
         },
         Command::Conflict { command } => match command {
+            ConflictCommand::Resolve {
+                conflict_id,
+                take,
+                as_actor,
+            } => resolution::resolve_conflict(&repo, &conflict_id, take, &as_actor),
             ConflictCommand::List { as_actor } => list_conflicts(&repo, &as_actor),
             ConflictCommand::Show {
                 conflict_id,
@@ -1141,7 +1169,8 @@ fn merge_preview(
         return Err(CliFailure::OperationUnavailable.into());
     }
 
-    let plan = plan_merge(base_files, line_files, incoming_files);
+    let mut plan = plan_merge(base_files, line_files, incoming_files);
+    resolution::apply_resolutions(repo, &actor, &line, &change, &incoming, &mut plan)?;
 
     println!("actor: {}", actor.name);
     println!("merge preview: {} -> {}", change.name, line.name);
@@ -1304,7 +1333,8 @@ fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> 
         return Err(CliFailure::OperationUnavailable.into());
     }
 
-    let plan = plan_merge(base_files, line_files, incoming_files);
+    let mut plan = plan_merge(base_files, line_files, incoming_files);
+    resolution::apply_resolutions(repo, &actor, &line, &change, &incoming, &mut plan)?;
 
     if !plan.conflicts.is_empty() {
         let conflicts = store_conflicts(
@@ -1828,6 +1858,7 @@ fn store_conflicts(
             file_policies: pending.file_policies,
             source_policy: source_policy.clone(),
             status: ConflictStatus::Unresolved,
+            resolution: None,
             created_at: now()?,
         };
         write_json(repo, &conflict_path(repo, &conflict.id)?, &conflict)?;
@@ -2270,6 +2301,7 @@ fn operation_kind(kind: &OperationKind) -> &'static str {
         OperationKind::CreateSnapshot { .. } => "create_snapshot",
         OperationKind::IntegrateLine { .. } => "integrate_line",
         OperationKind::CreateConflict { .. } => "create_conflict",
+        OperationKind::ResolveConflict { .. } => "resolve_conflict",
     }
 }
 
@@ -2793,6 +2825,7 @@ mod tests {
             file_policies: vec![policy(&[PUBLIC_DOMAIN])],
             source_policy: policy(&[PUBLIC_DOMAIN]),
             status: ConflictStatus::Unresolved,
+            resolution: None,
             created_at: 0,
         };
 
@@ -2820,6 +2853,7 @@ mod tests {
             file_policies: vec![policy(&[PUBLIC_DOMAIN]), policy(&["team/security"])],
             source_policy: policy(&[PUBLIC_DOMAIN]),
             status: ConflictStatus::Unresolved,
+            resolution: None,
             created_at: 0,
         };
 
