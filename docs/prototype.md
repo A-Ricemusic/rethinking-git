@@ -367,7 +367,7 @@ Working-file updates and the workspace pointer share a durable recovery journal.
 The next command finishes interrupted publication before reading repository state.
 If files were edited after an interruption, recovery stops and retains the journal
 instead of overwriting the new edits. Preserve the whole repository and those edits
-before manually reconciling that state. Current journal schema 4 upgrades older
+before manually reconciling that state. Current journal schema 5 upgrades older
 schemas under the command lock; older transaction clients refuse the newer schema.
 
 Snapshots record file bytes, access policies, the executable bit and symlink type.
@@ -376,7 +376,7 @@ preserving existing read/write permissions. Recreated files use the process umas
 Legacy records without the bit remain non-executable and keep their manifest hash.
 Windows snapshots retain logical modes from the materialized snapshot because
 the filesystem does not expose Unix execute bits. Symlinks use the target-text
-fallback described below. File to directory transitions are refused. These limitations still prevent a claim of full
+fallback described below. File/directory transitions use the journal recovery described below. Remaining limitations still prevent a claim of full
 Git checkout compatibility. Windows power-loss durability remains unqualified.
 
 Executable-aware recovery introduced journal schema 3, including expected and
@@ -548,7 +548,7 @@ even when bytes match. Older journals migrate their regular-file records. Older
 binaries refuse the new journal version, so preserve a verified backup before
 upgrading. Tests include subprocess interruption after link replacement, later-edit
 refusal, referent preservation, and Git round trips. Same-principal filesystem races,
-file/directory transitions and platform durability qualification remain open.
+and platform durability qualification remain open.
 
 ### Custom conflict resolution
 
@@ -704,3 +704,18 @@ before reporting success or publishing a snapshot. Independently added paths suc
 collisions currently refuse integration without advancing the line or writing saved
 records; adjust the conflicting paths in a new snapshot before retrying. This also
 checks the result after saved per-path conflict decisions have been applied.
+### Recoverable file/directory checkout transitions
+
+Checkout can replace a tracked file or symlink with tracked descendants, and replace
+tracked descendants with a file or symlink. It validates the complete old/new path
+sets before committing the journal, removes tracked leaves before creating targets,
+and removes only empty directories. Untracked leaves and nested `.git`/`.rgit`
+directories block replacement, including with `--discard-changes`.
+
+Journal schema 5 preserves these transition semantics across interruption; older
+clients refuse this version. Recovery checks all affected entries before publishing,
+accepts intermediate directory states, and preserves later untracked work unless it
+collides with a target, in which case recovery stops for manual reconciliation.
+Subprocess tests terminate after six filesystem publication points in each direction.
+Case-only and Unicode-equivalent spelling transitions remain conservatively refused.
+These process interruption tests do not qualify power-loss or hostile filesystem races.

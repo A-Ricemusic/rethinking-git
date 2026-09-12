@@ -11,6 +11,8 @@ use std::{
     time::Duration,
 };
 
+mod working_plan;
+
 pub(crate) struct CommandTransaction {
     root: PathBuf,
     _lock: Connection,
@@ -111,20 +113,15 @@ impl CommandTransaction {
         if self.pending.borrow().is_empty() && self.working.borrow().is_empty() {
             return Ok(());
         }
-        super::checkout_paths::validate(self.working.borrow().keys().map(String::as_str))?;
-        super::checkout_paths::validate_existing(
-            &self.workspace_root()?,
-            self.working.borrow().keys().map(String::as_str),
-        )?;
+        let shape = working_plan::ShapePlan::from_updates(&self.working.borrow())?;
+        shape.validate_aliases(&self.workspace_root()?)?;
+        working_plan::validate_updates(&self.working.borrow())?;
         for (key, update) in self.working.borrow().iter() {
-            let current = read_working(&self.workspace_root()?, key)?;
-            if current != update.before
-                || !matches_flags(
-                    &self.workspace_root()?.join(key),
-                    update.before_executable,
-                    update.before_symlink,
-                )?
-            {
+            if !shape.current(&self.workspace_root()?, key)?.matches(
+                &update.before,
+                update.before_executable,
+                update.before_symlink,
+            ) {
                 bail!("working file changed during command: {key}");
             }
         }
@@ -160,6 +157,10 @@ impl CommandTransaction {
     }
 
     fn recover(&self) -> Result<()> {
+        self.recover_with_hook(&mut || Ok(()))
+    }
+
+    fn recover_with_hook(&self, hook: &mut impl FnMut() -> Result<()>) -> Result<()> {
         let entries = {
             let mut query = self
                 .journal
@@ -186,38 +187,18 @@ impl CommandTransaction {
                     },
                 ))
             })?;
-            rows.collect::<std::result::Result<Vec<_>, _>>()?
+            rows.collect::<std::result::Result<BTreeMap<_, _>, _>>()?
         };
-        super::checkout_paths::validate(working.iter().map(|(key, _)| key.as_str()))?;
-        super::checkout_paths::validate_existing(
-            &self.workspace_root()?,
-            working.iter().map(|(key, _)| key.as_str()),
-        )?;
+        let shape = working_plan::ShapePlan::from_updates(&working)?;
+        shape.validate_aliases(&self.workspace_root()?)?;
+        working_plan::validate_updates(&working)?;
         for (key, update) in &working {
-            if update.after_symlink == Some(true) {
-                validate_link(
-                    update
-                        .after
-                        .as_deref()
-                        .context("symlink journal target missing")?,
-                )?;
-                if update.after_executable == Some(true) {
-                    bail!("symlink journal mode is invalid");
-                }
-            }
-            let current = read_working(&self.workspace_root()?, key)?;
-            if (current != update.before
-                || !matches_flags(
-                    &self.workspace_root()?.join(key),
-                    update.before_executable,
-                    update.before_symlink,
-                )?)
-                && (current != update.after
-                    || !matches_flags(
-                        &self.workspace_root()?.join(key),
-                        update.after_executable,
-                        update.after_symlink,
-                    )?)
+            let current = shape.current(&self.workspace_root()?, key)?;
+            if !current.matches(
+                &update.before,
+                update.before_executable,
+                update.before_symlink,
+            ) && !current.matches(&update.after, update.after_executable, update.after_symlink)
             {
                 bail!("recovery stopped: working file was edited after interrupted command: {key}");
             }
@@ -230,11 +211,10 @@ impl CommandTransaction {
             }
             check_path(&self.root, &path)?;
         }
-        for (key, update) in &working {
-            publish_working(&self.workspace_root()?, key, update)?;
-        }
+        working_plan::publish(&self.workspace_root()?, &working, &shape, hook)?;
         for (key, bytes) in &entries {
             publish_file(&self.root.join(key), bytes)?;
+            hook()?;
         }
         if !entries.is_empty() || !working.is_empty() {
             let transaction = self.journal.unchecked_transaction()?;
@@ -267,12 +247,12 @@ fn open_database(path: &Path) -> Result<Connection> {
             if tables != 0 {
                 bail!("unrecognized command transaction database");
             }
-            connection.execute_batch("PRAGMA application_id=1380402004; PRAGMA user_version=4;")?;
+            connection.execute_batch("PRAGMA application_id=1380402004; PRAGMA user_version=5;")?;
         }
-        (1380402004, 1..=3) => {
-            connection.execute_batch("PRAGMA user_version=4;")?;
+        (1380402004, 1..=4) => {
+            connection.execute_batch("PRAGMA user_version=5;")?;
         }
-        (1380402004, 4) => {}
+        (1380402004, 5) => {}
         _ => bail!("unsupported command transaction database format"),
     }
     connection.execute_batch("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;")?;
@@ -388,6 +368,50 @@ impl CommandTransaction {
             .to_path_buf())
     }
 
+    pub(crate) fn stage_checkout(
+        &self,
+        before: &BTreeMap<String, (Vec<u8>, WorkingFlags)>,
+        after: &BTreeMap<String, (Vec<u8>, WorkingFlags)>,
+        current_modes: Option<&BTreeMap<String, WorkingFlags>>,
+        discard: bool,
+    ) -> Result<()> {
+        let paths: BTreeSet<_> = before.keys().chain(after.keys()).collect();
+        let shape = working_plan::ShapePlan::new(paths.iter().map(|path| {
+            (
+                (*path).clone(),
+                before.contains_key(*path),
+                after.contains_key(*path),
+            )
+        }))?;
+        shape.validate_aliases(&self.workspace_root()?)?;
+        for path in paths {
+            let current = shape.current(&self.workspace_root()?, path)?;
+            let previous = before.get(path).map(|v| &v.0);
+            let target = after.get(path).map(|v| &v.0);
+            let before_flags = before.get(path).map(|v| v.1).unwrap_or_default();
+            let after_flags = after.get(path).map(|v| v.1).unwrap_or_default();
+            let flags = if cfg!(not(unix)) && current.bytes.is_some() {
+                let mut flags = current_modes.map_or(before_flags, |modes| {
+                    modes.get(path).copied().unwrap_or_default()
+                });
+                flags.symlink |= current.flags.symlink;
+                flags
+            } else {
+                current.flags
+            };
+            if previous.is_none() && current.bytes.is_some() {
+                bail!("checkout would overwrite an untracked file: {path}");
+            }
+            if !discard && (current.bytes.as_ref() != previous || flags != before_flags) {
+                bail!("tracked file has local changes: {path}; snapshot first or explicitly restore with --discard-changes");
+            }
+            if current.bytes.as_ref() != target || flags != after_flags {
+                self.stage_working(path, current.bytes, target.cloned(), flags, after_flags)?;
+            }
+        }
+        Ok(())
+    }
+
     pub(crate) fn stage_working(
         &self,
         key: &str,
@@ -396,7 +420,7 @@ impl CommandTransaction {
         before_flags: WorkingFlags,
         after_flags: WorkingFlags,
     ) -> Result<()> {
-        working_path(&self.workspace_root()?, key)?;
+        validate_working_key(key)?;
         if after_flags.symlink {
             validate_link(after.as_deref().context("symlink update has no target")?)?;
         }
@@ -478,46 +502,6 @@ pub(crate) fn read_working(root: &Path, key: &str) -> Result<Option<Vec<u8>>> {
     }
 }
 
-fn publish_working(root: &Path, key: &str, update: &WorkingUpdate) -> Result<()> {
-    let path = working_path(root, key)?;
-    let current = read_working(root, key)?;
-    if current == update.after
-        && matches_flags(&path, update.after_executable, update.after_symlink)?
-    {
-        return Ok(());
-    }
-    if (current != update.before
-        || !matches_flags(&path, update.before_executable, update.before_symlink)?)
-        && (current != update.after
-            || !matches_flags(&path, update.after_executable, update.after_symlink)?)
-    {
-        bail!("working file changed during recovery: {key}");
-    }
-    if let Some(bytes) = &update.after {
-        let parent = path.parent().context("working file has no parent")?;
-        let mut directory = root.to_path_buf();
-        for component in parent.strip_prefix(root)?.components() {
-            directory.push(component);
-            if !directory.exists() {
-                fs::create_dir(&directory)?;
-                #[cfg(unix)]
-                fs::File::open(directory.parent().unwrap())?.sync_all()?;
-            }
-            ensure_directory(&directory)?;
-        }
-        if cfg!(unix) && update.after_symlink == Some(true) {
-            publish_link(&path, bytes)?;
-        } else {
-            publish_file_with_mode(&path, bytes, update.after_executable, true)?;
-        }
-    } else {
-        fs::remove_file(&path)?;
-        #[cfg(unix)]
-        fs::File::open(path.parent().unwrap())?.sync_all()?;
-    }
-    Ok(())
-}
-
 pub(crate) fn is_executable(path: &Path) -> Result<bool> {
     #[cfg(unix)]
     {
@@ -529,27 +513,6 @@ pub(crate) fn is_executable(path: &Path) -> Result<bool> {
     {
         let _ = path;
         Ok(false)
-    }
-}
-
-fn matches_flags(path: &Path, expected: Option<bool>, symlink: Option<bool>) -> Result<bool> {
-    #[cfg(unix)]
-    {
-        let metadata = match fs::symlink_metadata(path) {
-            Ok(metadata) => metadata,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(true),
-            Err(e) => return Err(e.into()),
-        };
-        if symlink.is_some_and(|expected| expected != metadata.file_type().is_symlink()) {
-            return Ok(false);
-        }
-        Ok(expected
-            .is_none_or(|expected| is_executable(path).is_ok_and(|actual| actual == expected)))
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = (path, expected, symlink);
-        Ok(true)
     }
 }
 
@@ -637,6 +600,27 @@ mod tests {
     }
 
     #[test]
+    fn schema_four_upgrades_and_future_schema_is_refused() {
+        let repository = Repository::new();
+        let database = repository.0.join("journal.sqlite3");
+        {
+            let connection = Connection::open(&database).unwrap();
+            connection
+                .execute_batch("PRAGMA application_id=1380402004; PRAGMA user_version=4;")
+                .unwrap();
+        }
+        {
+            let connection = open_database(&database).unwrap();
+            let version: i64 = connection
+                .query_row("PRAGMA user_version", [], |row| row.get(0))
+                .unwrap();
+            assert_eq!(version, 5);
+            connection.execute_batch("PRAGMA user_version=6;").unwrap();
+        }
+        assert!(open_database(&database).is_err());
+    }
+
+    #[test]
     fn aliased_recovery_rows_are_refused_before_any_publication() {
         let repository = Repository::new();
         let meta = repository.0.join(".rgit");
@@ -666,6 +650,201 @@ mod tests {
             .query_row("SELECT count(*) FROM working", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 2);
+    }
+
+    fn shape_fixture(root: &Path, to_directory: bool) -> BTreeMap<String, WorkingUpdate> {
+        let mut updates = BTreeMap::new();
+        for (path, before, after) in [
+            ("shape", Some(b"file".to_vec()), None),
+            ("shape/nested/one", None, Some(b"one".to_vec())),
+            ("shape/two", None, Some(b"two".to_vec())),
+        ] {
+            let (before, after) = if to_directory {
+                (before, after)
+            } else {
+                (after, before)
+            };
+            if let Some(bytes) = &before {
+                fs::create_dir_all(root.join(path).parent().unwrap()).unwrap();
+                fs::write(root.join(path), bytes).unwrap();
+            }
+            updates.insert(
+                path.to_string(),
+                WorkingUpdate {
+                    before,
+                    after,
+                    before_executable: Some(false),
+                    after_executable: Some(false),
+                    before_symlink: Some(false),
+                    after_symlink: Some(false),
+                },
+            );
+        }
+        updates
+    }
+
+    #[test]
+    #[ignore = "shape transition interruption subprocess helper"]
+    fn shape_interruption_child() {
+        let root = PathBuf::from(std::env::var_os("RGIT_SHAPE_ROOT").unwrap());
+        let selected: usize = std::env::var("RGIT_SHAPE_PHASE").unwrap().parse().unwrap();
+        let to_directory = std::env::var("RGIT_SHAPE_DIRECTION").unwrap() == "directory";
+        let updates = shape_fixture(&root, to_directory);
+        let command = CommandTransaction::open(&root.join(".rgit")).unwrap();
+        let tx = command.journal.unchecked_transaction().unwrap();
+        for (path, update) in updates {
+            tx.execute(
+                "INSERT INTO working VALUES (?1,?2,?3,0,0,0,0)",
+                rusqlite::params![path, update.before, update.after],
+            )
+            .unwrap();
+        }
+        tx.execute(
+            "INSERT INTO pending VALUES ('workspace.json',?1)",
+            [b"new pointer".as_slice()],
+        )
+        .unwrap();
+        tx.commit().unwrap();
+        let mut count = 0;
+        command
+            .recover_with_hook(&mut || {
+                count += 1;
+                if count == selected {
+                    std::process::exit(77);
+                }
+                Ok(())
+            })
+            .unwrap();
+        panic!("requested publication phase not reached");
+    }
+
+    #[test]
+    fn shape_transitions_recover_after_every_publication_boundary() {
+        for direction in ["directory", "file"] {
+            // delete/mkdir/rmdir/file publication plus metadata publication.
+            for phase in 1..=6 {
+                let repository = Repository::new();
+                let meta = repository.0.join(".rgit");
+                fs::create_dir(&meta).unwrap();
+                fs::write(meta.join("workspace.json"), b"old pointer").unwrap();
+                let status = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args([
+                        "--exact",
+                        "transaction::tests::shape_interruption_child",
+                        "--ignored",
+                    ])
+                    .env("RGIT_SHAPE_ROOT", &repository.0)
+                    .env("RGIT_SHAPE_PHASE", phase.to_string())
+                    .env("RGIT_SHAPE_DIRECTION", direction)
+                    .status()
+                    .unwrap();
+                assert_eq!(status.code(), Some(77), "{direction} phase {phase}");
+                let command = CommandTransaction::open(&meta).unwrap();
+                assert_eq!(
+                    command.read(&meta.join("workspace.json")).unwrap(),
+                    b"new pointer"
+                );
+                if direction == "directory" {
+                    assert_eq!(
+                        fs::read(repository.0.join("shape/nested/one")).unwrap(),
+                        b"one"
+                    );
+                    assert_eq!(fs::read(repository.0.join("shape/two")).unwrap(), b"two");
+                } else {
+                    assert_eq!(fs::read(repository.0.join("shape")).unwrap(), b"file");
+                }
+                let pending: i64 = command
+                    .journal
+                    .query_row("SELECT count(*) FROM working", [], |r| r.get(0))
+                    .unwrap();
+                assert_eq!(pending, 0);
+            }
+        }
+    }
+
+    #[test]
+    fn directory_recovery_preserves_untracked_files_created_after_interruption() {
+        let repository = Repository::new();
+        let meta = repository.0.join(".rgit");
+        fs::create_dir(&meta).unwrap();
+        fs::write(meta.join("workspace.json"), b"old pointer").unwrap();
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "transaction::tests::shape_interruption_child",
+                "--ignored",
+            ])
+            .env("RGIT_SHAPE_ROOT", &repository.0)
+            .env("RGIT_SHAPE_PHASE", "1")
+            .env("RGIT_SHAPE_DIRECTION", "file")
+            .status()
+            .unwrap();
+        assert_eq!(status.code(), Some(77));
+        fs::write(repository.0.join("shape/untracked"), b"later work").unwrap();
+        assert!(CommandTransaction::open(&meta).is_err());
+        assert_eq!(
+            fs::read(repository.0.join("shape/untracked")).unwrap(),
+            b"later work"
+        );
+        assert_eq!(
+            fs::read(meta.join("workspace.json")).unwrap(),
+            b"old pointer"
+        );
+        fs::remove_file(repository.0.join("shape/untracked")).unwrap();
+        let command = CommandTransaction::open(&meta).unwrap();
+        assert_eq!(fs::read(repository.0.join("shape")).unwrap(), b"file");
+        assert_eq!(
+            command.read(&meta.join("workspace.json")).unwrap(),
+            b"new pointer"
+        );
+    }
+
+    #[test]
+    fn file_to_directory_recovery_preserves_later_untracked_work_and_refuses_collisions() {
+        for collision in [false, true] {
+            let repository = Repository::new();
+            let meta = repository.0.join(".rgit");
+            fs::create_dir(&meta).unwrap();
+            fs::write(meta.join("workspace.json"), b"old pointer").unwrap();
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "transaction::tests::shape_interruption_child",
+                    "--ignored",
+                ])
+                .env("RGIT_SHAPE_ROOT", &repository.0)
+                .env("RGIT_SHAPE_PHASE", "1")
+                .env("RGIT_SHAPE_DIRECTION", "directory")
+                .status()
+                .unwrap();
+            assert_eq!(status.code(), Some(77));
+            fs::create_dir_all(repository.0.join("shape/nested")).unwrap();
+            let path = repository.0.join(if collision {
+                "shape/nested/one"
+            } else {
+                "shape/untracked"
+            });
+            fs::write(&path, b"later work").unwrap();
+            let recovered = CommandTransaction::open(&meta);
+            if collision {
+                assert!(recovered.is_err());
+                assert_eq!(
+                    fs::read(meta.join("workspace.json")).unwrap(),
+                    b"old pointer"
+                );
+            } else {
+                let command = recovered.unwrap();
+                assert_eq!(
+                    command.read(&meta.join("workspace.json")).unwrap(),
+                    b"new pointer"
+                );
+                assert_eq!(
+                    fs::read(repository.0.join("shape/nested/one")).unwrap(),
+                    b"one"
+                );
+            }
+            assert_eq!(fs::read(path).unwrap(), b"later work");
+        }
     }
 
     #[test]

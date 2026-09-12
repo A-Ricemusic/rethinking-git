@@ -194,3 +194,34 @@ fn integration_refuses_a_corrupt_selected_blob_without_advancing_the_line() {
         assert_eq!(repo.json("lines/main.json"), before);
     }
 }
+
+#[test]
+fn saved_parent_resolution_cannot_publish_a_file_above_merged_descendants() {
+    let repo = Repo::new();
+    repo.change();
+    fs::write(repo.0.join("a"), "base").unwrap();
+    repo.ok(&["snapshot"]);
+    repo.ok(&["line", "integrate"]);
+    let incoming = repo.change();
+    fs::write(repo.0.join("a"), "incoming").unwrap();
+    repo.ok(&["snapshot"]);
+    repo.change();
+    fs::remove_file(repo.0.join("a")).unwrap();
+    fs::create_dir(repo.0.join("a")).unwrap();
+    fs::write(repo.0.join("a/b"), "child").unwrap();
+    repo.ok(&["snapshot"]);
+    repo.ok(&["line", "integrate"]);
+    repo.ok(&["workspace", "switch", &incoming]);
+    assert!(!repo.run(&["line", "integrate"]).status.success());
+    let conflicts = repo.ok(&["conflict", "list"]);
+    let id = conflicts.split_whitespace().next().unwrap();
+    repo.ok(&["conflict", "resolve", id, "--take", "incoming"]);
+    let head = repo.head();
+    for args in [&["merge", "preview"][..], &["line", "integrate"][..]] {
+        let output = repo.run(args);
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("file/directory collision"));
+        assert_eq!(repo.head(), head);
+    }
+    repo.ok(&["repo", "verify", "--as", "admin"]);
+}
