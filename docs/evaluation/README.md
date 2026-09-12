@@ -32,3 +32,13 @@ harness summaries; they are not a count of unique test functions. Local evaluati
 not a speed benchmark, network-authentication test, power-loss qualification or
 independent release/security review. It complements the smaller CI scenarios and does
 not close the remaining blockers in the [readiness audit](../production-readiness.md).
+
+## Recorded run
+
+[The September 12, 2026 receipt](native-self-host-2026-09-12.json) records a successful
+macOS arm64 evaluation of source commit `6a4ae7e5c3b3c60c8c81cc99e63971607ce48c7c`
+(the combined candidate subsequently merged in PR #34). Its 132 commits and 133
+tracked files cloned into native storage; unchanged export reproduced that exact
+Git tip. All workflow phases completed, including the full workspace test command,
+release build, changed-content export, backup restore and guarded reset/restore.
+The final repository verified with 134 snapshots and no unreferenced blobs.

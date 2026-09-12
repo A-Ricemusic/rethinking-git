@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "completed_at_utc": "2026-09-12T07:25:48.881581+00:00",
+  "source_revision": "6a4ae7e5c3b3c60c8c81cc99e63971607ce48c7c",
+  "binary_sha256": "3d6d970bdbb9854f9ff59f7f13b3f55a5e3111dad52ccf02c5125a46e17d3d0f",
+  "runner_sha256": "71ea0fef9c19f55ef0275ed58b0609f42e10b05de53e544f18f0cd22696d59c8",
+  "platform": "Darwin arm64",
+  "git_version": "git version 2.50.1 (Apple Git-155)",
+  "rust_version": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+  "source_commit_count": 132,
+  "source_file_count": 133,
+  "unchanged_git_tip": "6a4ae7e5c3b3c60c8c81cc99e63971607ce48c7c",
+  "reported_test_passes_including_subprocesses": 258,
+  "reported_ignored_tests_and_helpers": 8,
+  "final_verification": "repository verified: 133 changes, 1 lines, 134 snapshots, 0 conflicts, 11 operations, 429 blobs (0 unreferenced)",
+  "phases": [
+    {
+      "phase": "clone",
+      "exit_code": 0
+    },
+    {
+      "phase": "initial-verify",
+      "exit_code": 0
+    },
+    {
+      "phase": "initial-status",
+      "exit_code": 0
+    },
+    {
+      "phase": "source-commit-count",
+      "exit_code": 0
+    },
+    {
+      "phase": "source-files",
+      "exit_code": 0
+    },
+    {
+      "phase": "unchanged-export",
+      "exit_code": 0
+    },
+    {
+      "phase": "unchanged-tip",
+      "exit_code": 0
+    },
+    {
+      "phase": "unchanged-fsck",
+      "exit_code": 0
+    },
+    {
+      "phase": "workspace-tests",
+      "exit_code": 0
+    },
+    {
+      "phase": "release-build",
+      "exit_code": 0
+    },
+    {
+      "phase": "after-build-status",
+      "exit_code": 0
+    },
+    {
+      "phase": "rebuilt-binary-status",
+      "exit_code": 0
+    },
+    {
+      "phase": "original-binary-status",
+      "exit_code": 0
+    },
+    {
+      "phase": "set-author",
+      "exit_code": 0
+    },
+    {
+      "phase": "edited-status",
+      "exit_code": 0
+    },
+    {
+      "phase": "snapshot",
+      "exit_code": 0
+    },
+    {
+      "phase": "integrate",
+      "exit_code": 0
+    },
+    {
+      "phase": "modified-export",
+      "exit_code": 0
+    },
+    {
+      "phase": "backup",
+      "exit_code": 0
+    },
+    {
+      "phase": "backup-verify",
+      "exit_code": 0
+    },
+    {
+      "phase": "backup-restore",
+      "exit_code": 0
+    },
+    {
+      "phase": "guarded-reset",
+      "exit_code": 0
+    },
+    {
+      "phase": "restored-change",
+      "exit_code": 0
+    },
+    {
+      "phase": "restore-original",
+      "exit_code": 0
+    },
+    {
+      "phase": "final-verify",
+      "exit_code": 0
+    },
+    {
+      "phase": "final-status",
+      "exit_code": 0
+    },
+    {
+      "phase": "git-version",
+      "exit_code": 0
+    },
+    {
+      "phase": "rust-version",
+      "exit_code": 0
+    }
+  ]
+}
