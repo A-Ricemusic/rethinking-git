@@ -252,6 +252,10 @@ migration_tool_identity
 ruleset_previous
 ```
 
+The binary mapping is frozen in `crates/rgit-store/src/edge_roles.rs`; repository
+tests check this documented list against it. Runtime startup does not parse this
+document or derive stored names from Rust debug formatting.
+
 This set corresponds exactly to the schema-0 `rgit_objects::ReferenceRole` registry.
 The `edge_role_registry` rows installed by migration 1 are part of that migration and
 MUST be compared to this complete set and the binary registry at open. An absent,

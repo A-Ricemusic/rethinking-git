@@ -4,6 +4,7 @@
 //! Authorization belongs above this crate; this layer intentionally exposes no
 //! principal-dependent views.
 
+mod edge_roles;
 mod error;
 mod loose;
 mod memory;
