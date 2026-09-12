@@ -318,3 +318,7 @@ File equality includes policy metadata and recorded byte length as well as the c
 The CLI accepts only repository format 2 and refuses missing, malformed, older, or newer configuration before running commands. There is no automatic migration. Object IDs must use the expected object-kind prefix and a lowercase hexadecimal suffix. Stored object identities must match the requested identity.
 
 Actor and line keys use nonempty slash-separated components. Control characters, platform path syntax, trailing dots/spaces, and reserved Windows device names are rejected; valid Unicode names remain supported. Encoded keys are limited to 200 bytes. The legacy filename encoding is retained, but an alias such as `team__alice` cannot read or replace `team/alice`. Existing nonconforming actor or line names must be repaired explicitly; this is not an authentication mechanism.
+
+## Identifier compatibility
+
+New repository, change, snapshot, conflict, and operation identifiers retain the full 32 hexadecimal characters of their UUID v4 suffix. Earlier 12-character identifiers remain readable without rewriting history. CLI output may therefore contain longer IDs; the prefix still identifies the object kind.

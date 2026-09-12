@@ -668,7 +668,7 @@ fn init_repo() -> Result<()> {
     let repo = Repo { root, meta };
     let config = RepoConfig {
         format_version: FORMAT_VERSION,
-        repo_id: format!("repo_{}", short_id()),
+        repo_id: format!("repo_{}", new_id_suffix()),
         created_at: now()?,
     };
     let workspace = Workspace {
@@ -800,7 +800,7 @@ fn create_change(repo: &Repo, name: &str, target_line: &str, policy: AccessPolic
         .ok()
         .and_then(|line| line.head_snapshot);
     let change = Change {
-        id: format!("chg_{}", short_id()),
+        id: format!("chg_{}", new_id_suffix()),
         name: name.to_string(),
         base_snapshot,
         target_line: target.name,
@@ -897,7 +897,7 @@ fn create_snapshot(repo: &Repo, message: &str, requested_policy: AccessPolicy) -
     let files = scan_working_tree(repo, true)?;
     let manifest_hash = manifest_hash(&files)?;
     let snapshot = Snapshot {
-        id: format!("snap_{}", short_id()),
+        id: format!("snap_{}", new_id_suffix()),
         change_id: change.id.clone(),
         parent_snapshot: change.current_snapshot.clone(),
         message: message.to_string(),
@@ -1338,7 +1338,7 @@ fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> 
         None
     };
     let integrated_snapshot = Snapshot {
-        id: format!("snap_{}", short_id()),
+        id: format!("snap_{}", new_id_suffix()),
         change_id: change.id.clone(),
         parent_snapshot: line.head_snapshot.clone(),
         message: format!("merge {} into {}", change.name, line.name),
@@ -1557,7 +1557,7 @@ fn record_operation(
     public_message: Option<String>,
 ) -> Result<()> {
     let operation = Operation {
-        id: format!("op_{}", short_id()),
+        id: format!("op_{}", new_id_suffix()),
         kind,
         policy,
         private_message,
@@ -1819,7 +1819,7 @@ fn store_conflicts(
             line.policy.clone(),
         ]);
         let conflict = Conflict {
-            id: format!("conf_{}", short_id()),
+            id: format!("conf_{}", new_id_suffix()),
             line: line.name.clone(),
             change_id: change.id.clone(),
             base_snapshot: change.base_snapshot.clone(),
@@ -2357,8 +2357,8 @@ fn file_name(name: &str) -> String {
     name.replace('/', "__")
 }
 
-fn short_id() -> String {
-    Uuid::new_v4().simple().to_string()[..12].to_string()
+fn new_id_suffix() -> String {
+    Uuid::new_v4().simple().to_string()
 }
 
 fn now() -> Result<u64> {

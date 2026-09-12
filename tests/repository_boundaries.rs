@@ -158,3 +158,28 @@ fn valid_unicode_actor_names_remain_readable_and_updatable() {
         .contains("équipe/alice domains:admin"));
     repo.ok(&["status", "--as", "équipe/alice"]);
 }
+
+#[test]
+fn new_identifiers_keep_full_uuid_entropy_and_legacy_changes_remain_readable() {
+    let repo = Repo::new();
+    let full_id = repo.change();
+    assert_eq!(full_id.strip_prefix("chg_").unwrap().len(), 32);
+    let legacy_id = &full_id[..16];
+    let full_path = repo.0.join(format!(".rgit/changes/{full_id}.json"));
+    let legacy_path = repo.0.join(format!(".rgit/changes/{legacy_id}.json"));
+    let mut change: Value = serde_json::from_slice(&fs::read(&full_path).unwrap()).unwrap();
+    change["id"] = json!(legacy_id);
+    fs::write(&legacy_path, serde_json::to_vec(&change).unwrap()).unwrap();
+    fs::remove_file(full_path).unwrap();
+    fs::write(
+        repo.0.join(".rgit/workspace.json"),
+        serde_json::to_vec(&json!({"current_change": legacy_id})).unwrap(),
+    )
+    .unwrap();
+    repo.ok(&["change", "show", legacy_id]);
+    repo.ok(&["snapshot"]);
+    let updated: Value = serde_json::from_slice(&fs::read(legacy_path).unwrap()).unwrap();
+    let snapshot = updated["current_snapshot"].as_str().unwrap();
+    assert_eq!(snapshot.strip_prefix("snap_").unwrap().len(), 32);
+    repo.ok(&["snapshot-info", "show", snapshot]);
+}
