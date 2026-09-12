@@ -551,3 +551,18 @@ to be an intentional deletion. `--take` and `--from-working` are mutually exclus
 Custom blobs are included in repository verification and backups even before they
 are integrated. There is no automatic text-merging engine or conflict-marker writer
 yet; edit the file with your editor or merge tool before capturing it.
+
+### Named lines and guarded history reset
+
+`rgit line create release --from main --as admin` creates a separate saved line at
+main's head, retaining source restrictions. It refuses existing names. New changes
+can target that line with `change new NAME --target release`.
+
+`rgit line reset main --to PREVIOUS_SNAPSHOT --expected-head CURRENT_SNAPSHOT --as admin`
+moves only the saved line pointer. It preserves working files, changes, snapshots and
+blobs. The expected-head guard rejects a stale reset after another writer advances
+the line. The operation records both heads; resetting back with the reverse pair can
+redo the move. Use explicit workspace restore to materialize a selected snapshot.
+A reset does not rewrite history on a remote: Git push still rejects non-fast-forward
+publication. This is explicit saved-head recovery, not a complete operation undo/redo
+engine or garbage collection.
