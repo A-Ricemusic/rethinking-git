@@ -12,6 +12,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use walkdir::WalkDir;
 
+mod checkout;
 mod cli_failure;
 mod resolution;
 mod transaction;
@@ -280,6 +281,22 @@ enum ConflictCommand {
 
 #[derive(Subcommand)]
 enum WorkspaceCommand {
+    /// Check out an existing change, preserving untracked files and refusing dirty tracked files.
+    Switch {
+        change_id: String,
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
+    /// Restore tracked files from the current snapshot, or another snapshot.
+    Restore {
+        #[arg(long)]
+        from: Option<String>,
+        /// Explicitly discard modifications to tracked files.
+        #[arg(long)]
+        discard_changes: bool,
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
     /// Show the current workspace state visible to an actor.
     Info {
         #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
@@ -448,6 +465,12 @@ struct Operation {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum OperationKind {
+    SwitchWorkspace {
+        change_id: String,
+    },
+    RestoreWorkspace {
+        snapshot_id: Option<String>,
+    },
     ResolveConflict {
         conflict_id: String,
     },
@@ -582,6 +605,15 @@ fn main() -> Result<()> {
             } => show_conflict(&repo, &conflict_id, &as_actor),
         },
         Command::Workspace { command } => match command {
+            WorkspaceCommand::Switch {
+                change_id,
+                as_actor,
+            } => checkout::switch(&repo, &change_id, &as_actor),
+            WorkspaceCommand::Restore {
+                from,
+                discard_changes,
+                as_actor,
+            } => checkout::restore(&repo, from.as_deref(), discard_changes, &as_actor),
             WorkspaceCommand::Info { as_actor } => workspace_info(&repo, &as_actor),
         },
         Command::Op { command } => match command {
@@ -2295,6 +2327,8 @@ fn hash_bytes(bytes: &[u8]) -> String {
 fn operation_kind(kind: &OperationKind) -> &'static str {
     match kind {
         OperationKind::InitRepo => "init_repo",
+        OperationKind::SwitchWorkspace { .. } => "switch_workspace",
+        OperationKind::RestoreWorkspace { .. } => "restore_workspace",
         OperationKind::SetActor { .. } => "set_actor",
         OperationKind::SetPathPolicy { .. } => "set_path_policy",
         OperationKind::CreateChange { .. } => "create_change",

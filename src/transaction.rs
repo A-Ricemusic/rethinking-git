@@ -16,6 +16,7 @@ pub(crate) struct CommandTransaction {
     _lock: Connection,
     journal: Connection,
     pending: RefCell<BTreeMap<PathBuf, Vec<u8>>>,
+    working: RefCell<BTreeMap<String, WorkingUpdate>>,
 }
 
 impl CommandTransaction {
@@ -26,11 +27,13 @@ impl CommandTransaction {
             .context("repository is busy; another command holds its transaction lock")?;
         let journal = open_database(&root.join("command-journal.sqlite3"))?;
         journal.execute_batch("CREATE TABLE IF NOT EXISTS pending (path TEXT PRIMARY KEY NOT NULL, bytes BLOB NOT NULL)")?;
+        journal.execute_batch("CREATE TABLE IF NOT EXISTS working (path TEXT PRIMARY KEY NOT NULL, before_bytes BLOB, after_bytes BLOB)")?;
         let result = Self {
             root: root.to_path_buf(),
             _lock: lock,
             journal,
             pending: RefCell::new(BTreeMap::new()),
+            working: RefCell::new(BTreeMap::new()),
         };
         result.recover()?;
         Ok(result)
@@ -89,10 +92,22 @@ impl CommandTransaction {
     }
 
     pub(crate) fn commit(&self) -> Result<()> {
-        if self.pending.borrow().is_empty() {
+        if self.pending.borrow().is_empty() && self.working.borrow().is_empty() {
             return Ok(());
         }
+        for (key, update) in self.working.borrow().iter() {
+            let current = read_working(&self.workspace_root()?, key)?;
+            if current != update.before {
+                bail!("working file changed during command: {key}");
+            }
+        }
         let transaction = self.journal.unchecked_transaction()?;
+        for (key, update) in self.working.borrow().iter() {
+            transaction.execute(
+                "INSERT INTO working VALUES (?1, ?2, ?3)",
+                rusqlite::params![key, update.before, update.after],
+            )?;
+        }
         for (path, bytes) in self.pending.borrow().iter() {
             transaction.execute(
                 "INSERT INTO pending(path, bytes) VALUES (?1, ?2)",
@@ -103,6 +118,7 @@ impl CommandTransaction {
             .commit()
             .context("failed to commit command journal")?;
         self.pending.borrow_mut().clear();
+        self.working.borrow_mut().clear();
         self.recover().context(
             "command committed; publication incomplete; run another rgit command to recover",
         )
@@ -118,6 +134,27 @@ impl CommandTransaction {
             })?;
             rows.collect::<std::result::Result<Vec<_>, _>>()?
         };
+        let working = {
+            let mut query = self
+                .journal
+                .prepare("SELECT path, before_bytes, after_bytes FROM working ORDER BY path")?;
+            let rows = query.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    WorkingUpdate {
+                        before: row.get(1)?,
+                        after: row.get(2)?,
+                    },
+                ))
+            })?;
+            rows.collect::<std::result::Result<Vec<_>, _>>()?
+        };
+        for (key, update) in &working {
+            let current = read_working(&self.workspace_root()?, key)?;
+            if current != update.before && current != update.after {
+                bail!("recovery stopped: working file was edited after interrupted command: {key}");
+            }
+        }
         // Validate the entire recovery set before publishing any member.
         for (key, _) in &entries {
             let path = self.root.join(key);
@@ -126,11 +163,16 @@ impl CommandTransaction {
             }
             check_path(&self.root, &path)?;
         }
+        for (key, update) in &working {
+            publish_working(&self.workspace_root()?, key, update)?;
+        }
         for (key, bytes) in &entries {
             publish_file(&self.root.join(key), bytes)?;
         }
-        if !entries.is_empty() {
-            self.journal.execute("DELETE FROM pending", [])?;
+        if !entries.is_empty() || !working.is_empty() {
+            let transaction = self.journal.unchecked_transaction()?;
+            transaction.execute_batch("DELETE FROM pending; DELETE FROM working;")?;
+            transaction.commit()?;
         }
         Ok(())
     }
@@ -158,9 +200,12 @@ fn open_database(path: &Path) -> Result<Connection> {
             if tables != 0 {
                 bail!("unrecognized command transaction database");
             }
-            connection.execute_batch("PRAGMA application_id=1380402004; PRAGMA user_version=1;")?;
+            connection.execute_batch("PRAGMA application_id=1380402004; PRAGMA user_version=2;")?;
         }
-        (1380402004, 1) => {}
+        (1380402004, 1) => {
+            connection.execute_batch("PRAGMA user_version=2;")?;
+        }
+        (1380402004, 2) => {}
         _ => bail!("unsupported command transaction database format"),
     }
     connection.execute_batch("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;")?;
@@ -204,12 +249,23 @@ fn check_path(root: &Path, path: &Path) -> Result<()> {
 pub(crate) fn publish_file(path: &Path, bytes: &[u8]) -> Result<()> {
     let parent = path.parent().context("file has no parent")?;
     ensure_directory(parent)?;
+    let permissions = match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_file() && !metadata.file_type().is_symlink() => {
+            Some(metadata.permissions())
+        }
+        Ok(_) => bail!("publication target is not a regular file"),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error.into()),
+    };
     let temporary = parent.join(format!(".rgit-publish-{}", uuid::Uuid::new_v4().simple()));
     let result = (|| -> Result<()> {
         let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(&temporary)?;
+        if let Some(permissions) = permissions {
+            file.set_permissions(permissions)?;
+        }
         file.write_all(bytes)?;
         file.sync_all()?;
         drop(file);
@@ -222,6 +278,114 @@ pub(crate) fn publish_file(path: &Path, bytes: &[u8]) -> Result<()> {
         let _ = fs::remove_file(&temporary);
     }
     result
+}
+
+struct WorkingUpdate {
+    before: Option<Vec<u8>>,
+    after: Option<Vec<u8>>,
+}
+
+impl CommandTransaction {
+    fn workspace_root(&self) -> Result<PathBuf> {
+        Ok(self
+            .root
+            .parent()
+            .context("control directory has no parent")?
+            .to_path_buf())
+    }
+
+    pub(crate) fn stage_working(
+        &self,
+        key: &str,
+        before: Option<Vec<u8>>,
+        after: Option<Vec<u8>>,
+    ) -> Result<()> {
+        working_path(&self.workspace_root()?, key)?;
+        self.working
+            .borrow_mut()
+            .insert(key.to_string(), WorkingUpdate { before, after });
+        Ok(())
+    }
+}
+
+pub(crate) fn working_path(root: &Path, key: &str) -> Result<PathBuf> {
+    #[cfg(windows)]
+    super::validate_named_key(key)?;
+    let relative = Path::new(key);
+    if key.is_empty()
+        || relative
+            .components()
+            .any(|part| !matches!(part, Component::Normal(_)))
+        || key.split('/').any(|part| {
+            part.is_empty()
+                || part == "."
+                || part == ".."
+                || matches!(
+                    part.to_ascii_lowercase().as_str(),
+                    ".git" | ".rgit" | "target" | "node_modules"
+                )
+        })
+    {
+        bail!("unsafe snapshot path");
+    }
+    let mut path = root.to_path_buf();
+    for (index, part) in relative.components().enumerate() {
+        path.push(part);
+        match fs::symlink_metadata(&path) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                bail!("working path traverses a symlink: {key}")
+            }
+            Ok(metadata) if index + 1 < relative.components().count() && !metadata.is_dir() => {
+                bail!("working path has a non-directory parent: {key}")
+            }
+            Ok(metadata) if index + 1 == relative.components().count() && !metadata.is_file() => {
+                bail!("working path is not a regular file: {key}")
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(path)
+}
+
+pub(crate) fn read_working(root: &Path, key: &str) -> Result<Option<Vec<u8>>> {
+    let path = working_path(root, key)?;
+    match fs::read(path) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn publish_working(root: &Path, key: &str, update: &WorkingUpdate) -> Result<()> {
+    let path = working_path(root, key)?;
+    let current = read_working(root, key)?;
+    if current == update.after {
+        return Ok(());
+    }
+    if current != update.before {
+        bail!("working file changed during recovery: {key}");
+    }
+    if let Some(bytes) = &update.after {
+        let parent = path.parent().context("working file has no parent")?;
+        let mut directory = root.to_path_buf();
+        for component in parent.strip_prefix(root)?.components() {
+            directory.push(component);
+            if !directory.exists() {
+                fs::create_dir(&directory)?;
+                #[cfg(unix)]
+                fs::File::open(directory.parent().unwrap())?.sync_all()?;
+            }
+            ensure_directory(&directory)?;
+        }
+        publish_file(&path, bytes)?;
+    } else {
+        fs::remove_file(&path)?;
+        #[cfg(unix)]
+        fs::File::open(path.parent().unwrap())?.sync_all()?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -325,5 +489,71 @@ mod tests {
         first.commit().unwrap();
         drop(first);
         assert_eq!(worker.join().unwrap(), b"committed");
+    }
+    #[test]
+    #[ignore = "subprocess interruption helper"]
+    fn checkout_interruption_child() {
+        let root = PathBuf::from(std::env::var_os("RGIT_CHECKOUT_CRASH_ROOT").unwrap());
+        let command = CommandTransaction::open(&root.join(".rgit")).unwrap();
+        let transaction = command.journal.unchecked_transaction().unwrap();
+        transaction
+            .execute(
+                "INSERT INTO working VALUES ('first.txt', ?1, ?2), ('second.txt', ?1, ?2)",
+                rusqlite::params![b"old", b"new"],
+            )
+            .unwrap();
+        transaction
+            .execute(
+                "INSERT INTO pending VALUES ('workspace.json', ?1)",
+                [b"new pointer".as_slice()],
+            )
+            .unwrap();
+        transaction.commit().unwrap();
+        publish_file(&root.join("first.txt"), b"new").unwrap();
+        std::process::exit(77);
+    }
+
+    #[test]
+    fn checkout_recovers_after_process_exit_and_preserves_later_edits() {
+        for edit_after_exit in [false, true] {
+            let repository = Repository::new();
+            let meta = repository.0.join(".rgit");
+            fs::create_dir(&meta).unwrap();
+            fs::write(meta.join("workspace.json"), b"old pointer").unwrap();
+            fs::write(repository.0.join("first.txt"), b"old").unwrap();
+            fs::write(repository.0.join("second.txt"), b"old").unwrap();
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "transaction::tests::checkout_interruption_child",
+                    "--ignored",
+                ])
+                .env("RGIT_CHECKOUT_CRASH_ROOT", &repository.0)
+                .status()
+                .unwrap();
+            assert_eq!(status.code(), Some(77));
+            if edit_after_exit {
+                fs::write(repository.0.join("second.txt"), b"later edit").unwrap();
+            }
+            let recovered = CommandTransaction::open(&meta);
+            if edit_after_exit {
+                assert!(recovered.is_err());
+                assert_eq!(
+                    fs::read(repository.0.join("second.txt")).unwrap(),
+                    b"later edit"
+                );
+                assert_eq!(
+                    fs::read(meta.join("workspace.json")).unwrap(),
+                    b"old pointer"
+                );
+            } else {
+                let recovered = recovered.unwrap();
+                assert_eq!(fs::read(repository.0.join("second.txt")).unwrap(), b"new");
+                assert_eq!(
+                    recovered.read(&meta.join("workspace.json")).unwrap(),
+                    b"new pointer"
+                );
+            }
+        }
     }
 }

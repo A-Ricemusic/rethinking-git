@@ -339,3 +339,28 @@ selected content conservatively becomes admin-only; choosing public content does
 not silently remove a concurrent restriction. Resolution operation records are
 admin-only. This remains the prototype actor model, not authenticated identity.
 Custom merged content and external merge-tool integration are not yet supported.
+
+### Switching and restoring working files
+
+`rgit workspace switch <change-id>` checks out an existing change's current
+snapshot (or its base). It refuses local modifications to tracked files and never
+overwrites an untracked collision. Unrelated untracked files remain in place.
+
+`rgit workspace restore --discard-changes` restores the current snapshot's tracked
+files, explicitly discarding local edits. Add `--from <snapshot-id>` to restore
+another snapshot into the current change; take a new snapshot to record the result.
+Without `--discard-changes`, restore refuses dirty tracked files. Both commands
+require access to all source metadata and files; they do not produce partial views.
+
+Working-file updates and the workspace pointer share a durable recovery journal.
+The next command finishes interrupted publication before reading repository state.
+If files were edited after an interruption, recovery stops and retains the journal
+instead of overwriting the new edits. Preserve the whole repository and those edits
+before manually reconciling that state. Journal schema 2 upgrades schema 1 on open;
+older transaction clients refuse the newer schema.
+
+The current snapshot format records regular-file bytes and access policies. It
+does not record executable bits or symlinks; existing destination permissions are
+preserved, but permissions of recreated files come from the process umask. File to
+directory transitions are refused. These limitations still prevent a claim of full
+Git checkout compatibility. Windows power-loss durability remains unqualified.
