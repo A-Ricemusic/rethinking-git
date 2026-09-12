@@ -1236,11 +1236,10 @@ fn list_changes(repo: &Repo, actor_name: &str) -> Result<()> {
 
 fn show_change(repo: &Repo, change_id: &str, actor_name: &str) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
-    let change = read_change(repo, change_id)?;
+    let change = read_change(repo, change_id).map_err(cli_failure::unavailable_if_missing)?;
 
     if !can_access(&actor, &change.policy) {
-        println!("change `{change_id}` is hidden from actor `{}`", actor.name);
-        return Ok(());
+        return Err(CliFailure::OperationUnavailable.into());
     }
 
     println!("change: {} ({})", change.name, change.id);
@@ -1335,14 +1334,10 @@ fn list_snapshots(repo: &Repo, actor_name: &str) -> Result<()> {
 
 fn show_snapshot(repo: &Repo, snapshot_id: &str, actor_name: &str) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
-    let snapshot = read_snapshot(repo, snapshot_id)?;
+    let snapshot = read_snapshot(repo, snapshot_id).map_err(cli_failure::unavailable_if_missing)?;
 
     if !can_access(&actor, &snapshot.policy) {
-        println!(
-            "snapshot `{snapshot_id}` is hidden from actor `{}`",
-            actor.name
-        );
-        return Ok(());
+        return Err(CliFailure::OperationUnavailable.into());
     }
 
     print_snapshot_summary(repo, &snapshot, &actor)?;
@@ -1370,8 +1365,7 @@ fn status(repo: &Repo, actor_name: &str) -> Result<()> {
 
     let change = read_change(repo, &change_id)?;
     if !can_access(&actor, &change.policy) {
-        println!("change is hidden from actor `{}`", actor.name);
-        return Ok(());
+        return Err(CliFailure::OperationUnavailable.into());
     }
 
     let previous = read_optional_snapshot(repo, change.workspace_base_snapshot_id())?
@@ -1401,8 +1395,7 @@ fn diff_workspace(repo: &Repo, actor_name: &str) -> Result<()> {
     let change = read_change(repo, &change_id)?;
 
     if !can_access(&actor, &change.policy) {
-        println!("change is hidden from actor `{}`", actor.name);
-        return Ok(());
+        return Err(CliFailure::OperationUnavailable.into());
     }
 
     let previous = read_optional_snapshot(repo, change.workspace_base_snapshot_id())?
@@ -1427,15 +1420,11 @@ fn diff_snapshots(
     actor_name: &str,
 ) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
-    let old = read_snapshot(repo, old_snapshot)?;
-    let new = read_snapshot(repo, new_snapshot)?;
+    let old = read_snapshot(repo, old_snapshot).map_err(cli_failure::unavailable_if_missing)?;
+    let new = read_snapshot(repo, new_snapshot).map_err(cli_failure::unavailable_if_missing)?;
 
     if !can_access(&actor, &old.policy) || !can_access(&actor, &new.policy) {
-        println!(
-            "one or more snapshots are hidden from actor `{}`",
-            actor.name
-        );
-        return Ok(());
+        return Err(CliFailure::OperationUnavailable.into());
     }
 
     let diff = permissioned_diff(old.files, new.files, &actor);
@@ -1448,11 +1437,10 @@ fn diff_snapshots(
 
 fn diff_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
-    let line = read_line(repo, line_name)?;
+    let line = read_line(repo, line_name).map_err(cli_failure::unavailable_if_missing)?;
 
     if !can_access(&actor, &line.policy) {
-        println!("line `{line_name}` is hidden from actor `{}`", actor.name);
-        return Ok(());
+        return Err(CliFailure::OperationUnavailable.into());
     }
 
     let Some(head_snapshot_id) = line.head_snapshot.as_deref() else {
@@ -1585,10 +1573,7 @@ fn list_conflicts(repo: &Repo, actor_name: &str) -> Result<()> {
 
 fn show_conflict(repo: &Repo, conflict_id: &str, actor_name: &str) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
-    let Ok(conflict) = read_conflict(repo, conflict_id) else {
-        println!("conflict is restricted or not found");
-        return Ok(());
-    };
+    let conflict = read_conflict(repo, conflict_id).map_err(cli_failure::unavailable_if_missing)?;
 
     if can_access_conflict(&actor, &conflict) {
         println!("conflict: {}", conflict.id);
@@ -1608,7 +1593,7 @@ fn show_conflict(repo: &Repo, conflict_id: &str, actor_name: &str) -> Result<()>
         println!("incoming snapshot: {}", conflict.incoming_snapshot);
         println!("domains: {}", conflict.policy.domains.join(","));
     } else {
-        println!("conflict is restricted or not found");
+        return Err(CliFailure::OperationUnavailable.into());
     }
 
     Ok(())
@@ -1786,11 +1771,10 @@ fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> 
 
 fn view_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
-    let line = read_line(repo, line_name)?;
+    let line = read_line(repo, line_name).map_err(cli_failure::unavailable_if_missing)?;
 
     if !can_access(&actor, &line.policy) {
-        println!("line `{line_name}` is hidden from actor `{}`", actor.name);
-        return Ok(());
+        return Err(CliFailure::OperationUnavailable.into());
     }
 
     let Some(snapshot_id) = line.head_snapshot.as_deref() else {
@@ -1821,11 +1805,10 @@ fn view_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> {
 
 fn line_history(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
-    let line = read_line(repo, line_name)?;
+    let line = read_line(repo, line_name).map_err(cli_failure::unavailable_if_missing)?;
 
     if !can_access(&actor, &line.policy) {
-        println!("line `{line_name}` is hidden from actor `{}`", actor.name);
-        return Ok(());
+        return Err(CliFailure::OperationUnavailable.into());
     }
 
     let mut operations = read_dir_json::<Operation>(repo, &repo.path(&["operations"]))?;

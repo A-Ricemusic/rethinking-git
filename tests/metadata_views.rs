@@ -154,3 +154,81 @@ fn snapshot_metadata_does_not_disclose_a_restricted_owning_change() {
         );
     }
 }
+
+#[test]
+fn denied_and_missing_direct_reads_fail_without_disclosing_existence() {
+    let repo = Repo::new();
+    repo.ok(&["change", "new", "private", "--domain", "admin"]);
+    let workspace: Value =
+        serde_json::from_slice(&fs::read(repo.0.join(".rgit/workspace.json")).unwrap()).unwrap();
+    let change = workspace["current_change"].as_str().unwrap();
+    repo.ok(&["snapshot", "--message", "private-message"]);
+    let snapshot = snapshot_id(&repo);
+    let line_path = repo.0.join(".rgit/lines/main.json");
+    let mut line: Value = serde_json::from_slice(&fs::read(&line_path).unwrap()).unwrap();
+    line["policy"]["domains"] = serde_json::json!(["admin"]);
+    fs::write(&line_path, serde_json::to_vec(&line).unwrap()).unwrap();
+    let operations = fs::read_dir(repo.0.join(".rgit/operations"))
+        .unwrap()
+        .count();
+    for args in [
+        vec!["change", "show", change],
+        vec!["change", "show", "chg_00000000000000000000000000000000"],
+        vec!["snapshot-info", "show", &snapshot],
+        vec![
+            "snapshot-info",
+            "show",
+            "snap_00000000000000000000000000000000",
+        ],
+        vec!["status"],
+        vec!["diff", "workspace"],
+        vec!["diff", "snapshot", &snapshot, &snapshot],
+        vec![
+            "diff",
+            "snapshot",
+            &snapshot,
+            "snap_00000000000000000000000000000000",
+        ],
+        vec!["line", "view", "main"],
+        vec!["line", "view", "missing"],
+        vec!["line", "history", "main"],
+        vec!["line", "history", "missing"],
+        vec!["diff", "line", "main"],
+        vec!["diff", "line", "missing"],
+        vec!["conflict", "show", "conf_00000000000000000000000000000000"],
+    ] {
+        let output = repo.run(&args);
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        assert!(output.stdout.is_empty(), "{args:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stderr).replace("\r\n", "\n"),
+            "Error: operation unavailable\n",
+            "{args:?}"
+        );
+    }
+    assert_eq!(
+        fs::read_dir(repo.0.join(".rgit/operations"))
+            .unwrap()
+            .count(),
+        operations
+    );
+    assert!(repo
+        .run(&["change", "show", change, "--as", "admin"])
+        .status
+        .success());
+}
+
+#[test]
+fn corrupt_conflict_read_is_an_error_instead_of_a_successful_empty_result() {
+    let repo = Repo::new();
+    let id = "conf_00000000000000000000000000000000";
+    fs::write(
+        repo.0.join(format!(".rgit/conflicts/{id}.json")),
+        b"not json",
+    )
+    .unwrap();
+    let result = repo.run(&["conflict", "show", id]);
+    assert_eq!(result.status.code(), Some(1));
+    assert!(result.stdout.is_empty());
+    assert!(!String::from_utf8_lossy(&result.stderr).contains("operation unavailable"));
+}
