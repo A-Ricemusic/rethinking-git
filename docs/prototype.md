@@ -695,3 +695,12 @@ Each file's diff uses a 500 ms algorithm deadline; on difficult inputs the libra
 may produce a less minimal valid diff. This is not a hard command runtime limit:
 scanning, reading and rendering still take time. See the pinned library's
 [deadline semantics](https://docs.rs/similar/2.7.0/similar/struct.TextDiffConfig.html#method.timeout).
+
+### Merge tree validation
+
+Merge preview and integration validate a clean result's manifest and selected blobs
+before reporting success or publishing a snapshot. Independently added paths such as
+`a` and `a/b` must not become files in the same snapshot. Such file/directory
+collisions currently refuse integration without advancing the line or writing saved
+records; adjust the conflicting paths in a new snapshot before retrying. This also
+checks the result after saved per-path conflict decisions have been applied.

@@ -83,22 +83,8 @@ fn verify_with_output(repo: &Repo, actor_name: &str, report: bool) -> Result<()>
             manifest_hash(&snapshot.files)? == snapshot.manifest_hash,
             "manifest hash",
         )?;
-        let mut paths = BTreeSet::new();
-        for file in &snapshot.files {
-            verify_file(repo, file)?;
-            require(paths.insert(file.path.clone()), "unique snapshot path")?;
-            referenced_blobs.insert(file.hash.clone());
-        }
-        for path in &paths {
-            let mut ancestor = Path::new(path).parent();
-            while let Some(parent) = ancestor {
-                require(
-                    !paths.contains(parent.to_str().context("invalid snapshot path")?),
-                    "noncolliding snapshot paths",
-                )?;
-                ancestor = parent.parent();
-            }
-        }
+        verify_manifest(repo, &snapshot.files)?;
+        referenced_blobs.extend(snapshot.files.iter().map(|file| file.hash.clone()));
         snapshots.insert(key, snapshot);
     }
     for change in changes.values() {
@@ -336,6 +322,25 @@ pub(super) fn open_blob(repo: &Repo, hash: &str) -> Result<fs::File> {
         "regular blob file",
     )?;
     fs::File::open(path).context("failed to open blob")
+}
+
+pub(super) fn verify_manifest(repo: &Repo, files: &[FileEntry]) -> Result<()> {
+    let mut paths = BTreeSet::new();
+    for file in files {
+        verify_file(repo, file)?;
+        require(paths.insert(file.path.as_str()), "unique snapshot path")?;
+    }
+    for path in &paths {
+        let mut ancestor = Path::new(path).parent();
+        while let Some(parent) = ancestor {
+            require(
+                !paths.contains(parent.to_str().context("invalid snapshot path")?),
+                "noncolliding snapshot paths (file/directory collision)",
+            )?;
+            ancestor = parent.parent();
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn verify_file(repo: &Repo, file: &FileEntry) -> Result<()> {

@@ -1497,6 +1497,9 @@ fn merge_preview(
 
     let mut plan = plan_merge(base_files, line_files, incoming_files);
     resolution::apply_resolutions(repo, &actor, &line, &change, &incoming, &mut plan)?;
+    if plan.conflicts.is_empty() {
+        verify::verify_manifest(repo, &plan.merged_files)?;
+    }
 
     println!("actor: {}", actor.name);
     println!("merge preview: {} -> {}", change.name, line.name);
@@ -1689,6 +1692,8 @@ fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> 
         }
         return Err(CliFailure::IntegrationConflicted.into());
     }
+
+    verify::verify_manifest(repo, &plan.merged_files)?;
 
     let integrated_policy = source_policy;
     let public_integration_message = if integrated_policy.domains == [PUBLIC_DOMAIN] {
