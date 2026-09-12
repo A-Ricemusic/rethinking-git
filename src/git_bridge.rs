@@ -403,6 +403,7 @@ pub(super) fn import_history(
             }
         }
     }
+    let mut blobs = BTreeMap::new();
     let mut imported = 0;
     let mut tip_change = None;
     for oid in revisions.lines() {
@@ -460,7 +461,7 @@ pub(super) fn import_history(
                 }
             }
         }
-        let files = import_files(repo, &source, oid, &format, &policy)?;
+        let files = import_files(repo, &source, oid, &format, &policy, &mut blobs)?;
         let (tree, _) = git_objects::tree(repo, &files, &format)?;
         if tree != parsed.tree {
             bail!("Git tree cannot be represented without changing its identity");
@@ -536,12 +537,20 @@ pub(super) fn import_history(
     Ok(())
 }
 
+#[derive(Clone)]
+struct ImportedBlob {
+    hash: String,
+    bytes: u64,
+    valid_link: bool,
+}
+
 fn import_files(
     repo: &Repo,
     source: &Path,
     commit: &str,
     format: &str,
     policy: &AccessPolicy,
+    blobs: &mut BTreeMap<String, ImportedBlob>,
 ) -> Result<Vec<FileEntry>> {
     let listing = output(source, &["ls-tree", "-r", "-z", "--full-tree", commit])?;
     let mut files = Vec::new();
@@ -565,32 +574,43 @@ fn import_files(
             .to_string();
         transaction::validate_working_key(&path)?;
         let oid = git_objects::parse_id(fields[2].as_bytes(), format)?;
-        let bytes = output(source, &["cat-file", "blob", &oid])?;
-        if git_objects::object_id("blob", &bytes, format)? != oid {
-            bail!("Git blob identity mismatch");
-        }
-        let hash = hash_bytes(&bytes);
-        let destination = repo.path(&["blobs", &hash]);
-        if destination.try_exists()? {
-            let metadata = fs::symlink_metadata(&destination)?;
-            if !metadata.is_file()
-                || metadata.file_type().is_symlink()
-                || fs::read(&destination)? != bytes
-            {
-                bail!("stored blob failed verification");
-            }
+        let blob = if let Some(blob) = blobs.get(&oid) {
+            blob.clone()
         } else {
-            transaction::publish_file(&destination, &bytes)?;
-        }
-        if fields[0] == "120000" {
-            transaction::validate_link(&bytes)?;
+            let bytes = output(source, &["cat-file", "blob", &oid])?;
+            if git_objects::object_id("blob", &bytes, format)? != oid {
+                bail!("Git blob identity mismatch");
+            }
+            let hash = hash_bytes(&bytes);
+            let destination = repo.path(&["blobs", &hash]);
+            if destination.try_exists()? {
+                let metadata = fs::symlink_metadata(&destination)?;
+                if !metadata.is_file()
+                    || metadata.file_type().is_symlink()
+                    || fs::read(&destination)? != bytes
+                {
+                    bail!("stored blob failed verification");
+                }
+            } else {
+                transaction::publish_file(&destination, &bytes)?;
+            }
+            let blob = ImportedBlob {
+                hash,
+                bytes: bytes.len() as u64,
+                valid_link: transaction::validate_link(&bytes).is_ok(),
+            };
+            blobs.insert(oid, blob.clone());
+            blob
+        };
+        if fields[0] == "120000" && !blob.valid_link {
+            bail!("symlink target must be nonempty and contain no NUL");
         }
         files.push(FileEntry {
             symlink: fields[0] == "120000",
             path,
             executable: fields[0] == "100755",
-            hash,
-            bytes: bytes.len() as u64,
+            hash: blob.hash,
+            bytes: blob.bytes,
             policy: policy.clone(),
         });
     }
