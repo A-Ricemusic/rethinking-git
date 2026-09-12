@@ -295,6 +295,10 @@ Actors and path policies decide which objects are visible in commands that accep
 
 This is not cryptographic security yet. It is the local policy and view model that real encrypted sync would enforce later.
 
+## Policy changes in merges and diffs
+
+File equality includes policy metadata and recorded byte length as well as the content hash. A policy-only change appears as modified and survives integration. Concurrent content and policy edits to the same path produce a conflict instead of silently discarding the restriction. Changes to hidden policies contribute only to the restricted-file count, without disclosing paths or domains.
+
 ## Repository validation
 
 The CLI accepts only repository format 2 and refuses missing, malformed, older, or newer configuration before running commands. There is no automatic migration. Object IDs must use the expected object-kind prefix and a lowercase hexadecimal suffix. Stored object identities must match the requested identity.

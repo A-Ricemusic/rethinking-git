@@ -463,7 +463,7 @@ struct FileDiff {
 
 struct DiffInput {
     visible: Vec<FileEntry>,
-    hidden_by_path: BTreeMap<String, String>,
+    hidden_by_path: BTreeMap<String, FileEntry>,
 }
 
 struct MergePlan {
@@ -1552,7 +1552,7 @@ fn diff_files(previous: Vec<FileEntry>, current: Vec<FileEntry>, hidden: usize) 
         match (previous_map.get(&path), current_map.get(&path)) {
             (None, Some(_)) => added.push(path),
             (Some(_), None) => deleted.push(path),
-            (Some(before), Some(after)) if before.hash != after.hash => modified.push(path),
+            (Some(before), Some(after)) if before != after => modified.push(path),
             _ => {}
         }
     }
@@ -1581,7 +1581,7 @@ fn diff_input(files: Vec<FileEntry>, actor: &Actor) -> DiffInput {
         if can_access(actor, &file.policy) {
             visible.push(file);
         } else {
-            hidden_by_path.insert(file.path, file.hash);
+            hidden_by_path.insert(file.path.clone(), file);
         }
     }
 
@@ -1591,9 +1591,9 @@ fn diff_input(files: Vec<FileEntry>, actor: &Actor) -> DiffInput {
     }
 }
 
-fn hidden_changed_paths(
-    previous: &BTreeMap<String, String>,
-    current: &BTreeMap<String, String>,
+fn hidden_changed_paths<T: PartialEq>(
+    previous: &BTreeMap<String, T>,
+    current: &BTreeMap<String, T>,
 ) -> usize {
     let previous_paths = previous.keys().cloned().collect::<BTreeSet<_>>();
     let current_paths = current.keys().cloned().collect::<BTreeSet<_>>();
@@ -1679,7 +1679,7 @@ fn plan_merge(base: Vec<FileEntry>, line: Vec<FileEntry>, incoming: Vec<FileEntr
 fn same_file(left: Option<&FileEntry>, right: Option<&FileEntry>) -> bool {
     match (left, right) {
         (None, None) => true,
-        (Some(left), Some(right)) => left.hash == right.hash,
+        (Some(left), Some(right)) => left == right,
         _ => false,
     }
 }
