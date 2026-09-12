@@ -232,3 +232,102 @@ fn corrupt_conflict_read_is_an_error_instead_of_a_successful_empty_result() {
     assert!(result.stdout.is_empty());
     assert!(!String::from_utf8_lossy(&result.stderr).contains("operation unavailable"));
 }
+
+#[test]
+fn json_status_has_versioned_empty_and_permission_filtered_states() {
+    let repo = Repo::new();
+    let empty: Value = serde_json::from_str(&repo.ok(&["status", "--json"])).unwrap();
+    assert_eq!(
+        empty,
+        serde_json::json!({
+            "schema_version": 1, "command": "status", "actor": "public",
+            "change": null, "base_snapshot": {"state": "absent"}, "changes": null,
+        })
+    );
+    let change = repo.change();
+    repo.ok(&["access", "path", "secret.txt", "--domain", "admin"]);
+    fs::write(repo.0.join("visible.txt"), "before").unwrap();
+    fs::write(repo.0.join("deleted.txt"), "before").unwrap();
+    fs::write(repo.0.join("secret.txt"), "before").unwrap();
+    repo.ok(&[
+        "snapshot",
+        "--domain",
+        "admin",
+        "--message",
+        "private-message",
+    ]);
+    let hidden_snapshot = snapshot_id(&repo);
+    fs::write(repo.0.join("visible.txt"), "after").unwrap();
+    fs::write(repo.0.join("secret.txt"), "after").unwrap();
+    fs::write(repo.0.join("added with spaces.txt"), "new").unwrap();
+    fs::remove_file(repo.0.join("deleted.txt")).unwrap();
+    let operations = fs::read_dir(repo.0.join(".rgit/operations"))
+        .unwrap()
+        .count();
+    let output = repo.ok(&["status", "--json"]);
+    assert_eq!(output.lines().count(), 1);
+    for restricted in [&hidden_snapshot, "private-message", "secret.txt"] {
+        assert!(!output.contains(restricted));
+    }
+    let report: Value = serde_json::from_str(&output).unwrap();
+    assert_eq!(
+        report,
+        serde_json::json!({
+            "schema_version": 1, "command": "status", "actor": "public",
+            "change": {"id": change, "name": "test"},
+            "base_snapshot": {"state": "restricted"},
+            "changes": {"added": ["added with spaces.txt"], "modified": ["visible.txt"], "deleted": ["deleted.txt"], "hidden_count": 1},
+        })
+    );
+    let admin: Value =
+        serde_json::from_str(&repo.ok(&["status", "--json", "--as", "admin"])).unwrap();
+    assert_eq!(
+        admin["base_snapshot"],
+        serde_json::json!({"state": "visible", "id": hidden_snapshot})
+    );
+    assert_eq!(admin["changes"]["hidden_count"], 0);
+    assert_eq!(
+        fs::read_dir(repo.0.join(".rgit/operations"))
+            .unwrap()
+            .count(),
+        operations
+    );
+}
+
+#[test]
+fn json_status_reports_inherited_base_and_refuses_restricted_changes() {
+    let repo = Repo::new();
+    repo.change();
+    repo.ok(&["snapshot"]);
+    repo.ok(&["line", "integrate", "--as", "admin"]);
+    let line: Value =
+        serde_json::from_slice(&fs::read(repo.0.join(".rgit/lines/main.json")).unwrap()).unwrap();
+    repo.change();
+    let report: Value = serde_json::from_str(&repo.ok(&["status", "--json"])).unwrap();
+    assert_eq!(
+        report["base_snapshot"],
+        serde_json::json!({"state": "visible", "id": line["head_snapshot"]})
+    );
+    assert_eq!(
+        report["changes"],
+        serde_json::json!({"added": [], "modified": [], "deleted": [], "hidden_count": 0})
+    );
+    repo.ok(&["change", "new", "private", "--domain", "admin"]);
+    let output = repo.run(&["status", "--json"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("operation unavailable"));
+}
+
+#[cfg(unix)]
+#[test]
+fn json_status_preserves_newlines_quotes_and_backslashes_in_paths() {
+    let repo = Repo::new();
+    repo.change();
+    let name = "line\nbreak\"back\\slash";
+    fs::write(repo.0.join(name), "contents").unwrap();
+    let output = repo.ok(&["status", "--json"]);
+    assert_eq!(output.lines().count(), 1);
+    let report: Value = serde_json::from_str(&output).unwrap();
+    assert_eq!(report["changes"]["added"], serde_json::json!([name]));
+}

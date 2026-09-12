@@ -645,3 +645,10 @@ Tests terminate real initialization subprocesses after directory creation, ident
 publication, staging, and commit. The command journal has separate publication crash
 tests. These cover process interruption; they do not qualify every filesystem or
 hardware power-loss behavior.
+
+
+### Structured status
+
+`rgit status --json` exposes versioned, permission-filtered status for automation.
+See [the JSON contract](automation.md) for fields, empty/restricted states and exit
+semantics. Default text output remains unchanged.
