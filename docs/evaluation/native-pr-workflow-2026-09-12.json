@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "source_revision": "b2fcb724d8ac9b8c2433220e3f103162169b12f5",
+  "source_branch": "perf/stream-verification",
+  "remote": "https://github.com/A-Ricemusic/rethinking-git.git",
+  "clone_binary_revision": "da7aaac761644345207670cd24e33b4620d77f27",
+  "clone_binary_sha256": "1927dff1e01ce937ce6fbf2acb969af4d118a5cdcecb741803a3e98cd5b15fa1",
+  "imported_commits": 166,
+  "tracked_files": 147,
+  "git_directory_absent": true,
+  "build_started_utc": "2026-09-12T08:28:39.966675+00:00",
+  "rebuilt_binary_sha256": "c9795924b5c920356ae1b3cc7392baf175ec2506ca90e844a1f912cffc3dcf48",
+  "rebuilt_binary_source_revision": "b2fcb724d8ac9b8c2433220e3f103162169b12f5",
+  "workspace_tests": {
+    "command": "cargo test --workspace --locked",
+    "exit_code": 0,
+    "log_sha256": "e5571b612a33a4e7e3135a15d90d587366ee5c29041e228828b0dd4b730bb151"
+  },
+  "release_build": {
+    "command": "cargo build --release --locked",
+    "exit_code": 0,
+    "log_sha256": "b18006c986fec9cdc7694088f19468e732061be2fb26be75c304c721b6313718"
+  },
+  "phases": [
+    {
+      "name": "clean-after-build",
+      "exit_code": 0,
+      "elapsed_seconds": 0.5197350000000001
+    },
+    {
+      "name": "verify-built-source",
+      "exit_code": 0,
+      "elapsed_seconds": 2.1772368340000003
+    },
+    {
+      "name": "configure-existing-author",
+      "exit_code": 0,
+      "elapsed_seconds": 0.02405779100000016
+    },
+    {
+      "name": "create-documentation-change",
+      "exit_code": 0,
+      "elapsed_seconds": 0.027811375000000194
+    },
+    {
+      "name": "capture-validation-note",
+      "exit_code": 0,
+      "elapsed_seconds": 0.06395324999999996
+    },
+    {
+      "name": "integrate-validation-note",
+      "exit_code": 0,
+      "elapsed_seconds": 0.05656316600000011
+    },
+    {
+      "name": "first-authenticated-push",
+      "exit_code": 0,
+      "elapsed_seconds": 17.81490275
+    },
+    {
+      "name": "verify-first-publication",
+      "exit_code": 0,
+      "elapsed_seconds": 2.1459270420000003
+    }
+  ],
+  "branch": "docs/native-pr-validation-20260912",
+  "clean_after_build": true,
+  "first_publication": {
+    "remote_git_oid": "b2b9b834ef7cfc56cd6a62ac0fb45d514e2f8fd9",
+    "native_git_oid": "b2b9b834ef7cfc56cd6a62ac0fb45d514e2f8fd9",
+    "identities_match": true,
+    "checked_utc": "2026-09-12T08:33:46.052045+00:00"
+  },
+  "first_publication_verification": "repository verified: 167 changes, 1 lines, 168 snapshots, 0 conflicts, 9 operations, 494 blobs (0 unreferenced)",
+  "git_directory_absent_after_publication": true
+}
