@@ -12,6 +12,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use walkdir::WalkDir;
 
+mod backup;
 mod checkout;
 mod cli_failure;
 mod resolution;
@@ -112,6 +113,12 @@ enum Command {
 
 #[derive(Subcommand)]
 enum RepoCommand {
+    /// Create a verified copy of saved history in a new directory.
+    Backup {
+        destination: PathBuf,
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
     /// Verify saved records, references, manifests and blobs without repairing them.
     Verify {
         #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
@@ -556,6 +563,13 @@ fn main() -> Result<()> {
     let repo = Repo::discover()?;
     let result = match cli.command {
         Command::Init => unreachable!(),
+        Command::Repo {
+            command:
+                RepoCommand::Backup {
+                    destination,
+                    as_actor,
+                },
+        } => backup::backup(&repo, &destination, &as_actor),
         Command::Repo {
             command: RepoCommand::Verify { as_actor },
         } => verify::verify(&repo, &as_actor),
