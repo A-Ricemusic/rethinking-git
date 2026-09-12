@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "measured_at": "2026-09-12T06:36:42.089506+00:00",
+  "platform": "macOS-26.5.2-arm64-arm-64bit",
+  "machine": "arm64",
+  "binary_sha256": "25a024db723a7e6246eeed0490049ffb6501fa0b3fbb3fa7f5891040a3e63902",
+  "git_version": "git version 2.50.1 (Apple Git-155)",
+  "files": 100,
+  "commits": 20,
+  "bytes_per_file": 4096,
+  "fixture_git_head": "3af5d4386e3b5ad7131adb137303a0256135fb75",
+  "seconds": [
+    3.2141765830000004,
+    3.1959747500000004,
+    3.2087237910000006
+  ],
+  "median_seconds": 3.2087237910000006,
+  "notes": "Wall time includes CLI verification/publication; warm OS cache, no network. Not a production capacity qualification.",
+  "source_revision": "08fe8b224c8829d1545a15e6aee3888f2bd602b2"
+}
