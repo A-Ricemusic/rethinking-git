@@ -700,10 +700,23 @@ scanning, reading and rendering still take time. See the pinned library's
 
 Merge preview and integration validate a clean result's manifest and selected blobs
 before reporting success or publishing a snapshot. Independently added paths such as
-`a` and `a/b` must not become files in the same snapshot. Such file/directory
-collisions currently refuse integration without advancing the line or writing saved
-records; adjust the conflicting paths in a new snapshot before retrying. This also
+`a` and `a/b` must not become files in the same snapshot. File/directory collisions become one explicit conflict at the shared root.
+Integration saves the conflict without advancing the line. This also
 checks the result after saved per-path conflict decisions have been applied.
+
+### Resolving structural merge conflicts
+
+A `file_directory` conflict groups the root and every affected descendant. Resolve it
+with `conflict resolve ID --take base|line|incoming|delete`, then integrate again.
+Choosing a side selects its complete subtree; `delete` removes the entire group.
+Unrelated paths, including names that only share a text prefix, merge normally.
+`--from-working` is refused for a structural conflict; for custom content, edit and
+snapshot the incoming change, integrate again, and choose the updated side.
+
+All source subtree policies are checked, and mixed source policies conservatively
+restrict selected files to admin. Decisions remain bound to exact source snapshots;
+a per-file decision cannot be reused as a subtree decision. Older clients cannot
+read the new conflict kind, so keep a verified backup before upgrading.
 ### Recoverable file/directory checkout transitions
 
 Checkout can replace a tracked file or symlink with tracked descendants, and replace

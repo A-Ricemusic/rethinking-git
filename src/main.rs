@@ -28,6 +28,7 @@ mod resolution;
 mod status_json;
 mod text_diff;
 mod transaction;
+mod tree_conflicts;
 mod verify;
 
 use cli_failure::CliFailure;
@@ -610,6 +611,7 @@ enum ConflictKind {
     BothModified,
     DeleteModify,
     AddAdd,
+    FileDirectory,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
@@ -2085,10 +2087,12 @@ fn plan_merge(base: Vec<FileEntry>, line: Vec<FileEntry>, incoming: Vec<FileEntr
 
     merged_files.sort_by(|a, b| a.path.cmp(&b.path));
 
-    MergePlan {
+    let mut plan = MergePlan {
         merged_files,
         conflicts,
-    }
+    };
+    tree_conflicts::group(&mut plan, [&base, &line, &incoming]);
+    plan
 }
 
 fn same_file(left: Option<&FileEntry>, right: Option<&FileEntry>) -> bool {
@@ -2727,6 +2731,7 @@ fn conflict_kind(kind: &ConflictKind) -> &'static str {
         ConflictKind::BothModified => "both_modified",
         ConflictKind::DeleteModify => "delete_modify",
         ConflictKind::AddAdd => "add_add",
+        ConflictKind::FileDirectory => "file_directory",
     }
 }
 
@@ -3088,6 +3093,38 @@ mod tests {
         ]);
 
         assert_eq!(hidden_changed_paths(&previous, &current), 3);
+    }
+
+    #[test]
+    fn structural_conflicts_include_pending_parent_and_all_descendant_policies() {
+        let base = vec![file("a", "base", &[PUBLIC_DOMAIN])];
+        let line = vec![file("a", "modified", &[PUBLIC_DOMAIN])];
+        let incoming = vec![
+            file("a/b", "child", &["team/security"]),
+            file("a/deep/c", "deep", &[PUBLIC_DOMAIN]),
+            file("a-other", "independent", &[PUBLIC_DOMAIN]),
+        ];
+        let plan = plan_merge(base, line, incoming);
+        assert_eq!(plan.conflicts.len(), 1);
+        assert_eq!(plan.conflicts[0].path, "a");
+        assert_eq!(plan.conflicts[0].kind, ConflictKind::FileDirectory);
+        assert!(!can_access_pending_conflict(
+            &actor("public", &[PUBLIC_DOMAIN]),
+            &plan.conflicts[0]
+        ));
+        assert_eq!(plan.merged_files.len(), 1);
+        assert_eq!(plan.merged_files[0].path, "a-other");
+    }
+
+    #[test]
+    fn uncontested_structural_changes_and_identical_changes_remain_clean() {
+        let base = vec![file("a", "base", &[PUBLIC_DOMAIN])];
+        let directory = vec![file("a/b", "child", &[PUBLIC_DOMAIN])];
+        for line in [base.clone(), directory.clone()] {
+            let plan = plan_merge(base.clone(), line, directory.clone());
+            assert!(plan.conflicts.is_empty());
+            assert_eq!(plan.merged_files, directory);
+        }
     }
 
     #[test]
