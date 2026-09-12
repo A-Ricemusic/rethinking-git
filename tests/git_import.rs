@@ -567,3 +567,47 @@ fn restoring_another_snapshot_preserves_its_modes_when_captured_on_a_new_change(
     assert_ne!(captured["files"][0]["executable"], true);
     native.ok(&["repo", "verify", "--as", "admin"]);
 }
+
+#[test]
+fn reusing_a_regular_blob_as_a_link_still_validates_its_target() {
+    let source = Repo(destination());
+    fs::create_dir(&source.0).unwrap();
+    git(&source, &["init", "-b", "main"]);
+    fs::write(source.0.join("bytes"), b"invalid\0link").unwrap();
+    let blob = String::from_utf8(git(&source, &["hash-object", "-w", "bytes"])).unwrap();
+    for mode in ["100644", "120000"] {
+        git(
+            &source,
+            &[
+                "update-index",
+                "--add",
+                "--cacheinfo",
+                &format!("{mode},{},item", blob.trim()),
+            ],
+        );
+        git(
+            &source,
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.test",
+                "commit",
+                "-m",
+                mode,
+            ],
+        );
+    }
+    let native = Repo::new();
+    let result = native.run(&["git", "import", source.0.to_str().unwrap(), "--as", "admin"]);
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr)
+        .contains("symlink target must be nonempty and contain no NUL"));
+    assert_eq!(
+        fs::read_dir(native.0.join(".rgit/snapshots"))
+            .unwrap()
+            .count(),
+        0
+    );
+    native.ok(&["repo", "verify", "--as", "admin"]);
+}
