@@ -262,3 +262,46 @@ fn round_trip_preserves_a_real_ssh_commit_signature() {
         ],
     );
 }
+
+#[test]
+fn importing_shared_history_into_another_line_reuses_native_ancestors() {
+    let source = Repo(destination());
+    fs::create_dir(&source.0).unwrap();
+    git(&source, &["init", "-b", "main"]);
+    fs::write(source.0.join("file.txt"), "base").unwrap();
+    commit(&source, "base");
+    let native = Repo::new();
+    native.ok(&["git", "import", source.0.to_str().unwrap(), "--as", "admin"]);
+    let first: serde_json::Value =
+        serde_json::from_slice(&fs::read(native.0.join(".rgit/lines/main.json")).unwrap()).unwrap();
+    fs::write(source.0.join("file.txt"), "next").unwrap();
+    commit(&source, "next");
+    native.ok(&[
+        "git",
+        "import",
+        source.0.to_str().unwrap(),
+        "--into",
+        "remote/main",
+        "--as",
+        "admin",
+    ]);
+    assert_eq!(
+        fs::read_dir(native.0.join(".rgit/snapshots"))
+            .unwrap()
+            .count(),
+        2
+    );
+    let line: serde_json::Value =
+        serde_json::from_slice(&fs::read(native.0.join(".rgit/lines/remote__main.json")).unwrap())
+            .unwrap();
+    let snapshot: serde_json::Value = serde_json::from_slice(
+        &fs::read(native.0.join(format!(
+            ".rgit/snapshots/{}.json",
+            line["head_snapshot"].as_str().unwrap()
+        )))
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(snapshot["parent_snapshot"], first["head_snapshot"]);
+    native.ok(&["repo", "verify", "--as", "admin"]);
+}
