@@ -155,7 +155,11 @@ pub(super) fn publish(repo: &Repo, generated: &Generated) -> Result<()> {
     for (hash, bytes) in generated {
         let path = repo.path(&["blobs", hash]);
         if path.try_exists()? {
-            if verify::read_blob(repo, hash)? != *bytes {
+            let mut stored = Vec::new();
+            verify::open_blob(repo, hash)?
+                .take(FILE_LIMIT + 1)
+                .read_to_end(&mut stored)?;
+            if stored != *bytes {
                 bail!("existing merge blob failed verification");
             }
         } else {

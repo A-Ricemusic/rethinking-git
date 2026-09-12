@@ -250,3 +250,21 @@ fn concurrent_mode_changes_are_not_automatically_resolved_as_text() {
     assert!(repo.ok(&["merge", "preview"]).contains("result: conflicts"));
     assert!(!repo.run(&["line", "integrate"]).status.success());
 }
+
+#[test]
+fn corrupt_preexisting_result_blob_is_refused_without_advancing_the_line() {
+    use sha2::{Digest, Sha256};
+    let repo = Repo::new();
+    repo.divergent(b"a\nb\nc\n", b"A\nb\nc\n", b"a\nb\nC\n");
+    let hash = hex::encode(Sha256::digest(b"A\nb\nC\n"));
+    let path = repo.0.join(".rgit/blobs").join(hash);
+    fs::write(&path, vec![b'x'; 1_048_577]).unwrap();
+    let head = repo.json("lines/main.json");
+    let output = repo.run(&["line", "integrate"]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("existing merge blob failed verification")
+    );
+    assert_eq!(repo.json("lines/main.json"), head);
+    assert_eq!(fs::metadata(path).unwrap().len(), 1_048_577);
+}
