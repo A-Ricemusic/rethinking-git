@@ -386,9 +386,9 @@ impl Store for MemoryStore {
         Ok(Self::visible_object(&self.lock(), id)?.clone())
     }
 
-    fn presence(&self, id: &ObjectId) -> Option<ObjectPresence> {
+    fn presence(&self, id: &ObjectId) -> Result<Option<ObjectPresence>, StoreError> {
         let state = self.lock();
-        if state.quarantined.contains(id) {
+        Ok(if state.quarantined.contains(id) {
             Some(ObjectPresence::Quarantined)
         } else if state.objects.contains_key(id) {
             Some(ObjectPresence::Present)
@@ -396,7 +396,7 @@ impl Store for MemoryStore {
             Some(ObjectPresence::Promised)
         } else {
             None
-        }
+        })
     }
 
     fn mark_promised(&self, id: ObjectId) -> Result<(), StoreError> {
@@ -428,8 +428,8 @@ impl Store for MemoryStore {
         Ok(())
     }
 
-    fn reference(&self, key: &ReferenceKey) -> Option<ReferenceState> {
-        self.lock().references.get(key).cloned()
+    fn reference(&self, key: &ReferenceKey) -> Result<Option<ReferenceState>, StoreError> {
+        Ok(self.lock().references.get(key).cloned())
     }
 
     fn compare_and_swap(

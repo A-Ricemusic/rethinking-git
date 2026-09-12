@@ -158,10 +158,14 @@ fn metadata_inventory_promises_and_references_survive_reopen() {
     drop(store);
 
     let reopened = SqliteStore::open(&control).expect("reopen");
-    assert_eq!(reopened.presence(&promised), Some(ObjectPresence::Promised));
+    assert_eq!(
+        reopened.presence(&promised).expect("lookup succeeds"),
+        Some(ObjectPresence::Promised)
+    );
     assert_eq!(
         reopened
             .reference(&ReferenceKey::OperationHead)
+            .expect("lookup succeeds")
             .expect("head")
             .target,
         operation,
@@ -236,7 +240,7 @@ fn process_kill_at_sqlite_boundaries_recovers_old_or_committed_state() {
         let reopened = SqliteStore::open(&control).expect("recover after process kill");
         let (id, _) = encoded(&envelope(114));
         assert_eq!(
-            reopened.presence(&id),
+            reopened.presence(&id).expect("lookup succeeds"),
             committed.then_some(ObjectPresence::Present)
         );
         reopened.verify_metadata().expect("verify recovered store");
@@ -277,11 +281,11 @@ fn injected_failure_rolls_back_inventory_and_revision() {
         store.put(id.clone(), bytes),
         Err(StoreError::InjectedTransactionFailure)
     );
-    assert_eq!(store.presence(&id), None);
+    assert_eq!(store.presence(&id).expect("lookup succeeds"), None);
     drop(store);
 
     let reopened = SqliteStore::open(&control).expect("reopen");
-    assert_eq!(reopened.presence(&id), None);
+    assert_eq!(reopened.presence(&id).expect("lookup succeeds"), None);
     reopened.verify_metadata().expect("verify rollback");
     fs::remove_dir_all(path).expect("cleanup");
 }
@@ -318,9 +322,12 @@ fn every_precommit_put_failure_rolls_back_and_after_commit_is_recoverable() {
         drop(store);
         let reopened = SqliteStore::open(&control).expect("reopen");
         if point == SqliteFailurePoint::AfterCommit {
-            assert_eq!(reopened.presence(&id), Some(ObjectPresence::Present));
+            assert_eq!(
+                reopened.presence(&id).expect("lookup succeeds"),
+                Some(ObjectPresence::Present)
+            );
         } else {
-            assert_eq!(reopened.presence(&id), None);
+            assert_eq!(reopened.presence(&id).expect("lookup succeeds"), None);
         }
         fs::remove_dir_all(path).expect("cleanup");
     }
@@ -359,12 +366,25 @@ fn publication_failure_after_reference_writes_is_fully_atomic() {
         &allow,
     );
     assert_eq!(result, Err(StoreError::InjectedTransactionFailure));
-    assert_eq!(store.reference(&ReferenceKey::OperationHead), None);
-    assert_eq!(store.presence(&operation), None);
+    assert_eq!(
+        store
+            .reference(&ReferenceKey::OperationHead)
+            .expect("lookup succeeds"),
+        None
+    );
+    assert_eq!(store.presence(&operation).expect("lookup succeeds"), None);
     drop(store);
     let reopened = SqliteStore::open(&control).expect("reopen");
-    assert_eq!(reopened.reference(&ReferenceKey::OperationHead), None);
-    assert_eq!(reopened.presence(&operation), None);
+    assert_eq!(
+        reopened
+            .reference(&ReferenceKey::OperationHead)
+            .expect("lookup succeeds"),
+        None
+    );
+    assert_eq!(
+        reopened.presence(&operation).expect("lookup succeeds"),
+        None
+    );
     fs::remove_dir_all(path).expect("cleanup");
 }
 
@@ -439,7 +459,10 @@ fn reopen_rejects_partial_derived_and_edge_indexes() {
 struct Reentrant<'a>(&'a SqliteStore);
 impl PublicationValidator for Reentrant<'_> {
     fn validate(&self, candidate: &PublicationCandidate<'_>) -> Result<(), StoreError> {
-        let _ = self.0.presence(&candidate.publication().operation);
+        let _ = self
+            .0
+            .presence(&candidate.publication().operation)
+            .expect("lookup succeeds");
         Ok(())
     }
 }
@@ -477,7 +500,10 @@ fn quarantine_incident_is_durable_fail_closed_and_evidence_authenticated() {
     let store = SqliteStore::open(&control).expect("open");
     let id = put(&store, &envelope(110));
     store.quarantine(&id).expect("quarantine");
-    assert_eq!(store.presence(&id), Some(ObjectPresence::Quarantined));
+    assert_eq!(
+        store.presence(&id).expect("lookup succeeds"),
+        Some(ObjectPresence::Quarantined)
+    );
     assert_eq!(
         store.mark_promised(fake_id(111)),
         Err(StoreError::IncidentReadOnly)
@@ -485,7 +511,10 @@ fn quarantine_incident_is_durable_fail_closed_and_evidence_authenticated() {
     drop(store);
 
     let reopened = SqliteStore::open(&control).expect("reopen incident");
-    assert_eq!(reopened.presence(&id), Some(ObjectPresence::Quarantined));
+    assert_eq!(
+        reopened.presence(&id).expect("lookup succeeds"),
+        Some(ObjectPresence::Quarantined)
+    );
     drop(reopened);
     let evidence = fs::read_dir(control.join("incidents"))
         .expect("incident directory")
@@ -526,7 +555,10 @@ fn startup_adopts_orphan_incident_evidence_fail_closed() {
     drop(store);
 
     let reopened = SqliteStore::open(&control).expect("reconcile orphan evidence");
-    assert_eq!(reopened.presence(&id), Some(ObjectPresence::Quarantined));
+    assert_eq!(
+        reopened.presence(&id).expect("lookup succeeds"),
+        Some(ObjectPresence::Quarantined)
+    );
     assert_eq!(
         reopened.mark_promised(fake_id(113)),
         Err(StoreError::IncidentReadOnly)

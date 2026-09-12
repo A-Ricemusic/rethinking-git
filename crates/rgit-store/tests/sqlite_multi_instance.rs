@@ -75,13 +75,19 @@ fn instances_observe_promises_and_objects_without_reopen() {
     first
         .mark_promised(promised.clone())
         .expect("first store marks promise");
-    assert_eq!(second.presence(&promised), Some(ObjectPresence::Promised));
+    assert_eq!(
+        second.presence(&promised).expect("lookup succeeds"),
+        Some(ObjectPresence::Promised)
+    );
 
     let (first_id, first_bytes) = encoded(&envelope(31));
     first
         .put(first_id.clone(), first_bytes)
         .expect("first store puts object");
-    assert_eq!(second.presence(&first_id), Some(ObjectPresence::Present));
+    assert_eq!(
+        second.presence(&first_id).expect("lookup succeeds"),
+        Some(ObjectPresence::Present)
+    );
     assert_eq!(
         second.get(&first_id).expect("second reads object").id(),
         &first_id
@@ -91,7 +97,10 @@ fn instances_observe_promises_and_objects_without_reopen() {
     second
         .put(second_id.clone(), second_bytes)
         .expect("second store puts object");
-    assert_eq!(first.presence(&second_id), Some(ObjectPresence::Present));
+    assert_eq!(
+        first.presence(&second_id).expect("lookup succeeds"),
+        Some(ObjectPresence::Present)
+    );
     assert_eq!(
         first.get(&second_id).expect("first reads object").id(),
         &second_id
@@ -135,11 +144,11 @@ fn concurrent_instances_serialize_process_writers() {
     second_thread.join().expect("second writer thread");
     for seed in 40..72 {
         assert_eq!(
-            first.presence(&fake_id(seed)),
+            first.presence(&fake_id(seed)).expect("lookup succeeds"),
             Some(ObjectPresence::Promised)
         );
         assert_eq!(
-            second.presence(&fake_id(seed)),
+            second.presence(&fake_id(seed)).expect("lookup succeeds"),
             Some(ObjectPresence::Promised)
         );
     }
@@ -260,5 +269,39 @@ fn rejects_hardlinked_database_file() {
         Err(StoreError::UnsupportedDatabase)
     ));
 
+    fs::remove_dir_all(path).expect("cleanup");
+}
+
+#[test]
+fn lookup_distinguishes_absence_from_database_replacement() {
+    let path = repository("lookup-errors");
+    let control = path.join(".rgit");
+    let store = SqliteStore::open(&control).expect("open store");
+    let id = fake_id(121);
+    assert_eq!(store.presence(&id), Ok(None));
+    assert_eq!(
+        store.reference(&rgit_store::ReferenceKey::OperationHead),
+        Ok(None)
+    );
+    store.mark_promised(id.clone()).expect("mark promise");
+    assert_eq!(store.presence(&id), Ok(Some(ObjectPresence::Promised)));
+
+    let metadata = control.join("metadata");
+    fs::rename(&metadata, control.join("original-metadata")).expect("move metadata");
+    fs::create_dir(&metadata).expect("replace metadata directory");
+    fs::write(metadata.join("repository.sqlite3"), b"replacement").expect("replace database");
+
+    for result in [
+        store.presence(&id).map(|_| ()),
+        store
+            .reference(&rgit_store::ReferenceKey::OperationHead)
+            .map(|_| ()),
+    ] {
+        assert!(matches!(
+            result,
+            Err(StoreError::UnsupportedDatabase | StoreError::ObjectStorage)
+        ));
+    }
+    drop(store);
     fs::remove_dir_all(path).expect("cleanup");
 }

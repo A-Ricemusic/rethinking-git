@@ -149,8 +149,11 @@ impl SqliteStore {
         control: impl AsRef<Path>,
         options: SqliteStoreOptions,
     ) -> Result<Self, StoreError> {
-        #[cfg(not(unix))]
-        return Err(StoreError::UnsupportedDatabase);
+        // Keep the shared implementation type-checked on every target, while
+        // refusing unsupported writable backends before any filesystem mutation.
+        if !cfg!(unix) {
+            return Err(StoreError::UnsupportedDatabase);
+        }
         let control = control.as_ref().to_path_buf();
         if !control.is_absolute() {
             return Err(StoreError::UnsupportedDatabase);
@@ -520,8 +523,8 @@ impl Store for SqliteStore {
         self.memory.get(id)
     }
 
-    fn presence(&self, id: &ObjectId) -> Option<ObjectPresence> {
-        self.refresh().ok()?;
+    fn presence(&self, id: &ObjectId) -> Result<Option<ObjectPresence>, StoreError> {
+        self.refresh()?;
         self.memory.presence(id)
     }
 
@@ -623,8 +626,8 @@ impl Store for SqliteStore {
         self.checkpoint()
     }
 
-    fn reference(&self, key: &ReferenceKey) -> Option<ReferenceState> {
-        self.refresh().ok()?;
+    fn reference(&self, key: &ReferenceKey) -> Result<Option<ReferenceState>, StoreError> {
+        self.refresh()?;
         self.memory.reference(key)
     }
 
@@ -1917,6 +1920,18 @@ fn map_database_error(error: rusqlite::Error) -> StoreError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(not(unix))]
+    #[test]
+    fn unsupported_platform_refuses_open_before_creating_repository() {
+        let path = std::env::temp_dir().join(format!("rgit-unsupported-{}", std::process::id()));
+        assert!(!path.exists());
+        assert!(matches!(
+            SqliteStore::open(&path),
+            Err(StoreError::UnsupportedDatabase)
+        ));
+        assert!(!path.exists());
+    }
 
     #[test]
     fn embedded_schema_and_registry_are_present() {

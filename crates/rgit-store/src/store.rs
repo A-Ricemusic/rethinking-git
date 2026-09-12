@@ -54,10 +54,13 @@ where
 pub trait Store: Send + Sync {
     fn put(&self, id: ObjectId, bytes: Vec<u8>) -> Result<crate::PutOutcome, StoreError>;
     fn get(&self, id: &ObjectId) -> Result<StoredObject, StoreError>;
-    fn presence(&self, id: &ObjectId) -> Option<ObjectPresence>;
+    /// `Ok(None)` means absent; storage failures must remain distinguishable.
+    /// This storage-level lookup does not implement caller authorization.
+    fn presence(&self, id: &ObjectId) -> Result<Option<ObjectPresence>, StoreError>;
     fn mark_promised(&self, id: ObjectId) -> Result<(), StoreError>;
     fn quarantine(&self, id: &ObjectId) -> Result<(), StoreError>;
-    fn reference(&self, key: &ReferenceKey) -> Option<ReferenceState>;
+    /// Returns a known reference or `Ok(None)` if absent, never hides I/O failure.
+    fn reference(&self, key: &ReferenceKey) -> Result<Option<ReferenceState>, StoreError>;
     fn compare_and_swap(
         &self,
         key: ReferenceKey,
