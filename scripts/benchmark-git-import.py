@@ -7,6 +7,7 @@ import json
 import os
 import pathlib
 import platform
+import re
 import statistics
 import subprocess
 import tempfile
@@ -18,10 +19,13 @@ parser.add_argument("--files", type=int, default=100)
 parser.add_argument("--commits", type=int, default=20)
 parser.add_argument("--bytes", type=int, default=4096)
 parser.add_argument("--runs", type=int, default=3)
+parser.add_argument("--source-revision", required=True, help="Full source commit used to build the supplied binary")
 parser.add_argument("--output", type=pathlib.Path, required=True)
 args = parser.parse_args()
 if min(args.files, args.commits, args.bytes, args.runs) < 1:
     parser.error("fixture sizes and runs must be positive")
+if not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", args.source_revision):
+    parser.error("source revision must be a full Git object ID")
 binary = args.binary.resolve(strict=True)
 env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
 env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull,
@@ -57,7 +61,7 @@ with tempfile.TemporaryDirectory(prefix="rgit-import-benchmark-") as temporary:
         if len(list((native / ".rgit" / "snapshots").glob("*.json"))) != args.commits:
             raise RuntimeError("imported snapshot count differs from fixture")
         print(f"run {number + 1}: {samples[-1]:.3f}s", flush=True)
-report = dict(schema=1, measured_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+report = dict(schema=1, source_revision=args.source_revision, measured_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
               platform=platform.platform(), machine=platform.machine(),
               binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
               git_version=run(pathlib.Path.cwd(), "git", "--version"),
