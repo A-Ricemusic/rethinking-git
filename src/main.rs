@@ -356,8 +356,16 @@ enum ConflictCommand {
     /// Resolve against the exact recorded source snapshots.
     Resolve {
         conflict_id: String,
-        #[arg(long, value_enum)]
-        take: Resolution,
+        #[arg(
+            long,
+            value_enum,
+            required_unless_present = "from_working",
+            conflicts_with = "from_working"
+        )]
+        take: Option<Resolution>,
+        /// Capture the conflict path's current working contents as a custom resolution.
+        #[arg(long)]
+        from_working: bool,
         #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
         as_actor: String,
     },
@@ -533,6 +541,8 @@ enum ConflictKind {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 enum Resolution {
+    #[value(skip)]
+    Custom,
     Base,
     Line,
     Incoming,
@@ -563,6 +573,8 @@ struct Conflict {
     status: ConflictStatus,
     #[serde(default)]
     resolution: Option<Resolution>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    replacement: Option<FileEntry>,
     created_at: u64,
 }
 
@@ -791,8 +803,18 @@ fn main() -> Result<()> {
             ConflictCommand::Resolve {
                 conflict_id,
                 take,
+                from_working,
                 as_actor,
-            } => resolution::resolve_conflict(&repo, &conflict_id, take, &as_actor),
+            } => resolution::resolve_conflict(
+                &repo,
+                &conflict_id,
+                if from_working {
+                    Resolution::Custom
+                } else {
+                    take.context("resolution choice missing")?
+                },
+                &as_actor,
+            ),
             ConflictCommand::List { as_actor } => list_conflicts(&repo, &as_actor),
             ConflictCommand::Show {
                 conflict_id,
@@ -2113,6 +2135,7 @@ fn store_conflicts(
             source_policy: source_policy.clone(),
             status: ConflictStatus::Unresolved,
             resolution: None,
+            replacement: None,
             created_at: now()?,
         };
         write_json(repo, &conflict_path(repo, &conflict.id)?, &conflict)?;
@@ -3142,6 +3165,7 @@ mod tests {
             source_policy: policy(&[PUBLIC_DOMAIN]),
             status: ConflictStatus::Unresolved,
             resolution: None,
+            replacement: None,
             created_at: 0,
         };
 
@@ -3170,6 +3194,7 @@ mod tests {
             source_policy: policy(&[PUBLIC_DOMAIN]),
             status: ConflictStatus::Unresolved,
             resolution: None,
+            replacement: None,
             created_at: 0,
         };
 

@@ -535,3 +535,19 @@ binaries refuse the new journal version, so preserve a verified backup before
 upgrading. Tests include subprocess interruption after link replacement, later-edit
 refusal, referent preservation, and Git round trips. Same-principal filesystem races,
 file/directory transitions and platform durability qualification remain open.
+
+### Custom conflict resolution
+
+Edit the conflicted path, then run
+`rgit conflict resolve CONFLICT_ID --from-working --as ACTOR` to save the merged
+content. This captures a verified blob immediately; subsequent working edits do not
+change the recorded decision. `line integrate` applies the saved resolution only to
+the exact recorded source snapshots, and rechecks source access and blob integrity.
+The working tree stays untouched until an explicit restore or switch.
+
+Custom resolutions preserve executable/link type and conservatively retain source
+restrictions. Use `--take delete` for deletions; a missing working file is not assumed
+to be an intentional deletion. `--take` and `--from-working` are mutually exclusive.
+Custom blobs are included in repository verification and backups even before they
+are integrated. There is no automatic text-merging engine or conflict-marker writer
+yet; edit the file with your editor or merge tool before capturing it.
