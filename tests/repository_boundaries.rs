@@ -147,3 +147,14 @@ fn actor_names_reject_platform_path_syntax() {
         );
     }
 }
+
+#[test]
+fn valid_unicode_actor_names_remain_readable_and_updatable() {
+    let repo = Repo::new();
+    repo.ok(&["actor", "set", "équipe/alice", "--domain", "public"]);
+    repo.ok(&["actor", "set", "équipe/alice", "--domain", "admin"]);
+    assert!(repo
+        .ok(&["actor", "list"])
+        .contains("équipe/alice domains:admin"));
+    repo.ok(&["status", "--as", "équipe/alice"]);
+}

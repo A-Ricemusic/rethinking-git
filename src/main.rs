@@ -2265,17 +2265,21 @@ fn validate_named_key(name: &str) -> Result<()> {
             .split('.')
             .next()
             .unwrap_or("")
-            .to_ascii_uppercase();
+            .to_ascii_uppercase()
+            .replace('¹', "1")
+            .replace('²', "2")
+            .replace('³', "3");
         let reserved = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
             || (stem.len() == 4
                 && (stem.starts_with("COM") || stem.starts_with("LPT"))
                 && matches!(stem.as_bytes()[3], b'1'..=b'9'));
         if component.is_empty()
-            || component.ends_with('.')
+            || component.ends_with(['.', ' '])
             || reserved
-            || !component
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))
+            || component.chars().any(|character| {
+                character.is_control()
+                    || matches!(character, '\\' | ':' | '<' | '>' | '"' | '|' | '?' | '*')
+            })
         {
             bail!("invalid actor or line name");
         }
