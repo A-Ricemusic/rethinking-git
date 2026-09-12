@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "platform": "macOS-26.5.2-arm64-arm-64bit",
+  "machine": "arm64",
+  "runner_sha256": "569be69c30a0377ddf1049899c5b3039ec31d06fbb6c2836bf1b2de47316f8e4",
+  "file_bytes": 536870912,
+  "git_provenance": true,
+  "git_version": "git version 2.50.1 (Apple Git-155)",
+  "cache": "warm; commands warmed before measurement, binary order alternated",
+  "binaries": {
+    "baseline": {
+      "source_revision": "66432ffcf9b6ffe7fc543ec57b61b68ed5869369",
+      "sha256": "4b786e10b314d888879bde7c28e97a650814a6f67cb173ca662f551d0624d803"
+    },
+    "candidate": {
+      "source_revision": "da7aaac761644345207670cd24e33b4620d77f27",
+      "sha256": "1927dff1e01ce937ce6fbf2acb969af4d118a5cdcecb741803a3e98cd5b15fa1"
+    }
+  },
+  "results": [
+    {
+      "repeat": 1,
+      "command": "status",
+      "side": "baseline",
+      "peak_rss_bytes": 541605888,
+      "elapsed_seconds": 1.7809797500000002,
+      "exit_code": 0
+    },
+    {
+      "repeat": 1,
+      "command": "status",
+      "side": "candidate",
+      "peak_rss_bytes": 4751360,
+      "elapsed_seconds": 1.6040550000000025,
+      "exit_code": 0
+    },
+    {
+      "repeat": 1,
+      "command": "verify",
+      "side": "baseline",
+      "peak_rss_bytes": 541458432,
+      "elapsed_seconds": 9.359540166999999,
+      "exit_code": 0
+    },
+    {
+      "repeat": 1,
+      "command": "verify",
+      "side": "candidate",
+      "peak_rss_bytes": 4751360,
+      "elapsed_seconds": 8.998668125000002,
+      "exit_code": 0
+    },
+    {
+      "repeat": 2,
+      "command": "status",
+      "side": "candidate",
+      "peak_rss_bytes": 4751360,
+      "elapsed_seconds": 1.603010709000003,
+      "exit_code": 0
+    },
+    {
+      "repeat": 2,
+      "command": "status",
+      "side": "baseline",
+      "peak_rss_bytes": 541474816,
+      "elapsed_seconds": 1.755395791000005,
+      "exit_code": 0
+    },
+    {
+      "repeat": 2,
+      "command": "verify",
+      "side": "candidate",
+      "peak_rss_bytes": 4734976,
+      "elapsed_seconds": 9.010483500000007,
+      "exit_code": 0
+    },
+    {
+      "repeat": 2,
+      "command": "verify",
+      "side": "baseline",
+      "peak_rss_bytes": 541622272,
+      "elapsed_seconds": 9.235373124999995,
+      "exit_code": 0
+    },
+    {
+      "repeat": 3,
+      "command": "status",
+      "side": "baseline",
+      "peak_rss_bytes": 540409856,
+      "elapsed_seconds": 1.7959415420000084,
+      "exit_code": 0
+    },
+    {
+      "repeat": 3,
+      "command": "status",
+      "side": "candidate",
+      "peak_rss_bytes": 4734976,
+      "elapsed_seconds": 1.5947168750000031,
+      "exit_code": 0
+    },
+    {
+      "repeat": 3,
+      "command": "verify",
+      "side": "baseline",
+      "peak_rss_bytes": 541622272,
+      "elapsed_seconds": 9.394882082999999,
+      "exit_code": 0
+    },
+    {
+      "repeat": 3,
+      "command": "verify",
+      "side": "candidate",
+      "peak_rss_bytes": 4734976,
+      "elapsed_seconds": 9.003790624999993,
+      "exit_code": 0
+    }
+  ],
+  "summary": {
+    "status": {
+      "baseline": {
+        "median_peak_rss_bytes": 541474816,
+        "median_elapsed_seconds": 1.7809797500000002
+      },
+      "candidate": {
+        "median_peak_rss_bytes": 4751360,
+        "median_elapsed_seconds": 1.603010709000003
+      }
+    },
+    "verify": {
+      "baseline": {
+        "median_peak_rss_bytes": 541622272,
+        "median_elapsed_seconds": 9.359540166999999
+      },
+      "candidate": {
+        "median_peak_rss_bytes": 4734976,
+        "median_elapsed_seconds": 9.003790624999993
+      }
+    }
+  }
+}
