@@ -49,7 +49,7 @@ impl Repo {
 
 fn apply(root: &Path, patch: &str) {
     let mut child = Command::new("git")
-        .args(["apply", "-"])
+        .args(["-c", "core.autocrlf=false", "apply", "-"])
         .current_dir(root)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -76,11 +76,16 @@ fn workspace_and_snapshot_hunks_reproduce_added_modified_deleted_and_unterminate
     fs::write(repo.0.join("modified.txt"), "one\ntwo\nthree\n").unwrap();
     fs::write(repo.0.join("deleted.txt"), "remove\n").unwrap();
     fs::write(repo.0.join("no-newline.txt"), "old").unwrap();
+    fs::write(repo.0.join("empty-delete"), b"").unwrap();
+    fs::write(repo.0.join("crlf.txt"), b"one\r\ntwo\r\n").unwrap();
     let before = repo.snapshot();
     fs::write(repo.0.join("modified.txt"), "one\nTWO\nthree\n").unwrap();
     fs::remove_file(repo.0.join("deleted.txt")).unwrap();
     fs::write(repo.0.join("new file.txt"), "added\n").unwrap();
     fs::write(repo.0.join("no-newline.txt"), "new").unwrap();
+    fs::remove_file(repo.0.join("empty-delete")).unwrap();
+    fs::write(repo.0.join("empty-add"), b"").unwrap();
+    fs::write(repo.0.join("crlf.txt"), b"one\r\nTWO\r\n").unwrap();
     let patch = repo.ok(&["diff", "workspace", "--patch"]);
     assert!(patch.contains("@@"));
     assert!(patch.contains("-two\n+TWO\n"));
@@ -105,6 +110,12 @@ fn workspace_and_snapshot_hunks_reproduce_added_modified_deleted_and_unterminate
     assert_eq!(fs::read(repo.0.join("new file.txt")).unwrap(), b"added\n");
     assert_eq!(fs::read(repo.0.join("no-newline.txt")).unwrap(), b"new");
     assert!(!repo.0.join("deleted.txt").exists());
+    assert!(!repo.0.join("empty-delete").exists());
+    assert_eq!(fs::read(repo.0.join("empty-add")).unwrap(), b"");
+    assert_eq!(
+        fs::read(repo.0.join("crlf.txt")).unwrap(),
+        b"one\r\nTWO\r\n"
+    );
     repo.ok(&["line", "integrate", "--as", "admin"]);
     assert!(repo
         .ok(&["diff", "line", "--patch", "--as", "admin"])
