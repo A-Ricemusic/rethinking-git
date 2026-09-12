@@ -141,6 +141,19 @@ pub(super) fn fetch(
     actor: &str,
     policy: AccessPolicy,
 ) -> Result<()> {
+    let imported = fetch_history(repo, remote, branch, into, actor, policy)?;
+    git_bridge::report_import(imported, into, actor);
+    Ok(())
+}
+
+fn fetch_history(
+    repo: &Repo,
+    remote: &str,
+    branch: &str,
+    into: &str,
+    actor: &str,
+    policy: AccessPolicy,
+) -> Result<usize> {
     verify::check(repo, actor)?;
     let remote = resolve_remote(remote)?;
     validate_named_key(into)?;
@@ -174,6 +187,74 @@ pub(super) fn fetch(
         policy,
         true,
     )
+}
+
+pub(super) fn pull(repo: &Repo, args: &GitPullArgs) -> Result<()> {
+    verify::check(repo, &args.as_actor)?;
+    let before = read_workspace(repo)?;
+    let current = before
+        .current_change
+        .as_deref()
+        .map(|id| read_change(repo, id))
+        .transpose()?;
+    if current
+        .as_ref()
+        .is_some_and(|change| change.target_line != args.line)
+    {
+        bail!("current change targets another line; switch or retarget before pulling");
+    }
+    let previous = read_line(repo, &args.line)?;
+    if previous.head_snapshot.is_none() {
+        bail!("pull requires a populated line; use git clone or git fetch for initial history");
+    }
+    let policy = if args.domains.is_empty() {
+        previous.policy.clone()
+    } else {
+        policy_from_domains(args.domains.clone())
+    };
+    fetch_history(
+        repo,
+        &args.remote,
+        &args.branch,
+        &args.line,
+        &args.as_actor,
+        policy,
+    )?;
+    let updated = read_line(repo, &args.line)?;
+    let tip = updated
+        .head_snapshot
+        .as_deref()
+        .context("pulled line has no snapshot")?;
+    // Import may assign an initially absent workspace pointer. Materialization
+    // must compare against the actual pre-command workspace, not that overlay.
+    write_json(repo, &repo.path(&["workspace.json"]), &before)?;
+    if previous.head_snapshot == updated.head_snapshot && before.current_change.is_some() {
+        println!("remote tip unchanged; workspace preserved");
+        return Ok(());
+    }
+    if let Some(saved) = current
+        .as_ref()
+        .and_then(|change| change.current_snapshot.as_deref())
+    {
+        let saved = read_snapshot(repo, saved)?;
+        let base = ancestry::merge_base(repo, Some(tip), &saved, None)?;
+        if base.as_ref().map(|snapshot| &snapshot.id) != Some(&saved.id) {
+            bail!("current change has saved work absent from the incoming line; integrate or switch before pulling");
+        }
+    }
+    let snapshot = read_snapshot(repo, tip)?;
+    checkout::restore(repo, Some(tip), false, &args.as_actor)?;
+    create_change(
+        repo,
+        &format!("pull {}", args.line),
+        &args.line,
+        snapshot.policy,
+    )?;
+    println!(
+        "pulled {} into {}; new change is ready",
+        args.branch, args.line
+    );
+    Ok(())
 }
 
 pub(super) fn push(repo: &Repo, args: &GitPushArgs) -> Result<()> {

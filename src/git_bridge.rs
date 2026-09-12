@@ -336,7 +336,9 @@ pub(super) fn import(
     actor_name: &str,
     policy: AccessPolicy,
 ) -> Result<()> {
-    import_history(repo, source, revision, into, actor_name, policy, false)
+    let imported = import_history(repo, source, revision, into, actor_name, policy, false)?;
+    report_import(imported, into, actor_name);
+    Ok(())
 }
 
 pub(super) fn import_history(
@@ -347,7 +349,7 @@ pub(super) fn import_history(
     actor_name: &str,
     policy: AccessPolicy,
     allow_update: bool,
-) -> Result<()> {
+) -> Result<usize> {
     verify::check(repo, actor_name)?;
     validate_named_key(into)?;
     let source = fs::canonicalize(source).context("Git import requires a local repository path")?;
@@ -551,12 +553,12 @@ pub(super) fn import_history(
         None,
     )?;
     verify::check(repo, actor_name)?;
-    println!(
-        "imported {} Git commits into {into}; working files are unchanged",
-        imported
-    );
+    Ok(imported)
+}
+
+pub(super) fn report_import(imported: usize, into: &str, actor_name: &str) {
+    println!("imported {imported} Git commits into {into}; working files are unchanged");
     println!("use workspace switch or workspace restore --discard-changes --as {actor_name} to materialize saved files");
-    Ok(())
 }
 
 #[derive(Clone)]

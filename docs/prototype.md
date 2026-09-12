@@ -754,3 +754,22 @@ An interrupted publication can leave an unreferenced blob, which `repo verify`
 reports; it cannot advance the line without the referenced content. Saved explicit
 resolutions take precedence. Integration does not replace working files; restore the
 new line-head snapshot when ready to materialize and test the combined result.
+
+### Fast-forward pull
+
+`rgit git pull REMOTE --branch main --line main --as admin` fetches into an existing,
+populated line and materializes a fast-forward update. Newly imported commits inherit
+the line policy unless `--domain` is supplied. A successful update selects a new,
+empty change based on the exact pulled snapshot; earlier changes remain saved.
+
+Pull refuses a workspace targeting another line, divergent line history, saved work
+absent from the incoming history, dirty tracked files, and untracked collisions. It
+stages the import, working-file changes, workspace pointer and new change in the same
+command journal. A refusal preserves saved records and working files, although fetch
+may leave verified unreferenced blobs. An unchanged remote tip preserves the current
+workspace, including later edits. There is no discard/force option.
+
+Use clone or explicit fetch for initial history. Divergent work still requires
+fetching into a separate tracking line and explicit integration/resolution. Pull
+uses the existing Git authentication/transport protections and checkout recovery;
+it does not add native service authentication or a new merge strategy.
