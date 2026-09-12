@@ -171,6 +171,12 @@ fn new_identifiers_keep_full_uuid_entropy_and_legacy_changes_remain_readable() {
     change["id"] = json!(legacy_id);
     fs::write(&legacy_path, serde_json::to_vec(&change).unwrap()).unwrap();
     fs::remove_file(full_path).unwrap();
+    // Keep the fixture's operation references consistent with the legacy identity.
+    for operation in fs::read_dir(repo.0.join(".rgit/operations")).unwrap() {
+        let path = operation.unwrap().path();
+        let document = fs::read_to_string(&path).unwrap();
+        fs::write(path, document.replace(&full_id, legacy_id)).unwrap();
+    }
     fs::write(
         repo.0.join(".rgit/workspace.json"),
         serde_json::to_vec(&json!({"current_change": legacy_id})).unwrap(),
