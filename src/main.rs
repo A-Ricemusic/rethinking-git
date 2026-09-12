@@ -1470,11 +1470,11 @@ fn merge_preview(
     let incoming = read_snapshot(repo, incoming_snapshot_id)?;
 
     if change.target_line != line.name {
-        println!(
-            "change `{}` targets `{}`, not `{}`",
-            change.id, change.target_line, line.name
+        bail!(
+            "change targets `{}`, not `{}`; use `change retarget` to change its target first",
+            change.target_line,
+            line.name
         );
-        return Ok(());
     }
 
     let base_snapshot = ancestry::merge_base(
@@ -1634,11 +1634,11 @@ fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> 
     let incoming = read_snapshot(repo, incoming_snapshot_id)?;
 
     if change.target_line != line.name {
-        println!(
-            "change `{}` targets `{}`, not `{}`",
-            change.id, change.target_line, line.name
+        bail!(
+            "change targets `{}`, not `{}`; use `change retarget` to change its target first",
+            change.target_line,
+            line.name
         );
-        return Ok(());
     }
 
     let base_snapshot = ancestry::merge_base(

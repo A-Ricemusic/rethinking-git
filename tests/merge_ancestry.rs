@@ -285,3 +285,35 @@ fn saved_parent_resolution_cannot_publish_a_file_above_merged_descendants() {
     assert_eq!(snapshot["files"][0]["path"], "a");
     repo.ok(&["repo", "verify", "--as", "admin"]);
 }
+
+#[test]
+fn wrong_target_is_a_nonzero_refusal_and_explicit_retarget_allows_integration() {
+    let repo = Repo::new();
+    repo.ok(&["line", "create", "dev"]);
+    repo.ok(&["change", "new", "targeted", "--target", "dev"]);
+    fs::write(repo.0.join("file"), "saved").unwrap();
+    repo.ok(&["snapshot"]);
+    let line = repo.json("lines/main.json");
+    let workspace = repo.json("workspace.json");
+    let operations = fs::read_dir(repo.0.join(".rgit/operations"))
+        .unwrap()
+        .count();
+    for args in [&["merge", "preview"][..], &["line", "integrate"][..]] {
+        let output = repo.run(args);
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert!(error.contains("targets `dev`") && error.contains("change retarget"));
+        assert_eq!(repo.json("lines/main.json"), line);
+        assert_eq!(repo.json("workspace.json"), workspace);
+        assert_eq!(
+            fs::read_dir(repo.0.join(".rgit/operations"))
+                .unwrap()
+                .count(),
+            operations
+        );
+    }
+    repo.ok(&["change", "retarget", "main"]);
+    repo.ok(&["line", "integrate"]);
+    repo.ok(&["repo", "verify", "--as", "admin"]);
+}
