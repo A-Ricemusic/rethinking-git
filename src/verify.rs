@@ -94,6 +94,10 @@ fn verify_with_output(repo: &Repo, actor_name: &str, report: bool) -> Result<()>
                 bytes.len() as u64 == file.bytes && hash_bytes(&bytes) == file.hash,
                 "blob digest or length",
             )?;
+            if file.symlink {
+                transaction::validate_link(&bytes)?;
+                require(!file.executable, "symlink mode")?;
+            }
             referenced_blobs.insert(file.hash.clone());
         }
         for path in &paths {

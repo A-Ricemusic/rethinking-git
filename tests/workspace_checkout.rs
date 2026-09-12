@@ -205,3 +205,40 @@ fn restore_preserves_private_read_write_permissions() {
         0o600
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn links_are_replaced_without_touching_referents_and_type_changes_are_dirty() {
+    use std::os::unix::fs::symlink;
+    let repo = Repo::new();
+    let outside = Repo::new();
+    fs::write(outside.0.join("valuable"), "preserve").unwrap();
+    repo.change();
+    let target = outside.0.join("valuable");
+    symlink(&target, repo.0.join("link")).unwrap();
+    repo.ok(&["snapshot"]);
+    fs::remove_file(repo.0.join("link")).unwrap();
+    fs::write(repo.0.join("link"), target.as_os_str().as_encoded_bytes()).unwrap();
+    assert!(!repo
+        .run(&["workspace", "restore", "--as", "admin"])
+        .status
+        .success());
+    repo.ok(&["workspace", "restore", "--discard-changes", "--as", "admin"]);
+    assert_eq!(fs::read_link(repo.0.join("link")).unwrap(), target);
+    assert_eq!(
+        fs::read_to_string(outside.0.join("valuable")).unwrap(),
+        "preserve"
+    );
+    // Save a regular file, then restore it over a link with identical target bytes.
+    fs::remove_file(repo.0.join("link")).unwrap();
+    fs::write(repo.0.join("link"), "other-target").unwrap();
+    repo.ok(&["snapshot"]);
+    fs::remove_file(repo.0.join("link")).unwrap();
+    symlink("other-target", repo.0.join("link")).unwrap();
+    repo.ok(&["workspace", "restore", "--discard-changes", "--as", "admin"]);
+    assert!(!fs::symlink_metadata(repo.0.join("link"))
+        .unwrap()
+        .file_type()
+        .is_symlink());
+    assert_eq!(fs::read(repo.0.join("link")).unwrap(), b"other-target");
+}

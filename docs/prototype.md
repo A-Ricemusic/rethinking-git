@@ -305,7 +305,7 @@ Actor-filtered commands redact references to snapshots and changes whose metadat
 
 Snapshots preserve UTF-8 filenames exactly, including spaces and literal Unix backslashes. Access path policies use host path separators and repository-relative paths; they reject absolute paths and parent traversal. On Unix, a backslash is a literal filename character.
 
-The JSON prototype cannot represent symlinks, special files, or non-UTF-8 names faithfully, so scanning now refuses them instead of publishing an incomplete snapshot. This is a temporary safety boundary until those entry types are implemented. File modes, ignore rules, and cross-platform filename collision checks are still pending.
+The compatibility scanner preserves UTF-8 names, regular files, executable bits and symlink targets. Special files and non-UTF-8 names are refused instead of silently omitted. Portable collision checks and capture-race qualification remain pending.
 
 Before reusing an existing blob, snapshot creation verifies its contents against the captured bytes and refuses a mismatch without advancing the change. This detects preexisting corruption; it does not make the legacy multi-file write sequence transactional or safe against concurrent hostile filesystem changes.
 
@@ -359,7 +359,7 @@ instead of overwriting the new edits. Preserve the whole repository and those ed
 before manually reconciling that state. Journal schema 2 upgrades schema 1 on open;
 older transaction clients refuse the newer schema.
 
-Snapshots record regular-file bytes, access policies, and the executable bit.
+Snapshots record file bytes, access policies, the executable bit and symlink type.
 Unix snapshots detect mode-only edits; checkout restores the executable bit while
 preserving existing read/write permissions. Recreated files use the process umask.
 Legacy records without the bit remain non-executable and keep their manifest hash.
@@ -414,7 +414,7 @@ bases (criss-cross history) are refused pending recursive merge support.
 
 `rgit git export /outside/path/new.git --line main --author 'Name <email>' --as admin`
 creates a new bare Git repository containing the selected line's saved ancestry,
-messages, regular-file bytes, executable modes and merge parents. Git must be installed.
+messages, file bytes, symlink targets, executable modes and merge parents. Git must be installed.
 The explicit identity is required for native snapshots because they did not record
 per-snapshot authors; untouched imported commits retain their original identities. The result is checked with `git fsck --full --strict` and can
 be cloned with Git after export succeeds.
@@ -427,7 +427,7 @@ repository variables so they cannot redirect writes. An interrupted export beari
 
 Export writes verified Git objects through Git's [hash-object interface](https://git-scm.com/docs/git-hash-object).
 This preserves raw imported commit metadata rather than regenerating signatures or
-author headers. Tags, additional refs, symlinks and submodules still require support.
+author headers. Tags, additional refs and submodules still require support.
 
 
 ### Importing Git history
@@ -440,7 +440,7 @@ metadata publishes as one command transaction. Working files remain unchanged un
 you switch or explicitly restore. Unsupported trees fail without advancing native
 references; failed imports can leave verified unreferenced blobs.
 
-For supported regular-file histories, untouched commits round-trip with their exact
+For supported regular-file and symlink histories, untouched commits round-trip with their exact
 Git IDs, raw metadata, authors, timestamps, signatures, modes and parent order. SHA-1
 and SHA-256 repositories are supported; an export cannot mix object formats. Native
 edits can extend imported history, with `--author` supplying identity for new native
@@ -449,7 +449,7 @@ raw metadata, native files, parents, display messages and timestamps. Signature 
 are preserved, but trust in signing keys remains Git's responsibility.
 
 Import currently requires a local repository and an empty target line. Tags and
-additional named refs are not imported. Symlinks, submodules, non-UTF-8 names, empty
+additional named refs are not imported. Submodules, non-UTF-8 names, empty
 Git tree entries, unsupported reserved paths and excessive nesting are refused,
 not silently rewritten. This is a bounded compatibility path, not complete Git
 repository migration or native authenticated synchronization.
@@ -510,3 +510,28 @@ compatibility store, implement native per-object authorization, or replace Git i
 Each fetch currently uses a fresh temporary bare clone; transfer resumption, named
 remote configuration, tags, all-ref synchronization and native remote services remain
 open.
+
+
+### Symbolic links
+
+Snapshots store a symlink's target bytes and logical type, never its referent. On
+Unix, restore creates real links, including dangling links and links pointing outside
+the repository, without reading or modifying those targets. Symlink parents are
+still refused during materialization. A regular file and a link containing identical
+target bytes remain different entries for diff, merge and dirty-worktree checks.
+Git import/export preserve mode `120000` and target blobs in both object formats.
+
+On Windows, imported links materialize as regular files containing the target text,
+without requiring link-creation privileges. Subsequent snapshots retain the logical
+link type from the current saved baseline. This fallback does not provide executable
+OS links or an explicit Windows link-to-regular conversion command. Unix target bytes
+may be non-UTF-8; tracked path names must still be UTF-8. Empty/NUL-containing targets,
+executable symlink metadata and symlinked ignore-rule files are refused.
+
+Command journal schema 4 records old/new link type with content and executable mode.
+Recovery accepts only the old or new entry state; a later type change stops recovery
+even when bytes match. Older journals migrate their regular-file records. Older
+binaries refuse the new journal version, so preserve a verified backup before
+upgrading. Tests include subprocess interruption after link replacement, later-edit
+refusal, referent preservation, and Git round trips. Same-principal filesystem races,
+file/directory transitions and platform durability qualification remain open.

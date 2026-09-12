@@ -36,6 +36,14 @@ impl CommandTransaction {
         if columns == 0 {
             journal.execute_batch("BEGIN IMMEDIATE; ALTER TABLE working ADD COLUMN before_executable INTEGER; ALTER TABLE working ADD COLUMN after_executable INTEGER; COMMIT;")?;
         }
+        let columns: i64 = journal.query_row(
+            "SELECT count(*) FROM pragma_table_info('working') WHERE name='before_symlink'",
+            [],
+            |r| r.get(0),
+        )?;
+        if columns == 0 {
+            journal.execute_batch("BEGIN IMMEDIATE; ALTER TABLE working ADD COLUMN before_symlink INTEGER; ALTER TABLE working ADD COLUMN after_symlink INTEGER; COMMIT;")?;
+        }
         let result = Self {
             root: root.to_path_buf(),
             _lock: lock,
@@ -106,7 +114,11 @@ impl CommandTransaction {
         for (key, update) in self.working.borrow().iter() {
             let current = read_working(&self.workspace_root()?, key)?;
             if current != update.before
-                || !matches_mode(&self.workspace_root()?.join(key), update.before_executable)?
+                || !matches_flags(
+                    &self.workspace_root()?.join(key),
+                    update.before_executable,
+                    update.before_symlink,
+                )?
             {
                 bail!("working file changed during command: {key}");
             }
@@ -114,13 +126,15 @@ impl CommandTransaction {
         let transaction = self.journal.unchecked_transaction()?;
         for (key, update) in self.working.borrow().iter() {
             transaction.execute(
-                "INSERT INTO working VALUES (?1, ?2, ?3, ?4, ?5)",
+                "INSERT INTO working VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                 rusqlite::params![
                     key,
                     update.before,
                     update.after,
                     update.before_executable,
-                    update.after_executable
+                    update.after_executable,
+                    update.before_symlink,
+                    update.after_symlink
                 ],
             )?;
         }
@@ -153,7 +167,7 @@ impl CommandTransaction {
         let working = {
             let mut query = self
                 .journal
-                .prepare("SELECT path, before_bytes, after_bytes, before_executable, after_executable FROM working ORDER BY path")?;
+                .prepare("SELECT path, before_bytes, after_bytes, before_executable, after_executable, before_symlink, after_symlink FROM working ORDER BY path")?;
             let rows = query.query_map([], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
@@ -162,17 +176,38 @@ impl CommandTransaction {
                         after: row.get(2)?,
                         before_executable: row.get(3)?,
                         after_executable: row.get(4)?,
+                        before_symlink: row.get(5)?,
+                        after_symlink: row.get(6)?,
                     },
                 ))
             })?;
             rows.collect::<std::result::Result<Vec<_>, _>>()?
         };
         for (key, update) in &working {
+            if update.after_symlink == Some(true) {
+                validate_link(
+                    update
+                        .after
+                        .as_deref()
+                        .context("symlink journal target missing")?,
+                )?;
+                if update.after_executable == Some(true) {
+                    bail!("symlink journal mode is invalid");
+                }
+            }
             let current = read_working(&self.workspace_root()?, key)?;
             if (current != update.before
-                || !matches_mode(&self.workspace_root()?.join(key), update.before_executable)?)
+                || !matches_flags(
+                    &self.workspace_root()?.join(key),
+                    update.before_executable,
+                    update.before_symlink,
+                )?)
                 && (current != update.after
-                    || !matches_mode(&self.workspace_root()?.join(key), update.after_executable)?)
+                    || !matches_flags(
+                        &self.workspace_root()?.join(key),
+                        update.after_executable,
+                        update.after_symlink,
+                    )?)
             {
                 bail!("recovery stopped: working file was edited after interrupted command: {key}");
             }
@@ -222,12 +257,12 @@ fn open_database(path: &Path) -> Result<Connection> {
             if tables != 0 {
                 bail!("unrecognized command transaction database");
             }
-            connection.execute_batch("PRAGMA application_id=1380402004; PRAGMA user_version=3;")?;
+            connection.execute_batch("PRAGMA application_id=1380402004; PRAGMA user_version=4;")?;
         }
-        (1380402004, 1 | 2) => {
-            connection.execute_batch("PRAGMA user_version=3;")?;
+        (1380402004, 1..=3) => {
+            connection.execute_batch("PRAGMA user_version=4;")?;
         }
-        (1380402004, 3) => {}
+        (1380402004, 4) => {}
         _ => bail!("unsupported command transaction database format"),
     }
     connection.execute_batch("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;")?;
@@ -269,16 +304,22 @@ fn check_path(root: &Path, path: &Path) -> Result<()> {
 
 /// Publish complete bytes before references can point to them.
 pub(crate) fn publish_file(path: &Path, bytes: &[u8]) -> Result<()> {
-    publish_file_with_mode(path, bytes, None)
+    publish_file_with_mode(path, bytes, None, false)
 }
 
-fn publish_file_with_mode(path: &Path, bytes: &[u8], executable: Option<bool>) -> Result<()> {
+fn publish_file_with_mode(
+    path: &Path,
+    bytes: &[u8],
+    executable: Option<bool>,
+    working: bool,
+) -> Result<()> {
     let parent = path.parent().context("file has no parent")?;
     ensure_directory(parent)?;
     let permissions = match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.is_file() && !metadata.file_type().is_symlink() => {
             Some(metadata.permissions())
         }
+        Ok(metadata) if working && metadata.file_type().is_symlink() => None,
         Ok(_) => bail!("publication target is not a regular file"),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
         Err(error) => return Err(error.into()),
@@ -324,6 +365,8 @@ struct WorkingUpdate {
     after: Option<Vec<u8>>,
     before_executable: Option<bool>,
     after_executable: Option<bool>,
+    before_symlink: Option<bool>,
+    after_symlink: Option<bool>,
 }
 
 impl CommandTransaction {
@@ -340,17 +383,22 @@ impl CommandTransaction {
         key: &str,
         before: Option<Vec<u8>>,
         after: Option<Vec<u8>>,
-        before_executable: bool,
-        after_executable: bool,
+        before_flags: WorkingFlags,
+        after_flags: WorkingFlags,
     ) -> Result<()> {
         working_path(&self.workspace_root()?, key)?;
+        if after_flags.symlink {
+            validate_link(after.as_deref().context("symlink update has no target")?)?;
+        }
         self.working.borrow_mut().insert(
             key.to_string(),
             WorkingUpdate {
                 before,
                 after,
-                before_executable: Some(before_executable),
-                after_executable: Some(after_executable),
+                before_executable: Some(before_flags.executable),
+                after_executable: Some(after_flags.executable),
+                before_symlink: Some(before_flags.symlink),
+                after_symlink: Some(after_flags.symlink),
             },
         );
         Ok(())
@@ -387,13 +435,20 @@ pub(crate) fn working_path(root: &Path, key: &str) -> Result<PathBuf> {
     for (index, part) in relative.components().enumerate() {
         path.push(part);
         match fs::symlink_metadata(&path) {
-            Ok(metadata) if metadata.file_type().is_symlink() => {
+            Ok(metadata)
+                if metadata.file_type().is_symlink()
+                    && index + 1 < relative.components().count() =>
+            {
                 bail!("working path traverses a symlink: {key}")
             }
             Ok(metadata) if index + 1 < relative.components().count() && !metadata.is_dir() => {
                 bail!("working path has a non-directory parent: {key}")
             }
-            Ok(metadata) if index + 1 == relative.components().count() && !metadata.is_file() => {
+            Ok(metadata)
+                if index + 1 == relative.components().count()
+                    && !metadata.is_file()
+                    && !metadata.file_type().is_symlink() =>
+            {
                 bail!("working path is not a regular file: {key}")
             }
             Ok(_) => {}
@@ -406,6 +461,9 @@ pub(crate) fn working_path(root: &Path, key: &str) -> Result<PathBuf> {
 
 pub(crate) fn read_working(root: &Path, key: &str) -> Result<Option<Vec<u8>>> {
     let path = working_path(root, key)?;
+    if fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_symlink()) {
+        return Ok(Some(read_link_bytes(&path)?));
+    }
     match fs::read(path) {
         Ok(bytes) => Ok(Some(bytes)),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -416,11 +474,15 @@ pub(crate) fn read_working(root: &Path, key: &str) -> Result<Option<Vec<u8>>> {
 fn publish_working(root: &Path, key: &str, update: &WorkingUpdate) -> Result<()> {
     let path = working_path(root, key)?;
     let current = read_working(root, key)?;
-    if current == update.after && matches_mode(&path, update.after_executable)? {
+    if current == update.after
+        && matches_flags(&path, update.after_executable, update.after_symlink)?
+    {
         return Ok(());
     }
-    if (current != update.before || !matches_mode(&path, update.before_executable)?)
-        && current != update.after
+    if (current != update.before
+        || !matches_flags(&path, update.before_executable, update.before_symlink)?)
+        && (current != update.after
+            || !matches_flags(&path, update.after_executable, update.after_symlink)?)
     {
         bail!("working file changed during recovery: {key}");
     }
@@ -436,7 +498,11 @@ fn publish_working(root: &Path, key: &str, update: &WorkingUpdate) -> Result<()>
             }
             ensure_directory(&directory)?;
         }
-        publish_file_with_mode(&path, bytes, update.after_executable)?;
+        if cfg!(unix) && update.after_symlink == Some(true) {
+            publish_link(&path, bytes)?;
+        } else {
+            publish_file_with_mode(&path, bytes, update.after_executable, true)?;
+        }
     } else {
         fs::remove_file(&path)?;
         #[cfg(unix)]
@@ -449,7 +515,8 @@ pub(crate) fn is_executable(path: &Path) -> Result<bool> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        Ok(fs::metadata(path)?.permissions().mode() & 0o111 != 0)
+        let metadata = fs::symlink_metadata(path)?;
+        Ok(!metadata.file_type().is_symlink() && metadata.permissions().mode() & 0o111 != 0)
     }
     #[cfg(not(unix))]
     {
@@ -458,19 +525,89 @@ pub(crate) fn is_executable(path: &Path) -> Result<bool> {
     }
 }
 
-fn matches_mode(path: &Path, expected: Option<bool>) -> Result<bool> {
+fn matches_flags(path: &Path, expected: Option<bool>, symlink: Option<bool>) -> Result<bool> {
     #[cfg(unix)]
     {
-        if !path.exists() {
-            return Ok(true);
+        let metadata = match fs::symlink_metadata(path) {
+            Ok(metadata) => metadata,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(true),
+            Err(e) => return Err(e.into()),
+        };
+        if symlink.is_some_and(|expected| expected != metadata.file_type().is_symlink()) {
+            return Ok(false);
         }
         Ok(expected
             .is_none_or(|expected| is_executable(path).is_ok_and(|actual| actual == expected)))
     }
     #[cfg(not(unix))]
     {
-        let _ = (path, expected);
+        let _ = (path, expected, symlink);
         Ok(true)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct WorkingFlags {
+    pub executable: bool,
+    pub symlink: bool,
+}
+
+pub(crate) fn working_flags(path: &Path) -> Result<WorkingFlags> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => Ok(WorkingFlags {
+            executable: is_executable(path)?,
+            symlink: metadata.file_type().is_symlink(),
+        }),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(WorkingFlags::default()),
+        Err(e) => Err(e.into()),
+    }
+}
+
+pub(crate) fn validate_link(bytes: &[u8]) -> Result<()> {
+    if bytes.is_empty() || bytes.contains(&0) {
+        bail!("symlink target must be nonempty and contain no NUL");
+    }
+    Ok(())
+}
+
+pub(crate) fn read_link_bytes(path: &Path) -> Result<Vec<u8>> {
+    let target = fs::read_link(path)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        Ok(target.as_os_str().as_bytes().to_vec())
+    }
+    #[cfg(not(unix))]
+    {
+        Ok(target
+            .to_str()
+            .context("symlink target must be UTF-8 on this platform")?
+            .as_bytes()
+            .to_vec())
+    }
+}
+
+fn publish_link(path: &Path, bytes: &[u8]) -> Result<()> {
+    validate_link(bytes)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::{ffi::OsStrExt, fs::symlink};
+        let parent = path.parent().context("symlink has no parent")?;
+        ensure_directory(parent)?;
+        let temporary = parent.join(format!(".rgit-publish-{}", uuid::Uuid::new_v4().simple()));
+        symlink(std::ffi::OsStr::from_bytes(bytes), &temporary)?;
+        let result = fs::rename(&temporary, path);
+        if result.is_err() {
+            let _ = fs::remove_file(&temporary);
+        }
+        result?;
+        fs::File::open(parent)?.sync_all()?;
+        Ok(())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        bail!("native symlink publication is unsupported on this platform")
     }
 }
 
@@ -637,6 +774,77 @@ mod tests {
                 assert_eq!(fs::read(repository.0.join("second.txt")).unwrap(), b"new");
                 assert_eq!(
                     recovered.read(&meta.join("workspace.json")).unwrap(),
+                    b"new pointer"
+                );
+            }
+        }
+    }
+    #[cfg(unix)]
+    #[test]
+    #[ignore = "symlink interruption subprocess helper"]
+    fn symlink_interruption_child() {
+        let root = PathBuf::from(std::env::var_os("RGIT_SYMLINK_CRASH_ROOT").unwrap());
+        let command = CommandTransaction::open(&root.join(".rgit")).unwrap();
+        let transaction = command.journal.unchecked_transaction().unwrap();
+        transaction
+            .execute(
+                "INSERT INTO working VALUES ('link', ?1, ?2, 0, 0, 0, 1)",
+                rusqlite::params![b"old", b"../outside"],
+            )
+            .unwrap();
+        transaction
+            .execute(
+                "INSERT INTO pending VALUES ('workspace.json', ?1)",
+                [b"new pointer".as_slice()],
+            )
+            .unwrap();
+        transaction.commit().unwrap();
+        publish_link(&root.join("link"), b"../outside").unwrap();
+        std::process::exit(77);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_recovery_preserves_type_and_refuses_later_type_changes() {
+        for replace_with_regular in [false, true] {
+            let repo = Repository::new();
+            let meta = repo.0.join(".rgit");
+            fs::create_dir(&meta).unwrap();
+            fs::write(meta.join("workspace.json"), b"old pointer").unwrap();
+            fs::write(repo.0.join("link"), b"old").unwrap();
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "transaction::tests::symlink_interruption_child",
+                    "--ignored",
+                ])
+                .env("RGIT_SYMLINK_CRASH_ROOT", &repo.0)
+                .status()
+                .unwrap();
+            assert_eq!(status.code(), Some(77));
+            if replace_with_regular {
+                fs::remove_file(repo.0.join("link")).unwrap();
+                fs::write(repo.0.join("link"), b"../outside").unwrap();
+            }
+            let recovered = CommandTransaction::open(&meta);
+            if replace_with_regular {
+                assert!(recovered.is_err());
+                assert_eq!(
+                    fs::read(meta.join("workspace.json")).unwrap(),
+                    b"old pointer"
+                );
+                assert!(!fs::symlink_metadata(repo.0.join("link"))
+                    .unwrap()
+                    .file_type()
+                    .is_symlink());
+            } else {
+                recovered.unwrap();
+                assert_eq!(
+                    fs::read_link(repo.0.join("link")).unwrap(),
+                    PathBuf::from("../outside")
+                );
+                assert_eq!(
+                    fs::read(meta.join("workspace.json")).unwrap(),
                     b"new pointer"
                 );
             }

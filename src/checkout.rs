@@ -75,7 +75,7 @@ fn verified_files(
     repo: &Repo,
     actor: &Actor,
     snapshot: &Option<Snapshot>,
-) -> Result<BTreeMap<String, (Vec<u8>, bool)>> {
+) -> Result<BTreeMap<String, (Vec<u8>, transaction::WorkingFlags)>> {
     let Some(snapshot) = snapshot else {
         return Ok(BTreeMap::new());
     };
@@ -115,8 +115,14 @@ fn verified_files(
         if bytes.len() as u64 != file.bytes || hash_bytes(&bytes) != file.hash {
             bail!("stored blob failed verification");
         }
+        if file.symlink {
+            transaction::validate_link(&bytes)?;
+            if file.executable {
+                bail!("symlink cannot be executable");
+            }
+        }
         if files
-            .insert(file.path.clone(), (bytes, file.executable))
+            .insert(file.path.clone(), (bytes, file.flags()))
             .is_some()
         {
             bail!("snapshot contains duplicate paths");
@@ -148,29 +154,24 @@ fn stage_checkout(
         let current = transaction::read_working(&repo.root, path)?;
         let previous = before.get(path).map(|v| &v.0);
         let target = after.get(path).map(|v| &v.0);
-        let current_executable = if current.is_some() {
-            transaction::is_executable(&repo.root.join(path))?
-        } else {
-            false
-        };
-        let before_executable = before.get(path).is_some_and(|v| v.1);
-        let after_executable = after.get(path).is_some_and(|v| v.1);
+        let current_flags = transaction::working_flags(&repo.root.join(path))?;
+        let before_flags = before.get(path).map(|v| v.1).unwrap_or_default();
+        let after_flags = after.get(path).map(|v| v.1).unwrap_or_default();
         if previous.is_none() && current.is_some() {
             bail!("checkout would overwrite an untracked file: {path}");
         }
         if !discard
-            && (current.as_ref() != previous
-                || (cfg!(unix) && current_executable != before_executable))
+            && (current.as_ref() != previous || (cfg!(unix) && current_flags != before_flags))
         {
             bail!("tracked file has local changes: {path}; snapshot first or explicitly restore with --discard-changes");
         }
-        if current.as_ref() != target || (cfg!(unix) && current_executable != after_executable) {
+        if current.as_ref() != target || (cfg!(unix) && current_flags != after_flags) {
             repo.transaction.stage_working(
                 path,
                 current,
                 target.cloned(),
-                current_executable,
-                after_executable,
+                current_flags,
+                after_flags,
             )?;
         }
     }

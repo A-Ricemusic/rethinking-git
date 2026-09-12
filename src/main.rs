@@ -488,12 +488,23 @@ struct Snapshot {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct FileEntry {
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    symlink: bool,
     path: String,
     #[serde(default, skip_serializing_if = "is_false")]
     executable: bool,
     hash: String,
     bytes: u64,
     policy: AccessPolicy,
+}
+
+impl FileEntry {
+    fn flags(&self) -> transaction::WorkingFlags {
+        transaction::WorkingFlags {
+            executable: self.executable,
+            symlink: self.symlink,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -2265,10 +2276,10 @@ fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
             .unwrap_or_default(),
     );
     #[cfg(not(unix))]
-    let inherited_modes: BTreeMap<String, bool> = baseline
+    let inherited_modes: BTreeMap<String, transaction::WorkingFlags> = baseline
         .into_iter()
         .flat_map(|s| s.files)
-        .map(|f| (f.path, f.executable))
+        .map(|f| (f.path.clone(), f.flags()))
         .collect();
     let mut walker = WalkDir::new(&repo.root).into_iter();
     while let Some(entry) = walker.next() {
@@ -2285,12 +2296,16 @@ fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
         if entry.file_type().is_dir() {
             continue;
         }
-        if !entry.file_type().is_file() {
-            bail!("unsupported filesystem entry; symlinks and special files cannot be captured by this prototype");
+        if !entry.file_type().is_file() && !entry.file_type().is_symlink() {
+            bail!("unsupported special filesystem entry");
         }
 
         let path = entry.path();
-        let bytes = fs::read(path).with_context(|| format!("failed to read {}", path.display()))?;
+        let bytes = if entry.file_type().is_symlink() {
+            transaction::read_link_bytes(path)?
+        } else {
+            fs::read(path).with_context(|| format!("failed to read {}", path.display()))?
+        };
         let hash = hash_bytes(&bytes);
         let relative_path = repository_relative_path(
             path.strip_prefix(&repo.root)
@@ -2312,14 +2327,25 @@ fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
             }
         }
 
+        #[cfg(unix)]
+        let symlink = entry.file_type().is_symlink();
+        #[cfg(not(unix))]
+        let symlink = entry.file_type().is_symlink()
+            || inherited_modes
+                .get(&relative_path)
+                .is_some_and(|f| f.symlink);
+        if symlink {
+            transaction::validate_link(&bytes)?;
+        }
         files.push(FileEntry {
+            symlink,
             #[cfg(unix)]
             executable: transaction::is_executable(path)?,
             #[cfg(not(unix))]
-            executable: inherited_modes
-                .get(&relative_path)
-                .copied()
-                .unwrap_or(false),
+            executable: !symlink
+                && inherited_modes
+                    .get(&relative_path)
+                    .is_some_and(|f| f.executable),
             policy: policy_for_path(&relative_path, &path_policies),
             path: relative_path,
             hash,
@@ -2694,6 +2720,7 @@ mod tests {
 
     fn file(path: &str, hash: &str, domains: &[&str]) -> FileEntry {
         FileEntry {
+            symlink: false,
             executable: false,
             path: path.to_string(),
             hash: hash.to_string(),

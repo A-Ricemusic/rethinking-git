@@ -169,10 +169,29 @@ fn import_refuses_nonempty_target_and_unsupported_entries_without_publishing() {
         .run(&["git", "import", source.0.to_str().unwrap(), "--as", "admin"])
         .status
         .success());
-    #[cfg(unix)]
     {
-        std::os::unix::fs::symlink("file.txt", source.0.join("link")).unwrap();
-        commit(&source, "symlink");
+        let head = String::from_utf8(git(&source, &["rev-parse", "HEAD"])).unwrap();
+        git(
+            &source,
+            &[
+                "update-index",
+                "--add",
+                "--cacheinfo",
+                &format!("160000,{},submodule", head.trim()),
+            ],
+        );
+        git(
+            &source,
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.test",
+                "commit",
+                "-m",
+                "submodule",
+            ],
+        );
         let empty = Repo::new();
         assert!(!empty
             .run(&["git", "import", source.0.to_str().unwrap(), "--as", "admin"])
@@ -304,4 +323,80 @@ fn importing_shared_history_into_another_line_reuses_native_ancestors() {
     .unwrap();
     assert_eq!(snapshot["parent_snapshot"], first["head_snapshot"]);
     native.ok(&["repo", "verify", "--as", "admin"]);
+}
+
+#[test]
+fn symlink_trees_round_trip_and_restore_with_platform_semantics() {
+    for format in ["sha1", "sha256"] {
+        let source = Repo(destination());
+        fs::create_dir(&source.0).unwrap();
+        git(
+            &source,
+            &["init", "-b", "main", &format!("--object-format={format}")],
+        );
+        // Create a Git symlink through the index, even on Windows without link privileges.
+        fs::write(source.0.join("target-bytes"), "../missing-target").unwrap();
+        let blob = String::from_utf8(git(&source, &["hash-object", "-w", "target-bytes"])).unwrap();
+        git(
+            &source,
+            &[
+                "update-index",
+                "--add",
+                "--cacheinfo",
+                &format!("120000,{},link", blob.trim()),
+            ],
+        );
+        git(
+            &source,
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.test",
+                "commit",
+                "-m",
+                "link",
+            ],
+        );
+        let head = git(&source, &["rev-parse", "HEAD"]);
+        let native = Repo::new();
+        native.ok(&[
+            "git",
+            "import",
+            source.0.to_str().unwrap(),
+            "--as",
+            "admin",
+            "--domain",
+            "public",
+        ]);
+        native.ok(&["workspace", "restore", "--discard-changes", "--as", "admin"]);
+        #[cfg(unix)]
+        assert_eq!(
+            fs::read_link(native.0.join("link")).unwrap(),
+            PathBuf::from("../missing-target")
+        );
+        #[cfg(not(unix))]
+        assert_eq!(
+            fs::read(native.0.join("link")).unwrap(),
+            b"../missing-target"
+        );
+        // Capturing the materialization must retain the logical link type on Windows.
+        native.ok(&["snapshot"]);
+        let snapshots = fs::read_dir(native.0.join(".rgit/snapshots")).unwrap();
+        for snapshot in snapshots {
+            let value: serde_json::Value =
+                serde_json::from_slice(&fs::read(snapshot.unwrap().path()).unwrap()).unwrap();
+            assert_eq!(value["files"][0]["symlink"], true);
+        }
+        let exported = Repo(destination());
+        native.ok(&[
+            "git",
+            "export",
+            exported.0.to_str().unwrap(),
+            "--as",
+            "admin",
+        ]);
+        assert_eq!(git(&exported, &["rev-parse", "HEAD"]), head);
+        native.ok(&["repo", "verify", "--as", "admin"]);
+    }
 }
