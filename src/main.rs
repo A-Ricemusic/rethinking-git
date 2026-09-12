@@ -28,6 +28,7 @@ mod lines;
 mod resolution;
 mod status_json;
 mod text_diff;
+mod text_merge;
 mod transaction;
 mod tree_conflicts;
 mod verify;
@@ -1500,8 +1501,9 @@ fn merge_preview(
 
     let mut plan = plan_merge(base_files, line_files, incoming_files);
     resolution::apply_resolutions(repo, &actor, &line, &change, &incoming, &mut plan)?;
+    let generated = text_merge::apply(repo, &mut plan, &base_snapshot, &line_snapshot, &incoming)?;
     if plan.conflicts.is_empty() {
-        verify::verify_manifest(repo, &plan.merged_files)?;
+        text_merge::verify(repo, &plan, &generated)?;
     }
 
     println!("actor: {}", actor.name);
@@ -1677,6 +1679,7 @@ fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> 
     }
     let mut plan = plan_merge(base_files, line_files, incoming_files);
     resolution::apply_resolutions(repo, &actor, &line, &change, &incoming, &mut plan)?;
+    let generated = text_merge::apply(repo, &mut plan, &base_snapshot, &line_snapshot, &incoming)?;
 
     if !plan.conflicts.is_empty() {
         let conflicts = store_conflicts(
@@ -1696,7 +1699,8 @@ fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> 
         return Err(CliFailure::IntegrationConflicted.into());
     }
 
-    verify::verify_manifest(repo, &plan.merged_files)?;
+    text_merge::verify(repo, &plan, &generated)?;
+    text_merge::publish(repo, &generated)?;
 
     let integrated_policy = source_policy;
     let public_integration_message = if integrated_policy.domains == [PUBLIC_DOMAIN] {

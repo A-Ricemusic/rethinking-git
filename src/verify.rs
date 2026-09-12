@@ -334,9 +334,17 @@ pub(super) fn open_blob(repo: &Repo, hash: &str) -> Result<fs::File> {
 }
 
 pub(super) fn verify_manifest(repo: &Repo, files: &[FileEntry]) -> Result<()> {
-    let mut paths = BTreeSet::new();
+    verify_manifest_paths(files)?;
     for file in files {
         verify_file(repo, file)?;
+    }
+    Ok(())
+}
+
+pub(super) fn verify_manifest_paths(files: &[FileEntry]) -> Result<()> {
+    let mut paths = BTreeSet::new();
+    for file in files {
+        transaction::validate_working_key(&file.path)?;
         require(paths.insert(file.path.as_str()), "unique snapshot path")?;
     }
     for path in &paths {
