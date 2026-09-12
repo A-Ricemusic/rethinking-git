@@ -294,3 +294,9 @@ Operations record how state changed over time.
 Actors and path policies decide which objects are visible in commands that accept `--as`.
 
 This is not cryptographic security yet. It is the local policy and view model that real encrypted sync would enforce later.
+
+## Metadata visibility
+
+Actor-filtered commands redact references to snapshots and changes whose metadata the actor cannot read. A visible change does not grant access to a private snapshot message or parent ID. Public line views can still show permitted files while displaying `restricted` for the integration snapshot.
+
+`rgit workspace info` now defaults to the public actor; use `rgit workspace info --as admin` for the administrative view. These views remain local policy simulations, not authenticated access control.
