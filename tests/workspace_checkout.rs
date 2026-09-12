@@ -391,3 +391,94 @@ fn case_only_switch_is_refused_without_losing_the_saved_or_working_version() {
     assert_eq!(fs::read(repo.0.join("readme")).unwrap(), b"second");
     repo.ok(&["repo", "verify", "--as", "admin"]);
 }
+
+#[test]
+fn switches_file_and_directory_shapes_in_both_directions_without_metadata_edits() {
+    let repo = Repo::new();
+    let first = repo.change();
+    fs::write(repo.0.join("shape"), "file version").unwrap();
+    repo.ok(&["snapshot"]);
+    repo.ok(&["line", "integrate"]);
+    let second = repo.change();
+    fs::remove_file(repo.0.join("shape")).unwrap();
+    fs::create_dir_all(repo.0.join("shape/nested")).unwrap();
+    fs::write(repo.0.join("shape/nested/one"), "one").unwrap();
+    fs::write(repo.0.join("shape/two"), "two").unwrap();
+    repo.ok(&["snapshot"]);
+    for _ in 0..2 {
+        repo.ok(&["workspace", "switch", &first]);
+        assert_eq!(fs::read(repo.0.join("shape")).unwrap(), b"file version");
+        repo.ok(&["workspace", "switch", &second]);
+        assert_eq!(fs::read(repo.0.join("shape/nested/one")).unwrap(), b"one");
+        assert_eq!(fs::read(repo.0.join("shape/two")).unwrap(), b"two");
+    }
+    repo.ok(&["repo", "verify", "--as", "admin"]);
+}
+
+#[test]
+fn replacing_a_directory_refuses_untracked_files_even_with_discard() {
+    let repo = Repo::new();
+    let first = repo.change();
+    fs::write(repo.0.join("shape"), "saved file").unwrap();
+    let snapshot = repo.ok(&["snapshot"]);
+    let snapshot = snapshot
+        .split_whitespace()
+        .find(|word| word.starts_with("snap_"))
+        .unwrap();
+    let second = repo.change();
+    fs::remove_file(repo.0.join("shape")).unwrap();
+    fs::create_dir(repo.0.join("shape")).unwrap();
+    fs::write(repo.0.join("shape/tracked"), "saved child").unwrap();
+    repo.ok(&["snapshot"]);
+    fs::write(repo.0.join("shape/untracked"), "keep me").unwrap();
+    for command in [
+        vec!["workspace", "switch", &first],
+        vec![
+            "workspace",
+            "restore",
+            "--from",
+            snapshot,
+            "--discard-changes",
+        ],
+    ] {
+        let output = repo.run(&command);
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("untracked"));
+        assert_eq!(repo.current(), second);
+        assert_eq!(
+            fs::read(repo.0.join("shape/untracked")).unwrap(),
+            b"keep me"
+        );
+        assert_eq!(
+            fs::read(repo.0.join("shape/tracked")).unwrap(),
+            b"saved child"
+        );
+    }
+    fs::remove_file(repo.0.join("shape/untracked")).unwrap();
+    fs::create_dir(repo.0.join("shape/.git")).unwrap();
+    assert!(!repo.run(&["workspace", "switch", &first]).status.success());
+    assert!(repo.0.join("shape/.git").is_dir());
+}
+
+#[cfg(unix)]
+#[test]
+fn symlink_and_directory_transitions_preserve_external_referents() {
+    let repo = Repo::new();
+    let first = repo.change();
+    fs::write(repo.0.join("outside"), "referent").unwrap();
+    std::os::unix::fs::symlink("outside", repo.0.join("shape")).unwrap();
+    repo.ok(&["snapshot"]);
+    let second = repo.change();
+    fs::remove_file(repo.0.join("shape")).unwrap();
+    fs::create_dir(repo.0.join("shape")).unwrap();
+    fs::write(repo.0.join("shape/inside"), "child").unwrap();
+    repo.ok(&["snapshot"]);
+    repo.ok(&["workspace", "switch", &first]);
+    assert_eq!(
+        fs::read_link(repo.0.join("shape")).unwrap(),
+        PathBuf::from("outside")
+    );
+    repo.ok(&["workspace", "switch", &second]);
+    assert_eq!(fs::read(repo.0.join("shape/inside")).unwrap(), b"child");
+    assert_eq!(fs::read(repo.0.join("outside")).unwrap(), b"referent");
+}

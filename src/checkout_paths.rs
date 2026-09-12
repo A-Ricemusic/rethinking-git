@@ -1,6 +1,10 @@
 //! Conservative cross-platform alias checks before materializing saved paths.
 use anyhow::{bail, Result};
-use std::{collections::BTreeMap, fs, path::Path};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+    path::Path,
+};
 use unicode_casefold::UnicodeCaseFold;
 use unicode_normalization::UnicodeNormalization;
 
@@ -34,11 +38,13 @@ pub(crate) fn validate<'a>(paths: impl IntoIterator<Item = &'a str>) -> Result<(
 pub(crate) fn validate_existing<'a>(
     root: &Path,
     paths: impl IntoIterator<Item = &'a str>,
+    blocking_files: &BTreeSet<&str>,
 ) -> Result<()> {
     let mut directories = BTreeMap::new();
     for path in paths {
         super::transaction::validate_working_key(path)?;
         let mut parent = root.to_path_buf();
+        let mut prefix = String::new();
         let parts: Vec<_> = path.split('/').collect();
         for (index, part) in parts.iter().enumerate() {
             let names = match directories.entry(parent.clone()) {
@@ -60,9 +66,14 @@ pub(crate) fn validate_existing<'a>(
                 bail!("checkout path aliases an existing filesystem entry");
             }
             parent.push(part);
+            if !prefix.is_empty() {
+                prefix.push('/');
+            }
+            prefix.push_str(part);
             if index + 1 < parts.len() {
                 match fs::symlink_metadata(&parent) {
                     Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
+                    Ok(_) if blocking_files.contains(prefix.as_str()) => break,
                     Ok(_) => bail!("checkout path has an unsafe parent"),
                     Err(e) if e.kind() == std::io::ErrorKind::NotFound => break,
                     Err(e) => return Err(e.into()),
