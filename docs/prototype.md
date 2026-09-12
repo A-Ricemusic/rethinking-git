@@ -635,3 +635,19 @@ Tests terminate real initialization subprocesses after directory creation, ident
 publication, staging, and commit. The command journal has separate publication crash
 tests. These cover process interruption; they do not qualify every filesystem or
 hardware power-loss behavior.
+
+
+### Checkout filename aliases
+
+Checkout compares every source/target path prefix using full non-Turkic Unicode
+case folding (the pinned Unicode 9 table) followed by NFC normalization. Distinct
+spellings with the same key are refused before committing working updates, including
+`README`/`readme`, `Src/a`/`src/b`, and canonically equivalent Unicode spellings.
+Existing filesystem entries, including untracked directory aliases, are checked too.
+Commit and recovery revalidate the working update set before publication.
+
+This is a conservative portable rule on every host. Case-only switches/renames are
+currently refused rather than journaled as a special rename operation. Saved Git
+history with colliding paths remains importable, verifiable and exportable; checkout
+refuses to materialize it. This check does not qualify hostile concurrent filesystem
+changes or every platform-specific filename alias such as Windows short names.
