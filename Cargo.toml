@@ -36,6 +36,7 @@ name = "rgit"
 path = "src/main.rs"
 
 [dependencies]
+similar = { version = "=2.7.0", default-features = false, features = ["text"] }
 unicode-normalization.workspace = true
 unicode-casefold.workspace = true
 # Later ignore releases use let-chains despite declaring Rust 1.85 support.
