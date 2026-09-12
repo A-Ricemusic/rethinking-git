@@ -475,6 +475,9 @@ struct PathPolicy {
 #[derive(Serialize, Deserialize)]
 struct Workspace {
     current_change: Option<String>,
+    /// Saved logical modes for the actual workspace, independent of change ancestry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    mode_snapshot: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -981,6 +984,7 @@ fn init_repo() -> Result<()> {
         created_at: now()?,
     };
     let workspace = Workspace {
+        mode_snapshot: None,
         current_change: None,
     };
     let public_actor = Actor {
@@ -1119,9 +1123,16 @@ fn create_change(repo: &Repo, name: &str, target_line: &str, policy: AccessPolic
         policy: policy.clone(),
         created_at: now()?,
     };
-    let workspace = Workspace {
-        current_change: Some(change.id.clone()),
-    };
+    let mut workspace = read_workspace(repo)?;
+    if workspace.mode_snapshot.is_none() {
+        workspace.mode_snapshot = workspace
+            .current_change
+            .as_deref()
+            .map(|id| read_change(repo, id))
+            .transpose()?
+            .and_then(|previous| previous.workspace_base_snapshot_id().map(str::to_string));
+    }
+    workspace.current_change = Some(change.id.clone());
 
     write_json(repo, &change_path(repo, &change.id)?, &change)?;
     write_json(repo, &repo.path(&["workspace.json"]), &workspace)?;
@@ -1195,7 +1206,7 @@ fn show_change(repo: &Repo, change_id: &str, actor_name: &str) -> Result<()> {
 }
 
 fn create_snapshot(repo: &Repo, message: &str, requested_policy: AccessPolicy) -> Result<()> {
-    let workspace = read_workspace(repo)?;
+    let mut workspace = read_workspace(repo)?;
     let change_id = workspace.current_change.as_deref().ok_or_else(|| {
         anyhow!("workspace has no current change; run `rgit change new <name>` first")
     })?;
@@ -1221,6 +1232,8 @@ fn create_snapshot(repo: &Repo, message: &str, requested_policy: AccessPolicy) -
     };
 
     change.current_snapshot = Some(snapshot.id.clone());
+    workspace.mode_snapshot = Some(snapshot.id.clone());
+    write_json(repo, &repo.path(&["workspace.json"]), &workspace)?;
 
     write_json(repo, &snapshot_path(repo, &snapshot.id)?, &snapshot)?;
     write_json(repo, &change_path(repo, &change.id)?, &change)?;
@@ -2340,11 +2353,13 @@ fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
             .unwrap_or_default(),
     );
     #[cfg(not(unix))]
-    let inherited_modes: BTreeMap<String, transaction::WorkingFlags> = baseline
-        .into_iter()
-        .flat_map(|s| s.files)
-        .map(|f| (f.path.clone(), f.flags()))
-        .collect();
+    let inherited_modes: BTreeMap<String, transaction::WorkingFlags> =
+        read_optional_snapshot(repo, workspace.mode_snapshot.as_deref())?
+            .or(baseline)
+            .into_iter()
+            .flat_map(|s| s.files)
+            .map(|f| (f.path.clone(), f.flags()))
+            .collect();
     let mut walker = WalkDir::new(&repo.root).into_iter();
     while let Some(entry) = walker.next() {
         let entry = entry.context("failed to read directory entry")?;

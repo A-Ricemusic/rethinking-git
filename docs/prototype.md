@@ -568,3 +568,12 @@ redo the move. Use explicit workspace restore to materialize a selected snapshot
 A reset does not rewrite history on a remote: Git push still rejects non-fast-forward
 publication. This is explicit saved-head recovery, not a complete operation undo/redo
 engine or garbage collection.
+
+
+Logical workspace modes are now anchored to the last restored/captured snapshot,
+independently of the current change's ancestry. Restoring another snapshot or starting
+a new change preserves those modes when capturing on Windows. Mode-only unsaved
+changes also prevent a non-discarding switch, even when file bytes are identical.
+The optional workspace `mode_snapshot` reference is journaled with checkout/snapshot
+updates and checked by `repo verify`; legacy workspaces fall back to their saved
+change baseline. Unix continues to read actual filesystem modes.

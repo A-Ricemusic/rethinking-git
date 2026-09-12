@@ -113,6 +113,7 @@ fn verify_with_output(repo: &Repo, actor_name: &str, report: bool) -> Result<()>
         snapshot_reference(line.head_snapshot.as_deref(), &snapshots)?;
     }
     let workspace = read_workspace(repo)?;
+    snapshot_reference(workspace.mode_snapshot.as_deref(), &snapshots)?;
     if let Some(id) = workspace.current_change {
         require(changes.contains_key(&id), "workspace change")?;
     }
