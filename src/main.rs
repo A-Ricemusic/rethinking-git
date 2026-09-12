@@ -25,6 +25,7 @@ mod ignore_rules;
 mod initialization;
 mod lines;
 mod resolution;
+mod status_json;
 mod transaction;
 mod verify;
 
@@ -72,6 +73,9 @@ enum Command {
         /// Actor whose permissioned view should be used.
         #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
         as_actor: String,
+        /// Emit one versioned JSON status document for automation.
+        #[arg(long)]
+        json: bool,
     },
     /// Capture the current files as a snapshot on the current change.
     Snapshot {
@@ -715,10 +719,12 @@ struct Repo {
     transaction: transaction::CommandTransaction,
 }
 
+#[derive(Serialize)]
 struct FileDiff {
     added: Vec<String>,
     modified: Vec<String>,
     deleted: Vec<String>,
+    #[serde(rename = "hidden_count")]
     hidden: usize,
 }
 
@@ -829,7 +835,7 @@ fn main() -> Result<()> {
         Command::Repo {
             command: RepoCommand::Verify { as_actor },
         } => verify::verify(&repo, &as_actor),
-        Command::Status { as_actor } => status(&repo, &as_actor),
+        Command::Status { as_actor, json } => status(&repo, &as_actor, json),
         Command::Snapshot { message, domains } => {
             create_snapshot(&repo, &message, policy_from_domains(domains))
         }
@@ -1289,10 +1295,13 @@ fn show_snapshot(repo: &Repo, snapshot_id: &str, actor_name: &str) -> Result<()>
     Ok(())
 }
 
-fn status(repo: &Repo, actor_name: &str) -> Result<()> {
+fn status(repo: &Repo, actor_name: &str, json: bool) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
     let workspace = read_workspace(repo)?;
     let Some(change_id) = workspace.current_change else {
+        if json {
+            return status_json::print(repo, &actor, None, None);
+        }
         println!("workspace has no current change");
         println!("next: rgit change new <name>");
         return Ok(());
@@ -1307,6 +1316,9 @@ fn status(repo: &Repo, actor_name: &str) -> Result<()> {
         .map_or_else(Vec::new, |snapshot| snapshot.files);
     let current = scan_working_tree(repo, false)?;
     let diff = permissioned_diff(previous, current, &actor);
+    if json {
+        return status_json::print(repo, &actor, Some(&change), Some(&diff));
+    }
 
     println!("actor: {}", actor.name);
     println!("change: {} ({})", change.name, change.id);
