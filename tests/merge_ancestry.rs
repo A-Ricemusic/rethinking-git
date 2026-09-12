@@ -138,3 +138,90 @@ fn verifier_detects_cycles_through_merge_parents() {
         .status
         .success());
 }
+
+#[test]
+fn integration_refuses_file_directory_collisions_without_publishing_records() {
+    let repo = Repo::new();
+    let file_change = repo.change();
+    repo.change();
+    fs::create_dir(repo.0.join("a")).unwrap();
+    fs::write(repo.0.join("a/b"), "nested").unwrap();
+    repo.ok(&["snapshot"]);
+    repo.ok(&["line", "integrate", "main"]);
+    repo.ok(&["workspace", "switch", &file_change]);
+    fs::remove_dir(repo.0.join("a")).unwrap();
+    fs::write(repo.0.join("a"), "file").unwrap();
+    repo.ok(&["snapshot"]);
+    let head = repo.head();
+    let records = |directory: &str| {
+        fs::read_dir(repo.0.join(".rgit").join(directory))
+            .unwrap()
+            .count()
+    };
+    let snapshots = records("snapshots");
+    let operations = records("operations");
+    for args in [
+        &["merge", "preview"][..],
+        &["line", "integrate", "main"][..],
+    ] {
+        let output = repo.run(args);
+        assert!(!output.status.success(), "{args:?}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("file/directory collision"),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(!String::from_utf8_lossy(&output.stdout).contains("result: clean"));
+        assert_eq!(repo.head(), head);
+        assert_eq!(records("snapshots"), snapshots);
+        assert_eq!(records("operations"), operations);
+    }
+    repo.ok(&["repo", "verify", "--as", "admin"]);
+}
+
+#[test]
+fn integration_refuses_a_corrupt_selected_blob_without_advancing_the_line() {
+    let repo = Repo::new();
+    let change = repo.change();
+    fs::write(repo.0.join("file"), "saved").unwrap();
+    repo.ok(&["snapshot"]);
+    let snapshot = repo.json(&format!("snapshots/{}.json", repo.snapshot(&change)));
+    let hash = snapshot["files"][0]["hash"].as_str().unwrap();
+    fs::write(repo.0.join(".rgit/blobs").join(hash), "broken").unwrap();
+    let before = repo.json("lines/main.json");
+    for args in [&["merge", "preview"][..], &["line", "integrate"][..]] {
+        assert!(!repo.run(args).status.success());
+        assert_eq!(repo.json("lines/main.json"), before);
+    }
+}
+
+#[test]
+fn saved_parent_resolution_cannot_publish_a_file_above_merged_descendants() {
+    let repo = Repo::new();
+    repo.change();
+    fs::write(repo.0.join("a"), "base").unwrap();
+    repo.ok(&["snapshot"]);
+    repo.ok(&["line", "integrate"]);
+    let incoming = repo.change();
+    fs::write(repo.0.join("a"), "incoming").unwrap();
+    repo.ok(&["snapshot"]);
+    repo.change();
+    fs::remove_file(repo.0.join("a")).unwrap();
+    fs::create_dir(repo.0.join("a")).unwrap();
+    fs::write(repo.0.join("a/b"), "child").unwrap();
+    repo.ok(&["snapshot"]);
+    repo.ok(&["line", "integrate"]);
+    repo.ok(&["workspace", "switch", &incoming]);
+    assert!(!repo.run(&["line", "integrate"]).status.success());
+    let conflicts = repo.ok(&["conflict", "list"]);
+    let id = conflicts.split_whitespace().next().unwrap();
+    repo.ok(&["conflict", "resolve", id, "--take", "incoming"]);
+    let head = repo.head();
+    for args in [&["merge", "preview"][..], &["line", "integrate"][..]] {
+        let output = repo.run(args);
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("file/directory collision"));
+        assert_eq!(repo.head(), head);
+    }
+    repo.ok(&["repo", "verify", "--as", "admin"]);
+}
