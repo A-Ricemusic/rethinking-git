@@ -22,6 +22,7 @@ rgit identity set "Example Developer" "dev@example.com"
 printf 'hello\n' > README.md
 rgit change new first-change
 rgit status
+rgit diff workspace --patch
 rgit snapshot --message "Add README"
 rgit line integrate main --as admin
 rgit repo verify --as admin
@@ -30,7 +31,10 @@ rgit repo verify --as admin
 A change is a stable unit of work. Each `snapshot` captures its files and advances
 that change's saved tip. `line integrate` merges the saved tip into the selected
 line; it does not capture unsaved edits or automatically replace working files.
-The author is recorded when a snapshot is created. Configuring another author later
+Use `diff workspace --patch` to review text before capture, and `status --json`
+for the [versioned automation interface](automation.md). Binary/large content is
+explicitly omitted from text previews; [the reference](prototype.md#reviewing-changed-text)
+describes those limits. The author is recorded when a snapshot is created. Configuring another author later
 does not rewrite previous snapshots.
 
 `--as admin` selects the built-in local view with all domains. It is **not** a login,

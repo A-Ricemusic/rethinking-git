@@ -26,6 +26,7 @@ mod initialization;
 mod lines;
 mod resolution;
 mod status_json;
+mod text_diff;
 mod transaction;
 mod verify;
 
@@ -373,6 +374,9 @@ enum DiffCommand {
         /// Actor whose permissioned view should be used.
         #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
         as_actor: String,
+        /// Show unified text hunks, modes and explicit binary/large-file notices.
+        #[arg(long)]
+        patch: bool,
     },
     /// Diff two snapshots.
     Snapshot {
@@ -381,6 +385,9 @@ enum DiffCommand {
         /// Actor whose permissioned view should be used.
         #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
         as_actor: String,
+        /// Show unified text hunks, modes and explicit binary/large-file notices.
+        #[arg(long)]
+        patch: bool,
     },
     /// Diff a line's parent snapshot against its head snapshot.
     Line {
@@ -390,6 +397,9 @@ enum DiffCommand {
         /// Actor whose permissioned view should be used.
         #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
         as_actor: String,
+        /// Show unified text hunks, modes and explicit binary/large-file notices.
+        #[arg(long)]
+        patch: bool,
     },
 }
 
@@ -887,13 +897,18 @@ fn main() -> Result<()> {
             LineCommand::History { line, as_actor } => line_history(&repo, &line, &as_actor),
         },
         Command::Diff { command } => match command {
-            DiffCommand::Workspace { as_actor } => diff_workspace(&repo, &as_actor),
+            DiffCommand::Workspace { as_actor, patch } => diff_workspace(&repo, &as_actor, patch),
             DiffCommand::Snapshot {
                 old_snapshot,
                 new_snapshot,
                 as_actor,
-            } => diff_snapshots(&repo, &old_snapshot, &new_snapshot, &as_actor),
-            DiffCommand::Line { line, as_actor } => diff_line(&repo, &line, &as_actor),
+                patch,
+            } => diff_snapshots(&repo, &old_snapshot, &new_snapshot, &as_actor, patch),
+            DiffCommand::Line {
+                line,
+                as_actor,
+                patch,
+            } => diff_line(&repo, &line, &as_actor, patch),
         },
         Command::Merge { command } => match command {
             MergeCommand::Preview {
@@ -1331,7 +1346,7 @@ fn status(repo: &Repo, actor_name: &str, json: bool) -> Result<()> {
     Ok(())
 }
 
-fn diff_workspace(repo: &Repo, actor_name: &str) -> Result<()> {
+fn diff_workspace(repo: &Repo, actor_name: &str, patch: bool) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
     let workspace = read_workspace(repo)?;
     let Some(change_id) = workspace.current_change else {
@@ -1348,6 +1363,9 @@ fn diff_workspace(repo: &Repo, actor_name: &str) -> Result<()> {
     let previous = read_optional_snapshot(repo, change.workspace_base_snapshot_id())?
         .map_or_else(Vec::new, |snapshot| snapshot.files);
     let current = scan_working_tree(repo, false)?;
+    if patch {
+        return text_diff::print(repo, &actor, previous, current, true);
+    }
     let diff = permissioned_diff(previous, current, &actor);
 
     println!("actor: {}", actor.name);
@@ -1365,6 +1383,7 @@ fn diff_snapshots(
     old_snapshot: &str,
     new_snapshot: &str,
     actor_name: &str,
+    patch: bool,
 ) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
     let old = read_snapshot(repo, old_snapshot).map_err(cli_failure::unavailable_if_missing)?;
@@ -1374,6 +1393,9 @@ fn diff_snapshots(
         return Err(CliFailure::OperationUnavailable.into());
     }
 
+    if patch {
+        return text_diff::print(repo, &actor, old.files, new.files, false);
+    }
     let diff = permissioned_diff(old.files, new.files, &actor);
 
     println!("actor: {}", actor.name);
@@ -1382,7 +1404,7 @@ fn diff_snapshots(
     Ok(())
 }
 
-fn diff_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> {
+fn diff_line(repo: &Repo, line_name: &str, actor_name: &str, patch: bool) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
     let line = read_line(repo, line_name).map_err(cli_failure::unavailable_if_missing)?;
 
@@ -1399,6 +1421,9 @@ fn diff_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> {
         Some(parent_id) => read_snapshot(repo, parent_id)?.files,
         None => Vec::new(),
     };
+    if patch {
+        return text_diff::print(repo, &actor, parent_files, head.files, false);
+    }
     let diff = permissioned_diff(parent_files, head.files, &actor);
 
     println!("actor: {}", actor.name);

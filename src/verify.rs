@@ -307,6 +307,22 @@ fn verify_with_output(repo: &Repo, actor_name: &str, report: bool) -> Result<()>
 }
 
 pub(super) fn read_blob(repo: &Repo, hash: &str) -> Result<Vec<u8>> {
+    use std::io::Read;
+    let mut bytes = Vec::new();
+    open_blob(repo, hash)?
+        .read_to_end(&mut bytes)
+        .context("failed to read blob")?;
+    Ok(bytes)
+}
+
+pub(super) fn open_blob(repo: &Repo, hash: &str) -> Result<fs::File> {
+    require(
+        hash.len() == 64
+            && hash
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
+        "blob identifier",
+    )?;
     let directory = repo.path(&["blobs"]);
     let metadata = fs::symlink_metadata(&directory)?;
     require(
@@ -319,7 +335,7 @@ pub(super) fn read_blob(repo: &Repo, hash: &str) -> Result<Vec<u8>> {
         metadata.is_file() && !metadata.file_type().is_symlink(),
         "regular blob file",
     )?;
-    fs::read(path).context("failed to read blob")
+    fs::File::open(path).context("failed to open blob")
 }
 
 pub(super) fn verify_file(repo: &Repo, file: &FileEntry) -> Result<()> {
