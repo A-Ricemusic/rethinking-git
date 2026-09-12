@@ -236,3 +236,80 @@ pub(super) fn retarget(repo: &Repo, target: &str, actor_name: &str) -> Result<()
     println!("retargeted {id} to {target}");
     Ok(())
 }
+
+#[derive(Serialize, Deserialize, PartialEq, Eq)]
+struct CloneRequest {
+    remote: String,
+    branch: String,
+    policy: AccessPolicy,
+}
+
+pub(super) fn clone_repository(args: &GitCloneArgs) -> Result<()> {
+    let request = CloneRequest {
+        remote: resolve_remote(&args.remote)?,
+        branch: args.branch.clone(),
+        policy: policy_from_domains(args.domains.clone()),
+    };
+    let repo = if args.resume {
+        let destination = fs::canonicalize(&args.destination)?;
+        let repo = Repo::discover_from(destination.clone())?;
+        if repo.root != destination {
+            bail!("resume destination is not a native repository root");
+        }
+        let recorded: CloneRequest = read_json(&repo, &repo.path(&["clone-request.json"]))
+            .context("destination has no resumable clone request")?;
+        if recorded != request {
+            bail!("resume must use the original remote, branch and domains");
+        }
+        repo
+    } else {
+        fs::create_dir(&args.destination).context("clone destination must be a new directory")?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&args.destination, fs::Permissions::from_mode(0o700))?;
+        }
+        let destination = fs::canonicalize(&args.destination)?;
+        let repo = initialize_repo(destination)?;
+        write_json(&repo, &repo.path(&["clone-request.json"]), &request)?;
+        repo.transaction.commit()?;
+        repo
+    };
+    let result = (|| -> Result<()> {
+        let before = read_workspace(&repo)?;
+        fetch(
+            &repo,
+            &request.remote,
+            &request.branch,
+            DEFAULT_LINE,
+            ADMIN_DOMAIN,
+            request.policy,
+        )?;
+        let head = read_line(&repo, DEFAULT_LINE)?
+            .head_snapshot
+            .context("remote branch has no saved head")?;
+        let change = read_snapshot(&repo, &head)?.change_id;
+        // Import can assign the first workspace pointer. Checkout must compare
+        // against the actual pre-fetch baseline so new/untracked files are safe.
+        write_json(&repo, &repo.path(&["workspace.json"]), &before)?;
+        checkout::switch(&repo, &change, ADMIN_DOMAIN)?;
+        verify::check(&repo, ADMIN_DOMAIN)?;
+        repo.transaction.commit()?;
+        fs::remove_file(repo.path(&["clone-request.json"]))?;
+        #[cfg(unix)]
+        fs::File::open(&repo.meta)?.sync_all()?;
+        Ok(())
+    })();
+    result.with_context(|| {
+        format!(
+            "clone incomplete at {}; rerun the same clone with --resume after addressing the error",
+            repo.root.display()
+        )
+    })?;
+    println!(
+        "cloned Git branch {} into {}",
+        args.branch,
+        repo.root.display()
+    );
+    Ok(())
+}

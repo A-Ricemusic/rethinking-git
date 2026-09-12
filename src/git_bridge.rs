@@ -1,7 +1,7 @@
 use super::*;
 use std::{
-    io::Write,
-    process::{Command as ProcessCommand, Stdio},
+    io::{BufRead, BufReader, Read, Write},
+    process::{Child, ChildStdin, ChildStdout, Command as ProcessCommand, Stdio},
 };
 
 fn git(root: &Path) -> ProcessCommand {
@@ -87,8 +87,12 @@ pub(super) fn export(
         .as_deref()
         .context("line has no saved history")?;
     let history = ordered_history(repo, head)?;
-    if author.is_none() && history.iter().any(|snapshot| snapshot.git.is_none()) {
-        bail!("native snapshots require --author 'Name <email>'");
+    if author.is_none()
+        && history
+            .iter()
+            .any(|snapshot| snapshot.git.is_none() && snapshot.author.is_none())
+    {
+        bail!("native snapshots without recorded authors require --author 'Name <email>'");
     }
     let formats: BTreeSet<_> = history
         .iter()
@@ -195,7 +199,7 @@ pub(super) fn export(
     Ok(())
 }
 
-fn validate_author(author: &str) -> Result<()> {
+pub(super) fn validate_author(author: &str) -> Result<()> {
     let Some((name, email)) = author.rsplit_once(" <") else {
         bail!("author must be Name <email>");
     };
@@ -283,7 +287,11 @@ fn write_history(
             }
             metadata.raw_commit.clone()
         } else {
-            let author = author.context("native export requires author")?;
+            let author = snapshot
+                .author
+                .as_deref()
+                .or(author)
+                .context("native export requires author")?;
             let mut header = format!("tree {tree}\n");
             for parent in &parents {
                 header.push_str(&format!("parent {parent}\n"));
@@ -403,6 +411,8 @@ pub(super) fn import_history(
             }
         }
     }
+    let mut objects = GitObjectReader::new(&source)?;
+    let mut blobs = BTreeMap::new();
     let mut imported = 0;
     let mut tip_change = None;
     for oid in revisions.lines() {
@@ -416,7 +426,7 @@ pub(super) fn import_history(
         let metadata = git_objects::CommitMetadata {
             object_id: oid.to_string(),
             object_format: format.clone(),
-            raw_commit: output(&source, &["cat-file", "commit", oid])?,
+            raw_commit: objects.read(oid, "commit")?,
         };
         let parsed = metadata.parse()?;
         let parents: Vec<String> = parsed
@@ -435,6 +445,9 @@ pub(super) fn import_history(
                 if candidate.git.is_none()
                     && ancestry::parents(&candidate).cloned().collect::<Vec<_>>() == parents
                     && candidate.message.as_bytes() == parsed.message
+                    && candidate.author.as_ref().is_none_or(|author| {
+                        parsed.author_identity.as_deref() == Some(author.as_bytes())
+                    })
                     && candidate.created_at / 1000 == parsed.timestamp
                 {
                     let (tree, _) = git_objects::tree(repo, &candidate.files, &format)?;
@@ -460,7 +473,15 @@ pub(super) fn import_history(
                 }
             }
         }
-        let files = import_files(repo, &source, oid, &format, &policy)?;
+        let files = import_files(
+            repo,
+            &source,
+            oid,
+            &format,
+            &policy,
+            &mut blobs,
+            &mut objects,
+        )?;
         let (tree, _) = git_objects::tree(repo, &files, &format)?;
         if tree != parsed.tree {
             bail!("Git tree cannot be represented without changing its identity");
@@ -481,6 +502,7 @@ pub(super) fn import_history(
                 .context("Git timestamp exceeds native range")?,
         };
         let snapshot = Snapshot {
+            author: None,
             git: Some(metadata),
             id: snapshot_id.clone(),
             change_id: change_id.clone(),
@@ -503,6 +525,7 @@ pub(super) fn import_history(
             tip_change = Some(change_id);
         }
     }
+    objects.finish()?;
     let snapshot_id = mapped
         .get(&tip)
         .context("Git import contained no tip")?
@@ -536,12 +559,21 @@ pub(super) fn import_history(
     Ok(())
 }
 
+#[derive(Clone)]
+struct ImportedBlob {
+    hash: String,
+    bytes: u64,
+    valid_link: bool,
+}
+
 fn import_files(
     repo: &Repo,
     source: &Path,
     commit: &str,
     format: &str,
     policy: &AccessPolicy,
+    blobs: &mut BTreeMap<String, ImportedBlob>,
+    objects: &mut GitObjectReader,
 ) -> Result<Vec<FileEntry>> {
     let listing = output(source, &["ls-tree", "-r", "-z", "--full-tree", commit])?;
     let mut files = Vec::new();
@@ -565,35 +597,161 @@ fn import_files(
             .to_string();
         transaction::validate_working_key(&path)?;
         let oid = git_objects::parse_id(fields[2].as_bytes(), format)?;
-        let bytes = output(source, &["cat-file", "blob", &oid])?;
-        if git_objects::object_id("blob", &bytes, format)? != oid {
-            bail!("Git blob identity mismatch");
-        }
-        let hash = hash_bytes(&bytes);
-        let destination = repo.path(&["blobs", &hash]);
-        if destination.try_exists()? {
-            let metadata = fs::symlink_metadata(&destination)?;
-            if !metadata.is_file()
-                || metadata.file_type().is_symlink()
-                || fs::read(&destination)? != bytes
-            {
-                bail!("stored blob failed verification");
-            }
+        let blob = if let Some(blob) = blobs.get(&oid) {
+            blob.clone()
         } else {
-            transaction::publish_file(&destination, &bytes)?;
-        }
-        if fields[0] == "120000" {
-            transaction::validate_link(&bytes)?;
+            let bytes = objects.read(&oid, "blob")?;
+            if git_objects::object_id("blob", &bytes, format)? != oid {
+                bail!("Git blob identity mismatch");
+            }
+            let hash = hash_bytes(&bytes);
+            let destination = repo.path(&["blobs", &hash]);
+            if destination.try_exists()? {
+                let metadata = fs::symlink_metadata(&destination)?;
+                if !metadata.is_file()
+                    || metadata.file_type().is_symlink()
+                    || fs::read(&destination)? != bytes
+                {
+                    bail!("stored blob failed verification");
+                }
+            } else {
+                transaction::publish_file(&destination, &bytes)?;
+            }
+            let blob = ImportedBlob {
+                hash,
+                bytes: bytes.len() as u64,
+                valid_link: transaction::validate_link(&bytes).is_ok(),
+            };
+            blobs.insert(oid, blob.clone());
+            blob
+        };
+        if fields[0] == "120000" && !blob.valid_link {
+            bail!("symlink target must be nonempty and contain no NUL");
         }
         files.push(FileEntry {
             symlink: fields[0] == "120000",
             path,
             executable: fields[0] == "100755",
-            hash,
-            bytes: bytes.len() as u64,
+            hash: blob.hash,
+            bytes: blob.bytes,
             policy: policy.clone(),
         });
     }
     files.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(files)
+}
+
+/// One raw, length-framed reader per import; no filters, mailmap or link following.
+struct GitObjectReader {
+    child: Child,
+    input: Option<ChildStdin>,
+    output: BufReader<ChildStdout>,
+}
+
+impl GitObjectReader {
+    fn new(source: &Path) -> Result<Self> {
+        let mut child = git(source)
+            .args(["cat-file", "--batch"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn()?;
+        let input = child.stdin.take().context("Git object input unavailable")?;
+        let output = BufReader::new(
+            child
+                .stdout
+                .take()
+                .context("Git object output unavailable")?,
+        );
+        Ok(Self {
+            child,
+            input: Some(input),
+            output,
+        })
+    }
+
+    fn read(&mut self, oid: &str, kind: &str) -> Result<Vec<u8>> {
+        if !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|b| b.is_ascii_hexdigit()) {
+            bail!("invalid Git batch object request");
+        }
+        let input = self.input.as_mut().context("Git object reader closed")?;
+        writeln!(input, "{oid}")?;
+        input.flush()?;
+        read_object_response(&mut self.output, oid, kind)
+    }
+
+    fn finish(mut self) -> Result<()> {
+        drop(self.input.take());
+        if !self.child.wait()?.success() {
+            bail!("Git object reader failed");
+        }
+        Ok(())
+    }
+}
+
+impl Drop for GitObjectReader {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+fn read_object_response(reader: &mut impl BufRead, oid: &str, kind: &str) -> Result<Vec<u8>> {
+    let mut header = String::new();
+    reader.by_ref().take(256).read_line(&mut header)?;
+    let fields: Vec<_> = header.trim_end_matches('\n').split(' ').collect();
+    if !header.ends_with('\n') || fields.len() != 3 || fields[0] != oid || fields[1] != kind {
+        bail!("Git object response is missing or malformed");
+    }
+    let size: usize = fields[2]
+        .parse()
+        .context("invalid Git object response size")?;
+    let mut bytes = Vec::new();
+    bytes
+        .try_reserve_exact(size)
+        .context("Git object is too large for available memory")?;
+    bytes.resize(size, 0);
+    reader.read_exact(&mut bytes)?;
+    let mut trailer = [0];
+    reader.read_exact(&mut trailer)?;
+    if trailer != *b"\n" {
+        bail!("invalid Git object response terminator");
+    }
+    Ok(bytes)
+}
+
+#[cfg(test)]
+mod batch_tests {
+    use super::*;
+    use std::io::Cursor;
+    const OID: &str = "1111111111111111111111111111111111111111";
+
+    #[test]
+    fn raw_object_frames_preserve_binary_bytes_and_next_response() {
+        let mut bytes = format!("{OID} blob 4\n").into_bytes();
+        bytes.extend_from_slice(b"a\0\nb\n");
+        bytes.extend_from_slice(format!("{OID} blob 0\n\n").as_bytes());
+        let mut reader = Cursor::new(bytes);
+        assert_eq!(
+            read_object_response(&mut reader, OID, "blob").unwrap(),
+            b"a\0\nb"
+        );
+        assert!(read_object_response(&mut reader, OID, "blob")
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn malformed_missing_truncated_and_oversized_frames_fail_closed() {
+        for bytes in [
+            format!("{OID} missing\n").into_bytes(),
+            format!("{OID} commit 0\n\n").into_bytes(),
+            format!("{OID} blob 5\nshort").into_bytes(),
+            format!("{OID} blob 0\nx").into_bytes(),
+            format!("{OID} blob 18446744073709551615\n").into_bytes(),
+            vec![b'a'; 256],
+        ] {
+            assert!(read_object_response(&mut Cursor::new(bytes), OID, "blob").is_err());
+        }
+    }
 }

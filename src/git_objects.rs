@@ -13,6 +13,7 @@ pub(super) struct ParsedCommit {
     pub message: Vec<u8>,
     pub timestamp: u64,
     pub native_snapshot: Option<String>,
+    pub author_identity: Option<Vec<u8>>,
 }
 
 impl CommitMetadata {
@@ -29,7 +30,17 @@ impl CommitMetadata {
         let mut parents = Vec::new();
         let mut timestamp = None;
         let mut native_snapshot = None;
+        let mut author_identity = None;
         for line in self.raw_commit[..split].split(|byte| *byte == b'\n') {
+            if let Some(author) = line.strip_prefix(b"author ") {
+                let identity = author
+                    .rsplitn(3, |b| *b == b' ')
+                    .nth(2)
+                    .context("Git author timestamp missing")?;
+                if author_identity.replace(identity.to_vec()).is_some() {
+                    bail!("duplicate Git author header");
+                }
+            }
             if let Some(id) = line.strip_prefix(b"tree ") {
                 if tree.is_some() {
                     bail!("duplicate Git tree header");
@@ -61,6 +72,7 @@ impl CommitMetadata {
             message: self.raw_commit[split + 2..].to_vec(),
             timestamp: timestamp.context("Git committer missing")?,
             native_snapshot,
+            author_identity,
         })
     }
 }

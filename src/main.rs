@@ -19,6 +19,7 @@ mod cli_failure;
 mod git_bridge;
 mod git_objects;
 mod git_remotes;
+mod identity;
 mod ignore_rules;
 mod lines;
 mod resolution;
@@ -43,6 +44,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Configure author metadata for future native snapshots (not authentication).
+    Identity {
+        #[command(subcommand)]
+        command: IdentityCommand,
+    },
     /// Exchange saved history with Git (requires Git installed).
     Git {
         #[command(subcommand)]
@@ -122,6 +128,12 @@ enum Command {
     },
 }
 
+#[derive(Subcommand)]
+enum IdentityCommand {
+    Set { name: String, email: String },
+    Show,
+}
+
 #[derive(clap::Args)]
 struct GitPushArgs {
     remote: String,
@@ -137,8 +149,23 @@ struct GitPushArgs {
     allow_restricted: bool,
 }
 
+#[derive(clap::Args)]
+struct GitCloneArgs {
+    remote: String,
+    destination: PathBuf,
+    #[arg(long, default_value = DEFAULT_LINE)]
+    branch: String,
+    #[arg(long = "domain", default_value = ADMIN_DOMAIN)]
+    domains: Vec<String>,
+    /// Resume the matching incomplete clone, preserving later working edits.
+    #[arg(long)]
+    resume: bool,
+}
+
 #[derive(Subcommand)]
 enum GitCommand {
+    /// Clone a Git branch into a new native repository and working directory.
+    Clone(GitCloneArgs),
     /// Fetch a Git branch using configured Git/SSH credentials.
     Fetch {
         remote: String,
@@ -455,6 +482,8 @@ enum Redaction {
 
 #[derive(Serialize, Deserialize)]
 struct RepoConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    author: Option<String>,
     format_version: u32,
     repo_id: String,
     created_at: u64,
@@ -503,6 +532,8 @@ impl Change {
 
 #[derive(Clone, Serialize, Deserialize)]
 struct Snapshot {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    author: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     git: Option<git_objects::CommitMetadata>,
     id: String,
@@ -614,6 +645,7 @@ struct Operation {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum OperationKind {
+    SetIdentity,
     CreateLine {
         line: String,
         source_line: String,
@@ -708,9 +740,24 @@ fn main() -> Result<()> {
     if matches!(cli.command, Command::Init) {
         return init_repo();
     }
+    if let Command::Git {
+        command: GitCommand::Clone(args),
+    } = &cli.command
+    {
+        return git_remotes::clone_repository(args);
+    }
     let repo = Repo::discover()?;
     let result = match cli.command {
-        Command::Init => unreachable!(),
+        Command::Identity {
+            command: IdentityCommand::Set { name, email },
+        } => identity::set(&repo, &name, &email),
+        Command::Identity {
+            command: IdentityCommand::Show,
+        } => identity::show(&repo),
+        Command::Init
+        | Command::Git {
+            command: GitCommand::Clone(_),
+        } => unreachable!(),
         Command::Git {
             command:
                 GitCommand::Fetch {
@@ -895,8 +942,10 @@ fn main() -> Result<()> {
 
 impl Repo {
     fn discover() -> Result<Self> {
-        let mut dir = std::env::current_dir().context("failed to read current directory")?;
+        Self::discover_from(std::env::current_dir().context("failed to read current directory")?)
+    }
 
+    fn discover_from(mut dir: PathBuf) -> Result<Self> {
         loop {
             let meta = dir.join(META_DIR);
             if meta.is_dir() {
@@ -952,7 +1001,11 @@ impl FileDiff {
 }
 
 fn init_repo() -> Result<()> {
-    let root = std::env::current_dir().context("failed to read current directory")?;
+    initialize_repo(std::env::current_dir().context("failed to read current directory")?)
+        .map(|_| ())
+}
+
+fn initialize_repo(root: PathBuf) -> Result<Repo> {
     let meta = root.join(META_DIR);
 
     if meta.exists() {
@@ -979,6 +1032,7 @@ fn init_repo() -> Result<()> {
         transaction,
     };
     let config = RepoConfig {
+        author: None,
         format_version: FORMAT_VERSION,
         repo_id: format!("repo_{}", new_id_suffix()),
         created_at: now()?,
@@ -1024,7 +1078,7 @@ fn init_repo() -> Result<()> {
     println!("initialized rgit repository");
     println!("default line: {DEFAULT_LINE}");
     println!("default actors: public, admin");
-    Ok(())
+    Ok(repo)
 }
 
 fn set_actor(repo: &Repo, name: &str, domains: Vec<String>) -> Result<()> {
@@ -1219,6 +1273,7 @@ fn create_snapshot(repo: &Repo, message: &str, requested_policy: AccessPolicy) -
     let files = scan_working_tree(repo, true)?;
     let manifest_hash = manifest_hash(&files)?;
     let snapshot = Snapshot {
+        author: identity::configured(repo)?,
         git: None,
         id: format!("snap_{}", new_id_suffix()),
         change_id: change.id.clone(),
@@ -1685,6 +1740,7 @@ fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> 
         None
     };
     let integrated_snapshot = Snapshot {
+        author: identity::configured(repo)?,
         git: None,
         id: format!("snap_{}", new_id_suffix()),
         change_id: change.id.clone(),
@@ -1829,6 +1885,9 @@ fn print_snapshot_summary(repo: &Repo, snapshot: &Snapshot, actor: &Actor) -> Re
     );
     println!("domains: {}", snapshot.policy.domains.join(","));
     println!("message: {}", snapshot.message);
+    if let Some(author) = identity::snapshot_author(snapshot)? {
+        println!("author: {author}");
+    }
     println!("hidden files: {hidden}");
     Ok(())
 }
@@ -2685,6 +2744,7 @@ fn hash_bytes(bytes: &[u8]) -> String {
 fn operation_kind(kind: &OperationKind) -> &'static str {
     match kind {
         OperationKind::InitRepo => "init_repo",
+        OperationKind::SetIdentity => "set_identity",
         OperationKind::CreateLine { .. } => "create_line",
         OperationKind::ResetLine { .. } => "reset_line",
         OperationKind::BindGitIdentity { .. } => "bind_git_identity",
