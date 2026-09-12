@@ -12,6 +12,7 @@ pub(super) struct ParsedCommit {
     pub parents: Vec<String>,
     pub message: Vec<u8>,
     pub timestamp: u64,
+    pub native_snapshot: Option<String>,
 }
 
 impl CommitMetadata {
@@ -27,12 +28,20 @@ impl CommitMetadata {
         let mut tree = None;
         let mut parents = Vec::new();
         let mut timestamp = None;
+        let mut native_snapshot = None;
         for line in self.raw_commit[..split].split(|byte| *byte == b'\n') {
             if let Some(id) = line.strip_prefix(b"tree ") {
                 if tree.is_some() {
                     bail!("duplicate Git tree header");
                 }
                 tree = Some(parse_id(id, &self.object_format)?);
+            }
+            if let Some(id) = line.strip_prefix(b"rgit-snapshot ") {
+                let id = std::str::from_utf8(id)?;
+                validate_object_id(id, "snap_")?;
+                if native_snapshot.replace(id.to_string()).is_some() {
+                    bail!("duplicate native snapshot header");
+                }
             }
             if let Some(id) = line.strip_prefix(b"parent ") {
                 parents.push(parse_id(id, &self.object_format)?);
@@ -51,6 +60,7 @@ impl CommitMetadata {
             parents,
             message: self.raw_commit[split + 2..].to_vec(),
             timestamp: timestamp.context("Git committer missing")?,
+            native_snapshot,
         })
     }
 }

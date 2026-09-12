@@ -18,6 +18,7 @@ mod checkout;
 mod cli_failure;
 mod git_bridge;
 mod git_objects;
+mod git_remotes;
 mod ignore_rules;
 mod resolution;
 mod transaction;
@@ -120,8 +121,37 @@ enum Command {
     },
 }
 
+#[derive(clap::Args)]
+struct GitPushArgs {
+    remote: String,
+    #[arg(long, default_value = DEFAULT_LINE)]
+    line: String,
+    #[arg(long, default_value = DEFAULT_LINE)]
+    branch: String,
+    #[arg(long)]
+    author: Option<String>,
+    #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+    as_actor: String,
+    #[arg(long)]
+    allow_restricted: bool,
+}
+
 #[derive(Subcommand)]
 enum GitCommand {
+    /// Fetch a Git branch using configured Git/SSH credentials.
+    Fetch {
+        remote: String,
+        #[arg(long, default_value = DEFAULT_LINE)]
+        branch: String,
+        #[arg(long)]
+        into: String,
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+        #[arg(long = "domain", default_value = ADMIN_DOMAIN)]
+        domains: Vec<String>,
+    },
+    /// Publish a line with Git's normal fast-forward and server authorization checks.
+    Push(GitPushArgs),
     /// Import a local Git revision and its complete ancestry into an empty line.
     Import {
         source: PathBuf,
@@ -167,6 +197,12 @@ enum RepoCommand {
 
 #[derive(Subcommand)]
 enum ChangeCommand {
+    /// Retarget the current change to another line without rewriting its snapshots.
+    Retarget {
+        line: String,
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
     /// Create a new logical change and make the workspace point at it.
     New {
         /// Short, human-readable name for the change.
@@ -532,6 +568,14 @@ struct Operation {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum OperationKind {
+    BindGitIdentity {
+        snapshot_id: String,
+        object_id: String,
+    },
+    RetargetChange {
+        change_id: String,
+        line: String,
+    },
     ImportGit {
         line: String,
         change_id: String,
@@ -613,6 +657,26 @@ fn main() -> Result<()> {
         Command::Init => unreachable!(),
         Command::Git {
             command:
+                GitCommand::Fetch {
+                    remote,
+                    branch,
+                    into,
+                    as_actor,
+                    domains,
+                },
+        } => git_remotes::fetch(
+            &repo,
+            &remote,
+            &branch,
+            &into,
+            &as_actor,
+            policy_from_domains(domains),
+        ),
+        Command::Git {
+            command: GitCommand::Push(args),
+        } => git_remotes::push(&repo, &args),
+        Command::Git {
+            command:
                 GitCommand::Import {
                     source,
                     revision,
@@ -644,6 +708,7 @@ fn main() -> Result<()> {
             author.as_deref(),
             &as_actor,
             allow_restricted,
+            false,
         ),
         Command::Repo {
             command:
@@ -667,6 +732,9 @@ fn main() -> Result<()> {
             } => show_snapshot(&repo, &snapshot_id, &as_actor),
         },
         Command::Change { command } => match command {
+            ChangeCommand::Retarget { line, as_actor } => {
+                git_remotes::retarget(&repo, &line, &as_actor)
+            }
             ChangeCommand::New {
                 name,
                 target,
@@ -2510,6 +2578,8 @@ fn hash_bytes(bytes: &[u8]) -> String {
 fn operation_kind(kind: &OperationKind) -> &'static str {
     match kind {
         OperationKind::InitRepo => "init_repo",
+        OperationKind::BindGitIdentity { .. } => "bind_git_identity",
+        OperationKind::RetargetChange { .. } => "retarget_change",
         OperationKind::ImportGit { .. } => "import_git",
         OperationKind::SwitchWorkspace { .. } => "switch_workspace",
         OperationKind::RestoreWorkspace { .. } => "restore_workspace",

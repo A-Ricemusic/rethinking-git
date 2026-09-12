@@ -467,3 +467,46 @@ Rules use the [ignore crate's Git matcher](https://docs.rs/ignore/0.4.25/ignore/
 Machine-global excludes and `.git/info/exclude` are not yet loaded. The existing
 control/build-directory exclusions still apply, so this is not complete Git ignore
 configuration parity.
+
+### Git-backed collaboration
+
+`rgit git fetch REMOTE --branch main --into remote/main --as admin` imports a
+selected remote branch into a tracking line. Use `--domain public` explicitly for
+public history; otherwise newly imported records are admin-only. The first fetch
+can target an empty `main`. Subsequent fetches advance only when the remote contains
+the previous tracking head; rewinds require a new line for inspection. Fetch does
+not overwrite working files or merge local work automatically.
+
+`rgit git push REMOTE --line main --branch main --author 'Name <email>' --as admin`
+publishes saved ancestry using Git's ordinary fast-forward checks. There is no force
+option. Restricted history requires `--allow-restricted`, which explicitly exports
+plaintext without native policies. HTTPS and SSH use the installed Git client's
+credential helpers, SSH agent and host verification. Local paths are also supported;
+relative paths resolve from the calling directory. Plain HTTP, embedded URL passwords
+and external remote helpers are refused. Transport runs with empty client hooks and
+TLS verification enabled. Server-side hooks and authorization remain the server's
+responsibility.
+
+After a rejected concurrent push, fetch into a separate tracking line, switch to its
+head change, use `change retarget main --as admin`, and integrate it with local main.
+Resolve any conflicts before retrying the push. Integration updates the saved line;
+restore its resulting snapshot explicitly before editing the merged working tree.
+
+The first export of a native snapshot records its Git identity transactionally and
+adds its native UUID to the commit header. Later exports preserve that identity;
+`--author` applies only to previously unbound native snapshots. A fetch can reconcile
+an acknowledged remote push whose local identity publication was interrupted, but
+only when the UUID, content tree, parents, message and timestamp match. Remote
+publication and local publication are separate transactions: after an ambiguous
+push failure, fetch and inspect before retrying. Existing imported signatures and
+Git IDs remain unchanged.
+
+Tests exercise two independent clients, concurrent rejected pushes, a combined merge,
+tracking rewind refusal, repeated fetch without duplicate ancestry, and interrupted
+identity publication against real local Git repositories. Network credential-provider
+and server deployments still require qualification. This transport delegates
+repository authentication to Git; it does not authenticate `--as`, encrypt the local
+compatibility store, implement native per-object authorization, or replace Git itself.
+Each fetch currently uses a fresh temporary bare clone; transfer resumption, named
+remote configuration, tags, all-ref synchronization and native remote services remain
+open.

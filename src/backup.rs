@@ -2,7 +2,7 @@ use super::*;
 
 /// The caller's command lock excludes concurrent metadata publication throughout.
 pub(super) fn backup(repo: &Repo, destination: &Path, actor_name: &str) -> Result<()> {
-    verify::verify(repo, actor_name)?;
+    verify::check(repo, actor_name)?;
     let absolute = std::env::current_dir()?.join(destination);
     let parent = fs::canonicalize(
         absolute
@@ -64,7 +64,7 @@ pub(super) fn backup(repo: &Repo, destination: &Path, actor_name: &str) -> Resul
                 meta: staging.clone(),
                 transaction,
             };
-            verify::verify(&copy, actor_name).context("backup verification failed")?;
+            verify::check(&copy, actor_name).context("backup verification failed")?;
         }
         sync_directory(&staging)?;
         fs::rename(&staging, destination.join(META_DIR))?;
