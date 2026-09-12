@@ -106,7 +106,7 @@ pub(super) struct Object {
     pub bytes: Vec<u8>,
 }
 enum Entry {
-    File { id: String, executable: bool },
+    File { id: String, mode: &'static str },
     Directory(BTreeMap<String, Entry>),
 }
 
@@ -114,11 +114,11 @@ fn insert(
     directory: &mut BTreeMap<String, Entry>,
     parts: &[&str],
     id: String,
-    executable: bool,
+    mode: &'static str,
 ) -> Result<()> {
     if parts.len() == 1 {
         if directory
-            .insert(parts[0].to_string(), Entry::File { id, executable })
+            .insert(parts[0].to_string(), Entry::File { id, mode })
             .is_some()
         {
             bail!("duplicate Git tree path");
@@ -130,7 +130,7 @@ fn insert(
         let Entry::Directory(child) = child else {
             bail!("Git tree path collision");
         };
-        insert(child, &parts[1..], id, executable)?;
+        insert(child, &parts[1..], id, mode)?;
     }
     Ok(())
 }
@@ -143,9 +143,7 @@ fn encode_tree(
     let mut entries = Vec::new();
     for (name, entry) in directory {
         let (mode, id, directory) = match entry {
-            Entry::File { id, executable } => {
-                (if executable { "100755" } else { "100644" }, id, false)
-            }
+            Entry::File { id, mode } => (mode, id, false),
             Entry::Directory(child) => ("40000", encode_tree(child, format, objects)?, true),
         };
         let mut sort_key = name.as_bytes().to_vec();
@@ -195,7 +193,18 @@ pub(super) fn tree(
             bail!("blob changed while building Git tree");
         }
         let id = object_id("blob", &bytes, format)?;
-        insert(&mut directory, &parts, id.clone(), file.executable)?;
+        insert(
+            &mut directory,
+            &parts,
+            id.clone(),
+            if file.symlink {
+                "120000"
+            } else if file.executable {
+                "100755"
+            } else {
+                "100644"
+            },
+        )?;
         objects.push(Object {
             id,
             kind: "blob",

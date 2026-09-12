@@ -554,8 +554,11 @@ fn import_files(
             .position(|byte| *byte == b'\t')
             .context("invalid Git tree record")?;
         let fields: Vec<_> = std::str::from_utf8(&record[..split])?.split(' ').collect();
-        if fields.len() != 3 || fields[1] != "blob" || !matches!(fields[0], "100644" | "100755") {
-            bail!("Git import currently supports regular files only; symlinks and submodules require support before import");
+        if fields.len() != 3
+            || fields[1] != "blob"
+            || !matches!(fields[0], "100644" | "100755" | "120000")
+        {
+            bail!("Git import supports regular files and symlinks; submodules and other tree modes are unsupported");
         }
         let path = std::str::from_utf8(&record[split + 1..])
             .context("Git filename is not representable as UTF-8")?
@@ -579,7 +582,11 @@ fn import_files(
         } else {
             transaction::publish_file(&destination, &bytes)?;
         }
+        if fields[0] == "120000" {
+            transaction::validate_link(&bytes)?;
+        }
         files.push(FileEntry {
+            symlink: fields[0] == "120000",
             path,
             executable: fields[0] == "100755",
             hash,

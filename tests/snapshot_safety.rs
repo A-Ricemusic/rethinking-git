@@ -103,20 +103,19 @@ fn literal_backslashes_do_not_alias_directory_separators() {
 
 #[cfg(unix)]
 #[test]
-fn symlinks_are_refused_instead_of_silently_omitted() {
+fn symlinks_preserve_targets_without_following_directories_or_dangling_links() {
     use std::os::unix::fs::symlink;
     for target in ["missing", "."] {
         let repo = Repo::new();
         repo.change();
         symlink(target, repo.0.join("link")).unwrap();
-        let result = repo.run(&["snapshot"]);
-        assert!(!result.status.success(), "symlink was silently omitted");
-        assert!(String::from_utf8_lossy(&result.stderr).contains("unsupported filesystem entry"));
+        repo.ok(&["snapshot"]);
+        repo.ok(&["repo", "verify", "--as", "admin"]);
+        fs::remove_file(repo.0.join("link")).unwrap();
+        repo.ok(&["workspace", "restore", "--discard-changes", "--as", "admin"]);
         assert_eq!(
-            fs::read_dir(repo.0.join(".rgit/snapshots"))
-                .unwrap()
-                .count(),
-            0
+            fs::read_link(repo.0.join("link")).unwrap(),
+            PathBuf::from(target)
         );
     }
 }
