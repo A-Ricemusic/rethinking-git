@@ -577,3 +577,21 @@ changes also prevent a non-discarding switch, even when file bytes are identical
 The optional workspace `mode_snapshot` reference is journaled with checkout/snapshot
 updates and checked by `repo verify`; legacy workspaces fall back to their saved
 change baseline. Unix continues to read actual filesystem modes.
+
+### Cloning a Git branch into a native working directory
+
+`rgit git clone REMOTE NEW_DIRECTORY --branch main --domain public` works outside
+an existing native repository. It creates a private destination on Unix, fetches the
+selected branch into native `main`, verifies history and materializes its saved files.
+Omit `--domain public` to retain the admin-only import default. Authentication and
+protocol restrictions are the same as `git fetch`.
+
+An existing destination is refused. A transport/import/checkout failure retains the
+new directory with `.rgit/clone-request.json`; rerun the same command with `--resume`
+after fixing the cause. The remote, branch and domains must match. Resume replays any
+committed journal first, then compares checkout against the pre-fetch workspace so
+later edits and newly created colliding files are preserved. Move conflicting files
+aside intentionally before retrying. Initial repository creation still has the
+initialization-interruption limitation described above; resume requires its completed
+configuration and recorded clone request. This is selected-branch cloning, not all-ref
+migration or resumable network transfer.
