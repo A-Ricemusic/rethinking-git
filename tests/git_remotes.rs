@@ -282,3 +282,27 @@ fn relative_local_remotes_resolve_from_the_calling_directory() {
     client.ok(&["git", "push", &relative, "--as", "admin"]);
     client.ok(&["repo", "verify", "--as", "admin"]);
 }
+
+#[test]
+fn git_url_rewrites_cannot_enable_plaintext_transport() {
+    let repo = Repo::new();
+    let config = repo.0.join("transport.config");
+    fs::write(&config, "[url \"http://127.0.0.1:1/\"]\n    insteadOf = https://fixture.invalid/\n[protocol \"http\"]\n    allow = always\n").unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_rgit"))
+        .current_dir(&repo.0)
+        .env("GIT_CONFIG_GLOBAL", &config)
+        .args([
+            "git",
+            "fetch",
+            "https://fixture.invalid/repo",
+            "--into",
+            "remote/main",
+            "--as",
+            "admin",
+        ])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("transport 'http' not allowed"));
+    assert!(!repo.0.join(".rgit/lines/remote__main.json").exists());
+}
