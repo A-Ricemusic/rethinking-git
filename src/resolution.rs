@@ -19,12 +19,19 @@ pub(super) fn resolve_conflict(
     if !can_access_conflict(&actor, &conflict) {
         return Err(CliFailure::OperationUnavailable.into());
     }
-    let change = read_change(repo, &conflict.change_id)?;
+    let mut change = read_change(repo, &conflict.change_id)?;
     let line = read_line(repo, &conflict.line)?;
     let incoming = read_snapshot(repo, &conflict.incoming_snapshot)?;
     if !can_access(&actor, &change.policy) || !can_access(&actor, &line.policy) {
         return Err(CliFailure::OperationUnavailable.into());
     }
+    change.base_snapshot = ancestry::merge_base(
+        repo,
+        line.head_snapshot.as_deref(),
+        &incoming,
+        change.base_snapshot.as_deref(),
+    )?
+    .map(|snapshot| snapshot.id);
     if !matches_sources(&conflict, &line, &change, &incoming)
         || change.current_snapshot.as_deref() != Some(incoming.id.as_str())
     {
