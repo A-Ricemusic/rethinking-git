@@ -1,5 +1,7 @@
 # Rethinking Git
 
+**Status: experimental; not yet a production Git replacement.** See the [production-readiness audit](docs/production-readiness.md) for verified fixes, remaining blockers, and acceptance criteria.
+
 This repository is now centered on a `jj`-inspired model.
 
 The first prototype starts from these ideas:
@@ -13,9 +15,9 @@ Later versions can add protected `lines`, typed `markers`, permissioned material
 
 Start here:
 
-- [docs/jj-primitives.md](/Users/pelicannurse/Documents/Apps/rethinking-git/docs/jj-primitives.md)
-- [docs/access-control.md](/Users/pelicannurse/Documents/Apps/rethinking-git/docs/access-control.md)
-- [docs/prototype.md](/Users/pelicannurse/Documents/Apps/rethinking-git/docs/prototype.md)
+- [docs/jj-primitives.md](docs/jj-primitives.md)
+- [docs/access-control.md](docs/access-control.md)
+- [docs/prototype.md](docs/prototype.md)
 
 ## License
 

@@ -28,7 +28,7 @@ This checklist tracks implementation of the production-grade, permission-aware G
 - [x] Add macOS CI.
 - [x] Add Windows CI for supported behavior.
 - [x] Cache Cargo dependencies without hiding reproducibility problems.
-- [x] Publish test and benchmark artifacts from CI.
+- [-] Publish test and benchmark artifacts from CI. Test logs are restored by the CI remediation; benchmark artifacts remain pending.
 
 ### Baseline behavior
 
@@ -51,16 +51,18 @@ This checklist tracks implementation of the production-grade, permission-aware G
 
 ### Baseline performance
 
-- [x] Select benchmark hardware profiles.
-- [x] Select small, medium, Linux-scale, and monorepo fixtures.
-- [x] Benchmark repository initialization.
-- [x] Benchmark working-tree scanning.
-- [x] Benchmark snapshot creation.
-- [x] Benchmark warm and cold status.
-- [x] Benchmark file and snapshot diff.
-- [x] Benchmark three-way merge planning.
-- [x] Save results in a versioned benchmark report.
-- [x] Define initial latency, memory, and disk budgets.
+Audit correction: the harness and related fixtures were removed in `e287d09`. These items require restored, reproducible evidence; historical checkmarks do not establish current coverage.
+
+- [ ] Select benchmark hardware profiles.
+- [ ] Select small, medium, Linux-scale, and monorepo fixtures.
+- [ ] Benchmark repository initialization.
+- [ ] Benchmark working-tree scanning.
+- [ ] Benchmark snapshot creation.
+- [ ] Benchmark warm and cold status.
+- [ ] Benchmark file and snapshot diff.
+- [ ] Benchmark three-way merge planning.
+- [ ] Save results in a versioned benchmark report.
+- [ ] Define initial latency, memory, and disk budgets.
 
 ### Specifications and ADRs
 
@@ -83,7 +85,7 @@ This checklist tracks implementation of the production-grade, permission-aware G
 
 - [x] All documented prototype flows run in CI.
 - [x] Golden tests protect existing semantics.
-- [x] Benchmark baselines are reproducible.
+- [ ] Benchmark baselines are reproducible.
 - [x] Threat-model and trust-boundary documents are reviewed.
 - [x] Required ADRs are approved.
 - [ ] Milestone 0 review is signed off.
