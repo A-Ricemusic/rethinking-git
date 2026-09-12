@@ -1,0 +1,70 @@
+# Production readiness audit
+
+Audit baseline: `e2a7be2978a948ec8226fb3395370536383d13d7` (`master`, fetched September 11, 2026, America/Los_Angeles).
+
+## Engineering assessment
+
+This repository is a useful source-control prototype with promising object and storage libraries. It is **not ready to replace Git in a professional development environment**. Passing the library tests does not establish that the CLI uses those libraries or that a user can recover a working tree, collaborate, or restore a backup.
+
+The executable still writes format-2 JSON through `src/main.rs`; its Cargo dependencies do not include `rgit-store` or `rgit-graph`. The newer crates provide canonical objects, graph algorithms, verified loose records, and SQLite transactions, but are not the persistence path used by `rgit init`, `snapshot`, or `line integrate`.
+
+This audit distinguishes reproduced defects, implementation gaps verified in code, and qualification work that requires evidence beyond a code review. It is not a penetration test, independent security review, or milestone approval.
+
+## Evidence collected
+
+- Inspected the CLI command surface, storage reads/writes, permission filtering, diff/merge equality, working-tree scanning, object/path schemas, graph algorithms, SQLite refresh/publication paths, and the existing tests/specifications.
+- Baseline `cargo test --workspace --locked`: 160 tests passed and five explicit fixture-generation/subprocess helpers were ignored on macOS. The crash-test parents invoke their helpers separately.
+- Baseline formatting and `cargo clippy --workspace --all-targets --locked -- -D warnings` passed.
+- `cargo +1.85.0 check --workspace --all-targets --locked` passed locally, validating the declared minimum against the lockfile.
+- Added executable regression cases for format validation, path/identity aliases, policy-only integration, snapshot fidelity, corrupt blob reuse, and metadata disclosure. The original implementation failed the applicable regression cases before each fix.
+- Real non-UTF-8 filename creation is tested on Linux. APFS rejects that fixture itself, so Unix also has a filesystem-independent path-conversion test.
+- GitHub CI results and review decisions are linked in the remediation PRs. A local macOS test pass is not evidence for Windows durability or other filesystems.
+
+## Defects addressed by focused PRs
+
+| Priority | Defect and consequence | Fix and evidence |
+| --- | --- | --- |
+| High | CI was absent from the tracked tree despite completed checklist entries. Regressions had no repository-owned PR gate. | [PR #1](https://github.com/A-Ricemusic/rethinking-git/pull/1): full workspace format/lint/tests on Linux, macOS, Windows; Rust 1.85 check; dependency policy; pinned Actions and preserved logs. |
+| High | Opening `.rgit` did not read its format version. Old, future, or incomplete repositories could be mutated by incompatible code. | [PR #2](https://github.com/A-Ricemusic/rethinking-git/pull/2): validate config and exact supported version before dispatch; negative tests assert no mutation. |
+| High | Object IDs were joined directly into filesystem paths. Named keys could alias: `team/alice` and `team__alice` wrote the same actor grants. Stored identities were not checked. | PR #2: typed ID validation, safe named keys, and stored/requested identity checks. Seven CLI regression scenarios, including preserved Unicode names. |
+| High | File equality compared only content hashes. A policy restriction with unchanged bytes could be silently discarded by integration; diffs reported clean. | [PR #3](https://github.com/A-Ricemusic/rethinking-git/pull/3): compare full entries; conflict on divergent policy/content edits; count hidden metadata changes without revealing paths. |
+| High | Scanning trimmed filenames and converted literal Unix backslashes to separators, allowing different files to share one manifest path. Unsupported entries were silently omitted. | [PR #4](https://github.com/A-Ricemusic/rethinking-git/pull/4): preserve actual UTF-8 path components and access-policy spelling; refuse unrepresentable entries. Symlink support is still pending. |
+| High | Snapshot creation trusted an existing blob solely because its filename existed, allowing new snapshots to reference already-corrupt bytes. | PR #4: verify existing contents before reuse; regression confirms the current change and snapshot count do not advance after corruption. |
+| High | SQLite presence/reference lookups converted storage failures to `None`, indistinguishable from an absent object or reference. | [PR #5](https://github.com/A-Ricemusic/rethinking-git/pull/5): return `Result<Option<_>, StoreError>`; test absence, promise visibility, and replaced metadata. No disk-format change. |
+| High | Several read commands disclosed private snapshot IDs, parent IDs, messages, or owning-change IDs through otherwise visible objects. | [PR #6](https://github.com/A-Ricemusic/rethinking-git/pull/6): centralize reference redaction, check snapshot policy before summaries, and give workspace inspection an actor-specific view. Cross-command negative tests. |
+
+These changes reduce concrete risks; they do not convert the legacy backend into a secure transactional repository.
+
+## Remaining release blockers
+
+| ID | Priority | Finding and code evidence | Required outcome and acceptance evidence |
+| --- | --- | --- | --- |
+| R1 | Critical | CLI mutations use separate `fs::write` calls in `create_snapshot`, `integrate_line`, `record_operation`, and `write_json`. There is no repository-wide transaction or process lock. A crash can separate the head update from its operation record; concurrent writers can lose updates. | Route every mutation through the verified store and an operations layer. Atomically publish references with their operation using compare-and-swap. Kill real CLI processes at every phase; reopen and prove old-or-new state, complete object closure, and no lost concurrent updates. |
+| R2 | Critical | `--as` selects a local actor JSON file, and `actor set` can grant `admin` without authentication. Blobs and metadata are plaintext. All local users with storage access can bypass command filtering. | Introduce authenticated principals, separate discover/read/write/admin capabilities, signed operations, encryption/key management, and deny-by-default service boundaries. Add adversarial cross-principal tests and independent review before remote use. Do not market current filtering as security. |
+| R3 | Critical | No checkout/materialization, change switch, restore, undo, redo, or conflict resolution command exists. Golden tests simulate switching by directly editing `.rgit/workspace.json`. A user cannot recover ordinary work through the CLI alone. | A complete local workflow must start/switch changes, preserve dirty work, restore snapshots, resolve and integrate conflicts, and undo operations safely. Test a real directory end-to-end with no metadata edits and no Git rescue steps. |
+| R4 | High | No Git import/export, clone/fetch/push equivalent, remote service, negotiation protocol, or review/landing service exists. | First prove lossless import/export for content, modes, symlinks, history and named refs with Git fixture repositories. Then implement authenticated atomic sync with resumable transfer, authorization before discovery, and concurrent/offline collaboration tests. |
+| R5 | High | File mode is absent from `FileEntry`; symlinks and non-UTF-8 names have no legacy representation. The scanner has only hard-coded directory exclusions, ignores `.gitignore`, and lacks portable collision checks and race-resistant capture. | Version the filesystem schema, track executable bits and symlink targets, implement ignore semantics that retain tracked files, reject materialization collisions, and prevent traversal/symlink races. Test Linux/macOS/Windows semantics explicitly, including restrictive policies and changes during capture. |
+| R6 | High | No CLI `repo verify`, repair report, backup/restore, migrations, retention, GC or compaction workflow exists. `SqliteStore::verify_metadata` is a library method, not recovery tooling for format 2. | Read-only verification must identify corrupt/missing objects and invalid references without mutating originals. Prove backup restoration, explicit migration/rollback, and reachable-object preservation under GC with crash/fault tests. |
+| R7 | High | Snapshot policies can be selected independently of their owning change. Policy domains use OR semantics and cannot express all derived-data intersections. Some views intentionally project file visibility separately from snapshot metadata. | Specify and implement a coherent derivation/declassification model, including which metadata edges can be exposed. Property-test that every derived result requires all source grants or an explicit authorized projection. Fixing individual output leaks is not a complete authorization proof. |
+| R8 | High | `SqliteStore::refresh` calls `load_snapshot` for ordinary reads and writes. That walks the inventory, rereads canonical objects, and verifies derived indexes; the memory backend stages full state. The CLI rereads/hashes every scanned file. | Establish measured budgets and representative fixtures. Replace full-store refresh with validated incremental/indexed access while preserving corruption checks and concurrency semantics. Measure scaling, memory, cold/warm operations, and large-file behavior; do not assume the current implementation is fast enough. |
+| R9 | High | Windows writable SQLite VFS returns Unsupported; durable-store tests are Unix-gated. Cross-platform CI success does not qualify unsupported storage or network filesystems. | Publish a capability matrix; implement and fault-test supported backends. Explicitly refuse unsupported filesystem durability guarantees. Qualify Windows, disk-full, permission loss, short writes, process death, and multiple processes on real supported filesystems. |
+| R10 | High | Published benchmark fixtures and harness were removed in `e287d09`; checklist still claimed reproducible results. No complete milestone review establishes release readiness. | Restore versioned benchmark fixtures/results and retain reproducible evidence. Keep incomplete acceptance criteria open; obtain actual accountable and independent reviews where required. |
+| R11 | Medium | Most application orchestration and policy rendering still live in one large CLI file. Output is text-only; several denied/missing read operations exit successfully. | Extract operations/workspace/CLI layers, define typed outcomes and stable JSON/exit codes, and test automation clients. Preserve generic unauthorized errors without confusing them with success. |
+| R12 | Medium | IDs use only 12 UUID hex characters in the legacy CLI; object/operation writes can overwrite paths and the operation log lacks a causal parent chain. | Use full stable identifiers and immutable no-replace admission, define causal operations and idempotent retry semantics, and test collisions and duplicate requests. A clock timestamp is not a total transaction order. |
+| R13 | Medium | SQLite's runtime edge registry is parsed from an embedded Markdown specification. Renaming prose can break database startup; crate packaging depends on files outside the crate. | Move normative registry data into a versioned code/data module, verify documentation against it, and test packaging/building from release artifacts. Preserve the frozen schema fingerprint. |
+
+## Delivery sequence
+
+1. **Containment:** merge only reviewed regression fixes and working CI. Keep the tool labeled experimental. Preserve source repositories and existing history.
+2. **Durable local vertical slice:** build `rgit-operations`, connect the CLI to the store, add format migration, repository verification, compare-and-swap line updates and crash recovery. Every current CLI scenario must run on the new store before retiring JSON.
+3. **Usable solo development:** implement safe materialization/switch/restore, modes/symlinks/ignore rules, conflict resolution, operation undo, text patches and stable automation output. Acceptance: work and recover entirely through `rgit` on representative local repositories.
+4. **Migration and collaboration:** Git import/export first, then authenticated native remotes, concurrent/offline synchronization and review/landing policies. Acceptance: two independent clients collaborate and recover from disconnects and rejected writes without data loss or unauthorized disclosure.
+5. **Professional release qualification:** benchmarks, backup drills, migration support, adversarial tests, independent security review, supported-platform qualification, reproducible release artifacts and documented incident procedures. Use actual team workflows over time before declaring replacement readiness.
+
+The existing [implementation plan](../.plans/implementation-plan.md) already treats this as a multi-milestone project. No single patch series can substitute for the missing operational behavior and qualification evidence.
+
+## Review and merge policy for this audit
+
+Small fixes must have a focused diff, a reproduced failure where practical, regression coverage, passing workspace checks, and a fresh review of the final PR head. Source/API changes must disclose compatibility impact. Merge without bypassing failing required checks. Automated self-review is recorded as such; it does not satisfy the independent human review gates in [ownership.md](governance/ownership.md).
+
+Large unimplemented subsystems remain blockers, not checkboxes marked complete or placeholders called production. No milestone or release is approved by this audit.
