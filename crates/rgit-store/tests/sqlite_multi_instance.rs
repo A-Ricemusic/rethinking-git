@@ -160,25 +160,29 @@ fn concurrent_instances_serialize_process_writers() {
 
 #[test]
 fn concurrent_writable_startup_is_serialized() {
-    let path = repository("startup");
-    let control = Arc::new(path.join(".rgit"));
-    let barrier = Arc::new(Barrier::new(2));
-    let threads = (0..2)
-        .map(|_| {
-            let control = Arc::clone(&control);
-            let barrier = Arc::clone(&barrier);
-            std::thread::spawn(move || {
-                barrier.wait();
-                SqliteStore::open(control.as_ref()).expect("concurrent startup")
+    // Repeated synchronized creation exposed APFS O_CREAT/ENOENT races that
+    // a single pair of openers only caught intermittently in CI.
+    for _ in 0..32 {
+        let path = repository("startup");
+        let control = Arc::new(path.join(".rgit"));
+        let barrier = Arc::new(Barrier::new(8));
+        let threads = (0..8)
+            .map(|_| {
+                let control = Arc::clone(&control);
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    SqliteStore::open(control.as_ref()).expect("concurrent startup")
+                })
             })
-        })
-        .collect::<Vec<_>>();
-    let stores = threads
-        .into_iter()
-        .map(|thread| thread.join().expect("startup thread"))
-        .collect::<Vec<_>>();
-    drop(stores);
-    fs::remove_dir_all(path).expect("cleanup");
+            .collect::<Vec<_>>();
+        let stores = threads
+            .into_iter()
+            .map(|thread| thread.join().expect("startup thread"))
+            .collect::<Vec<_>>();
+        drop(stores);
+        fs::remove_dir_all(path).expect("cleanup");
+    }
 }
 
 #[test]
