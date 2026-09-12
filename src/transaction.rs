@@ -357,7 +357,7 @@ impl CommandTransaction {
     }
 }
 
-pub(crate) fn working_path(root: &Path, key: &str) -> Result<PathBuf> {
+pub(crate) fn validate_working_key(key: &str) -> Result<()> {
     #[cfg(windows)]
     super::validate_named_key(key)?;
     let relative = Path::new(key);
@@ -377,6 +377,12 @@ pub(crate) fn working_path(root: &Path, key: &str) -> Result<PathBuf> {
     {
         bail!("unsafe snapshot path");
     }
+    Ok(())
+}
+
+pub(crate) fn working_path(root: &Path, key: &str) -> Result<PathBuf> {
+    validate_working_key(key)?;
+    let relative = Path::new(key);
     let mut path = root.to_path_buf();
     for (index, part) in relative.components().enumerate() {
         path.push(part);

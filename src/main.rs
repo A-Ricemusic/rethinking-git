@@ -16,6 +16,7 @@ mod checkout;
 mod cli_failure;
 mod resolution;
 mod transaction;
+mod verify;
 
 use cli_failure::CliFailure;
 
@@ -35,6 +36,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Inspect repository integrity.
+    Repo {
+        #[command(subcommand)]
+        command: RepoCommand,
+    },
     /// Initialize source control in the current directory.
     Init,
     /// Show changed files since the current change's latest snapshot.
@@ -101,6 +107,15 @@ enum Command {
     Op {
         #[command(subcommand)]
         command: OpCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum RepoCommand {
+    /// Verify saved records, references, manifests and blobs without repairing them.
+    Verify {
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
     },
 }
 
@@ -541,6 +556,9 @@ fn main() -> Result<()> {
     let repo = Repo::discover()?;
     let result = match cli.command {
         Command::Init => unreachable!(),
+        Command::Repo {
+            command: RepoCommand::Verify { as_actor },
+        } => verify::verify(&repo, &as_actor),
         Command::Status { as_actor } => status(&repo, &as_actor),
         Command::Snapshot { message, domains } => {
             create_snapshot(&repo, &message, policy_from_domains(domains))
