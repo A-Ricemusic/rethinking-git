@@ -400,3 +400,71 @@ fn symlink_trees_round_trip_and_restore_with_platform_semantics() {
         native.ok(&["repo", "verify", "--as", "admin"]);
     }
 }
+
+#[test]
+fn tracked_build_directory_names_survive_import_restore_and_capture() {
+    let source = Repo(destination());
+    fs::create_dir(&source.0).unwrap();
+    git(&source, &["init", "-b", "main"]);
+    for path in ["target/source.txt", "node_modules/vendored.txt"] {
+        fs::create_dir_all(source.0.join(path).parent().unwrap()).unwrap();
+        fs::write(source.0.join(path), path).unwrap();
+    }
+    commit(&source, "tracked user directories");
+    let original = git(&source, &["rev-parse", "HEAD"]);
+    let native = Repo::new();
+    native.ok(&[
+        "git",
+        "import",
+        source.0.to_str().unwrap(),
+        "--as",
+        "admin",
+        "--domain",
+        "public",
+    ]);
+    native.ok(&["workspace", "restore", "--discard-changes", "--as", "admin"]);
+    for path in ["target/source.txt", "node_modules/vendored.txt"] {
+        assert_eq!(fs::read(native.0.join(path)).unwrap(), path.as_bytes());
+    }
+    // Ignore future generated siblings while retaining already-tracked content.
+    fs::write(native.0.join(".gitignore"), "target/\nnode_modules/\n").unwrap();
+    fs::write(native.0.join("target/generated"), "ignored").unwrap();
+    native.ok(&["snapshot"]);
+    let workspace: serde_json::Value =
+        serde_json::from_slice(&fs::read(native.0.join(".rgit/workspace.json")).unwrap()).unwrap();
+    let change: serde_json::Value = serde_json::from_slice(
+        &fs::read(native.0.join(format!(
+            ".rgit/changes/{}.json",
+            workspace["current_change"].as_str().unwrap()
+        )))
+        .unwrap(),
+    )
+    .unwrap();
+    let snapshot: serde_json::Value = serde_json::from_slice(
+        &fs::read(native.0.join(format!(
+            ".rgit/snapshots/{}.json",
+            change["current_snapshot"].as_str().unwrap()
+        )))
+        .unwrap(),
+    )
+    .unwrap();
+    let paths: Vec<_> = snapshot["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["path"].as_str().unwrap())
+        .collect();
+    assert!(paths.contains(&"target/source.txt"));
+    assert!(paths.contains(&"node_modules/vendored.txt"));
+    assert!(!paths.contains(&"target/generated"));
+    let exported = Repo(destination());
+    native.ok(&[
+        "git",
+        "export",
+        exported.0.to_str().unwrap(),
+        "--as",
+        "admin",
+    ]);
+    assert_eq!(git(&exported, &["rev-parse", "HEAD"]), original);
+    native.ok(&["repo", "verify", "--as", "admin"]);
+}
