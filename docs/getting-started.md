@@ -124,20 +124,33 @@ For a real remote, replace the path with its HTTPS or SSH URL. Restricted native
 history requires explicit `--allow-restricted` on export/push because Git does not
 carry native access policies.
 
-Back in `demo`, fetch into a tracking line and start work from its saved head:
+Back in `demo`, pull a fast-forward update into a clean workspace:
 
 ```sh
-rgit git fetch ../remote.git --into upstream --domain public --as admin
-rgit change new follow-up --target upstream
-rgit workspace restore --discard-changes --as admin
+cd ../demo
+rgit git pull ../remote.git --as admin
+rgit status
 rgit repo verify --as admin
 ```
 
-The explicit restore here assumes the demo has no edits to keep. For existing local
-work, snapshot it first, retarget the change to the tracking line with `change
-retarget upstream --as admin`, then integrate into `upstream` and resolve conflicts.
-Push that line with `--line upstream`. A stale push must be reconciled through a
-fetch and integration; there is no implicit force push.
+Pull materializes the updated line and starts an empty change at that exact saved
+snapshot. It inherits the existing line policy. Dirty files, untracked collisions,
+unintegrated saved work, and divergent history are refused without changing saved
+records or working files. An unchanged remote tip preserves the current workspace.
+
+For divergent work, fetch into a separate tracking line and integrate explicitly:
+
+```sh
+rgit git fetch ../remote.git --into upstream --domain public --as admin
+rgit change retarget upstream --as admin
+rgit line integrate upstream --as admin
+```
+
+Resolve any reported conflicts and repeat integration, then push with `--line
+upstream`. Integration changes saved history; use an explicit workspace restore from
+the resulting line-head snapshot when ready to materialize and test the combined
+contents. A stale push must be reconciled through fetch and integration; there is no
+implicit force push.
 
 Import/fetch/clone default to the admin domain. `--domain public` above deliberately
 makes this demonstration's imported history visible in the default view. Clone

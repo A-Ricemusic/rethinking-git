@@ -176,6 +176,20 @@ struct GitCloneArgs {
     resume: bool,
 }
 
+#[derive(clap::Args)]
+struct GitPullArgs {
+    remote: String,
+    #[arg(long, default_value = DEFAULT_LINE)]
+    branch: String,
+    #[arg(long, default_value = DEFAULT_LINE)]
+    line: String,
+    #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+    as_actor: String,
+    /// Policies for newly imported commits; defaults to the existing line policy.
+    #[arg(long = "domain")]
+    domains: Vec<String>,
+}
+
 #[derive(Subcommand)]
 enum GitCommand {
     /// Clone a Git branch into a new native repository and working directory.
@@ -192,6 +206,8 @@ enum GitCommand {
         #[arg(long = "domain", default_value = ADMIN_DOMAIN)]
         domains: Vec<String>,
     },
+    /// Fetch and materialize a fast-forward update, preserving dirty or unintegrated work.
+    Pull(GitPullArgs),
     /// Publish a line with Git's normal fast-forward and server authorization checks.
     Push(GitPushArgs),
     /// Import a local Git revision and its complete ancestry into an empty line.
@@ -801,6 +817,9 @@ fn main() -> Result<()> {
             &as_actor,
             policy_from_domains(domains),
         ),
+        Command::Git {
+            command: GitCommand::Pull(args),
+        } => git_remotes::pull(&repo, &args),
         Command::Git {
             command: GitCommand::Push(args),
         } => git_remotes::push(&repo, &args),
