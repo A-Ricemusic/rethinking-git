@@ -281,7 +281,10 @@ fn verify_with_output(repo: &Repo, actor_name: &str, report: bool) -> Result<()>
                     .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
             "blob filename",
         )?;
-        require(hash_bytes(&read_blob(repo, &name)?) == name, "blob digest")?;
+        require(
+            blob_io::digest(open_blob(repo, &name)?)?.0 == name,
+            "blob digest",
+        )?;
         blob_count += 1;
     }
     read_path_policies(repo)?;
@@ -353,14 +356,20 @@ pub(super) fn verify_file(repo: &Repo, file: &FileEntry) -> Result<()> {
                 .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
         "blob identifier",
     )?;
-    let bytes = read_blob(repo, &file.hash)?;
-    require(
-        bytes.len() as u64 == file.bytes && hash_bytes(&bytes) == file.hash,
-        "blob digest or length",
-    )?;
     if file.symlink {
+        let bytes = read_blob(repo, &file.hash)?;
+        require(
+            bytes.len() as u64 == file.bytes && hash_bytes(&bytes) == file.hash,
+            "blob digest or length",
+        )?;
         transaction::validate_link(&bytes)?;
         require(!file.executable, "symlink mode")?;
+    } else {
+        let (hash, length) = blob_io::digest(open_blob(repo, &file.hash)?)?;
+        require(
+            length == file.bytes && hash == file.hash,
+            "blob digest or length",
+        )?;
     }
     Ok(())
 }

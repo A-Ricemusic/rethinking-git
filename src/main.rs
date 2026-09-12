@@ -14,6 +14,7 @@ use walkdir::WalkDir;
 
 mod ancestry;
 mod backup;
+mod blob_io;
 mod checkout;
 mod checkout_paths;
 mod cli_failure;
@@ -2399,33 +2400,10 @@ fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
         }
 
         let path = entry.path();
-        let bytes = if entry.file_type().is_symlink() {
-            transaction::read_link_bytes(path)?
-        } else {
-            fs::read(path).with_context(|| format!("failed to read {}", path.display()))?
-        };
-        let hash = hash_bytes(&bytes);
         let relative_path = repository_relative_path(
             path.strip_prefix(&repo.root)
                 .context("failed to compute relative path")?,
         )?;
-
-        if store_blobs {
-            let blob_path = repo.path(&["blobs", &hash]);
-            if blob_path
-                .try_exists()
-                .context("failed to inspect stored blob")?
-            {
-                let stored =
-                    verify::read_blob(repo, &hash).context("failed to verify stored blob")?;
-                if stored != bytes {
-                    bail!("stored blob failed verification; snapshot was not published");
-                }
-            } else {
-                transaction::publish_file(&blob_path, &bytes)?;
-            }
-        }
-
         #[cfg(unix)]
         let symlink = entry.file_type().is_symlink();
         #[cfg(not(unix))]
@@ -2433,9 +2411,39 @@ fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
             || inherited_modes
                 .get(&relative_path)
                 .is_some_and(|f| f.symlink);
-        if symlink {
-            transaction::validate_link(&bytes)?;
-        }
+        let (hash, byte_count) = if !store_blobs && !symlink {
+            blob_io::digest(
+                fs::File::open(path)
+                    .with_context(|| format!("failed to open {}", path.display()))?,
+            )?
+        } else {
+            let bytes = if entry.file_type().is_symlink() {
+                transaction::read_link_bytes(path)?
+            } else {
+                fs::read(path).with_context(|| format!("failed to read {}", path.display()))?
+            };
+            let hash = hash_bytes(&bytes);
+            if store_blobs {
+                let blob_path = repo.path(&["blobs", &hash]);
+                if blob_path
+                    .try_exists()
+                    .context("failed to inspect stored blob")?
+                {
+                    let stored =
+                        verify::read_blob(repo, &hash).context("failed to verify stored blob")?;
+                    if stored != bytes {
+                        bail!("stored blob failed verification; snapshot was not published");
+                    }
+                } else {
+                    transaction::publish_file(&blob_path, &bytes)?;
+                }
+            }
+
+            if symlink {
+                transaction::validate_link(&bytes)?;
+            }
+            (hash, bytes.len() as u64)
+        };
         files.push(FileEntry {
             symlink,
             #[cfg(unix)]
@@ -2448,7 +2456,7 @@ fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
             policy: policy_for_path(&relative_path, &path_policies),
             path: relative_path,
             hash,
-            bytes: bytes.len() as u64,
+            bytes: byte_count,
         });
     }
 
