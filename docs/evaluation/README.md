@@ -42,3 +42,11 @@ tracked files cloned into native storage; unchanged export reproduced that exact
 Git tip. All workflow phases completed, including the full workspace test command,
 release build, changed-content export, backup restore and guarded reset/restore.
 The final repository verified with 134 snapshots and no unreferenced blobs.
+
+## Disposable React app trial
+
+The [React development experience report](react-vcs-trial.md) exercises all current
+command paths against a temporary React app, records workflow limitations and an
+agent-adoption recommendation, and confirms removal of the app and its histories.
+Its [receipt](react-vcs-trial-2026-09-12.json) preserves command outcomes and cleanup
+metadata without retaining the app.

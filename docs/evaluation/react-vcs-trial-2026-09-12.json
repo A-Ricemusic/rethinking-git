@@ -1,0 +1,3870 @@
+{
+  "source_revision": "d2919690186ecfd2495b0ee43508ddd50c617628",
+  "binary_sha256": "386afe3f3ffa94fc2a3c1c3f4e74fafddf99fb2ba2f076125d34801431927991",
+  "commands": [
+    {
+      "command": [
+        "rgit",
+        "init"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1027,
+      "stdout_sha256": "4a84d7f1708dc38aaea65f9dc35064f6658f2228ec9f480fc01b4b0a36a76413",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "init",
+        "--resume"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0062,
+      "stdout_sha256": "d3b331f1f9eb1428df647f5eb1e992b926fee40b531c42f442072d097930b152",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "identity",
+        "set",
+        "React VCS Evaluation",
+        "evaluation@example.invalid"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0185,
+      "stdout_sha256": "8bc16dc0219564dfc6fe7f87e6e75d1077e5659a385a5d2ad41bac46e16dd94b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "identity",
+        "show"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0044,
+      "stdout_sha256": "bf9fd761dca96f4a4121a6e2873ac41dcdea50d57f1998140f072247e3a33a95",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 2.1434,
+      "stdout_sha256": "baa68efba84f6618719851728dc2d718e76f31c9626987f0be48719f52af8676",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "lint"
+      ],
+      "cwd": "app",
+      "exit_code": 1,
+      "expected_exit": 0,
+      "seconds": 0.9414,
+      "stdout_sha256": "23e721242a8f6ddf8e6de969b7995dd9592cf46b27fbe6f8a4b15b6ba85e4183",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "init",
+        "--resume"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0189,
+      "stdout_sha256": "d3b331f1f9eb1428df647f5eb1e992b926fee40b531c42f442072d097930b152",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "identity",
+        "set",
+        "React VCS Evaluation",
+        "evaluation@example.invalid"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0272,
+      "stdout_sha256": "8bc16dc0219564dfc6fe7f87e6e75d1077e5659a385a5d2ad41bac46e16dd94b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "identity",
+        "show"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0043,
+      "stdout_sha256": "bf9fd761dca96f4a4121a6e2873ac41dcdea50d57f1998140f072247e3a33a95",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.5025,
+      "stdout_sha256": "c345c1e0544b542a8a330c9610fa5e06da45547e955965175ed55d003492091d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "lint"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.2233,
+      "stdout_sha256": "8662128122406ecd902cdf7ce94333867fc5bd7b6590aa4013d81153ef078ca5",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "initial-react-app",
+        "--target",
+        "main"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0303,
+      "stdout_sha256": "af5beafe9f5f1918af5c8bfbfa38bf78e22d64e9cfd2471078768aef5c04829e",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "Create working React counter"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.218,
+      "stdout_sha256": "e5bdaf7774ef179232f8b68f3a0e790aadd2ed4ce655c1dc078ef249aa9a53ed",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "main",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0319,
+      "stdout_sha256": "0e4d801998ab38234c65692ad7a865807bcec20a97deff278a6317dc44ac59a2",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "status",
+        "--json",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.007,
+      "stdout_sha256": "00e1d344e127afc921ff8c1d65a5550af88de0ce7525b77beb9fd9067a557096",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "info",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0047,
+      "stdout_sha256": "c6c46046e0324e5d3623d600390a0c798f381cbc8af365092503f1ce934fc97d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "list",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0041,
+      "stdout_sha256": "ee821f4c6da4f68683eb7a8403f7a46568c318d894c5c3586829c2bebbf23dcd",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "show",
+        "chg_1033b51111d040948d8b5a4628db3f28",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0041,
+      "stdout_sha256": "a0c0e28eee1e52ed3fd0c6abd755c6824802fc57e275bb15a457d44551ba9e0b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot-info",
+        "list",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0045,
+      "stdout_sha256": "0893d2d8c971b0bab5dec326941d867b92a60ce8f583b64133d78a87bb7bbff9",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot-info",
+        "show",
+        "snap_6f634e9ee9eb4536a28e2bba1530c00a",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0047,
+      "stdout_sha256": "5f730f1abc7be66fcf24b24611221b6037bae0764ad704c7dbe679c5ad0de74c",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "list",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0037,
+      "stdout_sha256": "0a34aac00877383ddc333c9edef01bbb636d7bc1439ee48c72c6c03df40fee03",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "view",
+        "main",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.004,
+      "stdout_sha256": "0e97010a965e84f3472d14133a94002bdf3c2e79712e256b4fc511ac87fdf20d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "history",
+        "main",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0045,
+      "stdout_sha256": "5cc0282cccd972d3b84456659fa83a6dfb148641f2727d633250bdb85b2799be",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "op",
+        "log",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0041,
+      "stdout_sha256": "385ec10bbb87d6c4280502b17f7ee1295374a7bd5339c515512e92e863ca6016",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "status",
+        "--json",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0056,
+      "stdout_sha256": "154eb0fbf5a14a054bea1af564cfc60979085faafd40c84771ce6913674b988b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "diff",
+        "workspace",
+        "--patch",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0061,
+      "stdout_sha256": "29f9a1e57eb224902494959da174a73b8e9f9011ebd4e2282e95c18c6b854734",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "switch",
+        "chg_1033b51111d040948d8b5a4628db3f28",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 1,
+      "expected_exit": 1,
+      "seconds": 0.0071,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "a285f48ab44b2cba95d49956ea56280c9d978550040809108b7d7290af13f20c"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0354,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0488,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "repo",
+        "verify",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0099,
+      "stdout_sha256": "fa356cbf6004f239a54194b4f26f8909cbdb41520db99771157c0e416c29e22e",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "react-title",
+        "--target",
+        "main"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0334,
+      "stdout_sha256": "1427d1506d7f13dcbca7b3be684c91288fd3ec7a1642d3e10df2372a16b1f464",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.027,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "Rename React heading"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1683,
+      "stdout_sha256": "90039f3411fe26958a85f6fc8fa139e10be104c118504fbc23be33e660e49e96",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "react-footer",
+        "--target",
+        "main"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.031,
+      "stdout_sha256": "7217f93428eb6ef76431adc77cd31ec1965af6001cd50a19a03d5fc82b0cdfa7",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.038,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "Update footer"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1599,
+      "stdout_sha256": "7f88880b3be7e83679414250458691ebf69d9538cc9e3da8ca61e335dde62417",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "main",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0348,
+      "stdout_sha256": "b05e811b44b22420195cb67cee7172dff2cacc2f1caf6367797a15bb31f32cc2",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "switch",
+        "chg_74232a07acad48849f8e263db9ea5d01",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0413,
+      "stdout_sha256": "edd98716221347254895fca5ecc3c39e11c2265f58262e25e43d2dcfb4c65276",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "merge",
+        "preview",
+        "--into",
+        "main",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0072,
+      "stdout_sha256": "cda3d6e7de65bf68573d0396a67ca400a99ecc3f0091d386d2db1e13651a081d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "main",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0382,
+      "stdout_sha256": "c05bc14dc44644b961537fdfc5fb586d5a36a46614c61b3de93e38b5a8a5fd1b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--from",
+        "snap_00ae1ad74a2546b8acf096db23e9808c",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0376,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "diff",
+        "snapshot",
+        "snap_63eb81278663416e9677e9a01b9346f9",
+        "snap_ebc347ef0d2149289c58d398e906164d",
+        "--patch",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.005,
+      "stdout_sha256": "fe64f5a4540df8b928f657b7ce086e748c273ef56574da4a63117fa604a3e75c",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "diff",
+        "line",
+        "main",
+        "--patch",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0047,
+      "stdout_sha256": "d956b186bca13428d3d50bb903176269c575d8f92df7086d8f48205dc2fb9181",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "title-option-a",
+        "--target",
+        "main"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0303,
+      "stdout_sha256": "fccc6b9a47216587ed42c1b967846ecfca2c4d5a2fe9a29e150f89010b889978",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0293,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "Propose heading A"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1382,
+      "stdout_sha256": "f28dc48d82788c2b11e685b4dac095533a699734c18d8006b666dd6e66705270",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "title-option-b",
+        "--target",
+        "main"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0357,
+      "stdout_sha256": "fa38c063528f1a08270c12dbb8970d803d22ba04970735abbbcd86c18649d7bb",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0398,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "Propose heading B"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1498,
+      "stdout_sha256": "af67c6bdb6d90d8ab0d6e476ac219f62240110e945a76903dc77db1996cf363d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "main",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0384,
+      "stdout_sha256": "fb6ab87233b025feb6eadd8ff5a97c0c429c00dc85097105cb121aa9515b7481",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "switch",
+        "chg_4c1723d6a0e04713800d5c7fc6f7946e",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0369,
+      "stdout_sha256": "a2e5fce661577b2ceed1e8b989b439750737a56290e74092423003728362905d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "main",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 1,
+      "expected_exit": 1,
+      "seconds": 0.021,
+      "stdout_sha256": "f5682da1baf22d550374a324e3fc7306fc42d53fed5bb3c32f7128a247cb4316",
+      "stderr_sha256": "7ead1abb8a3e02e686c331fc5d46631f71002d95607c267579ce8f54892264ae"
+    },
+    {
+      "command": [
+        "rgit",
+        "conflict",
+        "list",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.005,
+      "stdout_sha256": "75c67638b9aa112fd1365295530f60873debfb9380b007c50db65825a7bad3ca",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "conflict",
+        "show",
+        "conf_7c3af7fefc424fa584e5073c421c531f",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0064,
+      "stdout_sha256": "f22da4878fa219e042d5e347559fffe43428cba122b75b3eb3133443d272a772",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "conflict",
+        "resolve",
+        "conf_7c3af7fefc424fa584e5073c421c531f",
+        "--from-working",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0361,
+      "stdout_sha256": "188bf76f1dae6b2f16bb7251ec187973fcecac7b69d0e8e57d6dde7b830b5289",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "main",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.031,
+      "stdout_sha256": "5ae2491b601cb072ea11fdd08aa2dc736e38a7388a5a1aafbd8fc1960e1a0a5e",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--from",
+        "snap_c0b9f6578bcc41f2834a54c047b7e056",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0243,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.4131,
+      "stdout_sha256": "26038cf0e956deff19a7c03878f5f030ffef166963345644352f6a2d5bf04901",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "lint"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.2435,
+      "stdout_sha256": "8662128122406ecd902cdf7ce94333867fc5bd7b6590aa4013d81153ef078ca5",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "repo",
+        "verify",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0207,
+      "stdout_sha256": "9177a5c354594bf5b14b5e5466dd4e5cf5b5ca752d02d193d621b17bc27ae35f",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "create",
+        "decision-base",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0299,
+      "stdout_sha256": "6374f519fcd61d72e2636ca9b314da8b5051378792149c6087ffa6e6ff08b7ee",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "decision-left-base",
+        "--target",
+        "decision-base"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0319,
+      "stdout_sha256": "2f369ac7c2b4225b19d8919caafacd40503e730862c4d888bc8b49d2fbd1d18d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0238,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "Left decision"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1426,
+      "stdout_sha256": "9d777564c34224612e83fc8c41e0228bd6339c95a34fc72f6a736937c3bb08c0",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "decision-right-base",
+        "--target",
+        "decision-base"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0331,
+      "stdout_sha256": "3f66928a59f3d8aa07a95d3d36c18f41273511254ee434815c1889595d534173",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0395,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "Right decision"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1378,
+      "stdout_sha256": "bf7dc8af9611c4e4f3be4f3f90ca4db7ffaa61f1b2a3dc03255247d6af35b665",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "decision-base",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0334,
+      "stdout_sha256": "08d93532d07ca7827ab4f129857b05c80dddcefac55898b4869e38d66f582f4d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "switch",
+        "chg_07140031e4504283acf2856df6d2db89",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0345,
+      "stdout_sha256": "9049a4e6b4fbf458ea621b2ddee6db2e13b8441e1136f987cdfc00fc7ac40f12",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "decision-base",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 1,
+      "expected_exit": 1,
+      "seconds": 0.0219,
+      "stdout_sha256": "fe1dff2e53bb9a38291289af270ca6c95e1df0def82ea55a4ce9b08626cb51f1",
+      "stderr_sha256": "7ead1abb8a3e02e686c331fc5d46631f71002d95607c267579ce8f54892264ae"
+    },
+    {
+      "command": [
+        "rgit",
+        "conflict",
+        "resolve",
+        "conf_c4ff291fcf2b41099363141fcbe2fd03",
+        "--take",
+        "base",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0258,
+      "stdout_sha256": "5a7ed4ab60fe1513229fb4a06754fcf0f0d275c83a64e040c445122d47c5dcf1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "decision-base",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.035,
+      "stdout_sha256": "a8a0618455fd7177227debb08d4ffb7f83af877972fd1508896831241c06bbe0",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--from",
+        "snap_4ce34e06f6ac454986e6fdc9cf255ae5",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0337,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "create",
+        "decision-line",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0259,
+      "stdout_sha256": "782e636f1554b68ddddea58b0ae32a51ae4b471ceac6aec2304a87336b88ceb4",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "decision-left-line",
+        "--target",
+        "decision-line"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0292,
+      "stdout_sha256": "07e2b40ecc2b99304043ef063f23aa514e6029fa79176085ff19204a7dd789cc",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0247,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "Left decision"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1415,
+      "stdout_sha256": "ba1717795fda68fea20eea8b28e12644f8fc664da9a52bef7c1dcb41396c4380",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "decision-right-line",
+        "--target",
+        "decision-line"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.036,
+      "stdout_sha256": "ee8e651a08939f8a628a941a43c60f94396d5d5260a2be7ebb3997bab4790e7a",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0357,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "Right decision"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1477,
+      "stdout_sha256": "48e0ab6a365871a34ad8b3fa3c87e3e1c39fab2dde685a507637f0705f1d0b84",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "decision-line",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0357,
+      "stdout_sha256": "b2f43f6525ce9b0ba19652c8ae86241ab3bd979edf2b1a5d339fec5646af0b43",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "switch",
+        "chg_b2d78bee681847d8afecaed3f36ddfba",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0348,
+      "stdout_sha256": "d78dc7857ba237e7bbc177536745bd2cea39c551e8e44cf8d5ab4263e6a9b584",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "decision-line",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 1,
+      "expected_exit": 1,
+      "seconds": 0.0259,
+      "stdout_sha256": "5f22727e43c359cff76f9456095dc1118c7ea7cf4d85d242e87a8189cdc035c8",
+      "stderr_sha256": "7ead1abb8a3e02e686c331fc5d46631f71002d95607c267579ce8f54892264ae"
+    },
+    {
+      "command": [
+        "rgit",
+        "conflict",
+        "resolve",
+        "conf_1d03ac43008c4e1a9bc66cf750474415",
+        "--take",
+        "line",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0225,
+      "stdout_sha256": "5d6020de8cdb62a9ce18a4eff401153aa4ce4693833bbce4a24203ca9e978d54",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "decision-line",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0348,
+      "stdout_sha256": "1d1e0a8db5834f166ae4d1df4a5c0c056afbab12887740ab9e26155b8f430618",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--from",
+        "snap_e66e159c489c4643aaeebb77a5f1cb1f",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0386,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "create",
+        "decision-incoming",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0239,
+      "stdout_sha256": "5bb83adca7b15d8abf01364554a77bdc26668295ae309ecd5ca15a833afd2d10",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "decision-left-incoming",
+        "--target",
+        "decision-incoming"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0268,
+      "stdout_sha256": "b524a8e58203355792eb779fe47fb0dea4058148a669f351e0ee6e2783b770a2",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0358,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "Left decision"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.136,
+      "stdout_sha256": "12bc413c49c7c0a1f9e303833b7fbd65d701a2eec422d7f4b167bba59573417d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "decision-right-incoming",
+        "--target",
+        "decision-incoming"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0309,
+      "stdout_sha256": "d5f3b2efe099234279340d4f8ea6eb85d9fa38f76b68bfc9fb8944f75d6940c2",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0402,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "Right decision"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1339,
+      "stdout_sha256": "82cf053e7150b169ec5e087c6612bbbe791c86b2e61bad985fa2b94e6521e5af",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "decision-incoming",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0377,
+      "stdout_sha256": "e17301873e4369866be10783b96851bd526591ba86eb02386e4300043afab194",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "switch",
+        "chg_fd4dc426c41f485c9911c59636f9bd68",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0384,
+      "stdout_sha256": "1c6fbdc0f8230130f911213c5a3aba3d25dbcfb6bb35474f8fcaec0bcd66d1ec",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "decision-incoming",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 1,
+      "expected_exit": 1,
+      "seconds": 0.0242,
+      "stdout_sha256": "e1682d686a21a1b348ef40273660962a17fcfbc212abdd246723b724b9e432a5",
+      "stderr_sha256": "7ead1abb8a3e02e686c331fc5d46631f71002d95607c267579ce8f54892264ae"
+    },
+    {
+      "command": [
+        "rgit",
+        "conflict",
+        "resolve",
+        "conf_f8f5ef36cf984122b2ef5ed819f3c8a7",
+        "--take",
+        "incoming",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0253,
+      "stdout_sha256": "64dc845f6565a9bee0684aaadcbc6aa8ed8b1fdc95fb2b975db8331960618d88",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "decision-incoming",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0336,
+      "stdout_sha256": "aa7d0499a9ed70489f797c59ea93d864d0f3ad947c3f07f5a287eb235e5df9c3",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--from",
+        "snap_15b21d20ade9421ebf866328f3773d64",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0256,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "create",
+        "decision-delete",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0238,
+      "stdout_sha256": "7b8940b0c3c287e03adb377c8b60498a30aec0337ab9fe803ef94ad67c08749b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "decision-left-delete",
+        "--target",
+        "decision-delete"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0337,
+      "stdout_sha256": "d7ff78539c4e32fe080a0470042da073ed18024b292516700c4316ba118799a9",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0335,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "Left decision"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1356,
+      "stdout_sha256": "0276bc897ae6e49dcce83adcb9b9faf766261fbd760f7aa2606888391c0194d4",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "decision-right-delete",
+        "--target",
+        "decision-delete"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0364,
+      "stdout_sha256": "124c9acb60f34dd5e6cf5c752e81939c56e48c2c32d492eeb938e64bb01ba1a1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0406,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "Right decision"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.157,
+      "stdout_sha256": "faec37b52eccb303e2c34064d14c93808652bf209b3693aeff538784c8804813",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "decision-delete",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0376,
+      "stdout_sha256": "7413a98a0fe6875625ddc6e6656888a1a9e236152188bdd6c0503253f2a58bac",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "switch",
+        "chg_f819fbbfda1648ee80293f7c656fd211",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0419,
+      "stdout_sha256": "31ebe3666182892013385c9b49ed4ff823eb688ccb584f10cfe5f4d14ca0b0ba",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "decision-delete",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 1,
+      "expected_exit": 1,
+      "seconds": 0.0226,
+      "stdout_sha256": "32f7bfc73c65a5fae17222ce48e2fc6e5389f5e0bb86878ea0f7880b2a27b46e",
+      "stderr_sha256": "7ead1abb8a3e02e686c331fc5d46631f71002d95607c267579ce8f54892264ae"
+    },
+    {
+      "command": [
+        "rgit",
+        "conflict",
+        "resolve",
+        "conf_94e9f03a562b4251bb4dd6a56d422905",
+        "--take",
+        "delete",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0254,
+      "stdout_sha256": "bc2bb5052ce44cef33c2c1e938bf680f6ee309b3a81debfd014d285a348f9a5e",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "decision-delete",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0327,
+      "stdout_sha256": "b30dd990a1cd70190ff03a35a5d05be03d6b98a01439998d816e41137275913b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--from",
+        "snap_3e3e9aba6e48438fa506389737964ee7",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0339,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "after-merge-tests",
+        "--target",
+        "main"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0302,
+      "stdout_sha256": "c6bcf977749da2a6cbdbd52ad1fd8f3efe5c955e9cd53de5e3525c018575d378",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0348,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "repo",
+        "verify",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0475,
+      "stdout_sha256": "221d137c15990578b1e5fbefe9fcfcc797ca7cb5b6574eab7780f5b9cdb2c41c",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "tracked-ignore",
+        "--target",
+        "main"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.048,
+      "stdout_sha256": "f5fcdfce26e45ef5b9780a189faae17fe664ce2438a6edf8c0ab78c592eff40d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0351,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "Track edits despite new ignore rule"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1812,
+      "stdout_sha256": "e2b830006c34840e859c9e7d35e256764cd786901effff04f56ab8e67ec7e628",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "file-directory-transition",
+        "--target",
+        "main"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0298,
+      "stdout_sha256": "911933b0d1c29d842189c85784d5a55a566407231ff82997b6052a31526e4e0b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.042,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "Convert file into directory"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1487,
+      "stdout_sha256": "42345041ae8b11e181138c21c5f1d4366abe9fa80008bff63ac1e93b082c39f6",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--from",
+        "snap_6f634e9ee9eb4536a28e2bba1530c00a",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0558,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--from",
+        "snap_2c734c01e0ff452fa0b6455b204571d6",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 1,
+      "expected_exit": 0,
+      "seconds": 0.0109,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "557921e03e20dd4e33346504555d3f9a355bdba34293e90938591cc60b244c86"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "Record explicitly restored baseline before restoring nested shape"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1535,
+      "stdout_sha256": "441ce78e32ef5737416d00a12728e6e4517576c433c737c40d43711ad5faa669",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--from",
+        "snap_2c734c01e0ff452fa0b6455b204571d6",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0508,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "Record restored nested shape"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1498,
+      "stdout_sha256": "1d8a829438a4dd4db8546438aa2c136e928e26465a0014c2054013b83ad9d1ed",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "shape-other-side",
+        "--target",
+        "main"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0289,
+      "stdout_sha256": "e9f889636c98094880ef1a4f916fcf10a11d76ab10f431ea3f3e6c44a1aba8b9",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 1,
+      "expected_exit": 0,
+      "seconds": 0.0086,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "d09da0aa72a389ee01673ab53f563ff19e183ac0ed446312f10ebf6beb3b3223"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "Preserve carried directory shape in new change"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1601,
+      "stdout_sha256": "8a89a29d1f581e10d1aacfc6ef5bf3755929740fdff446049d8186069d6a4da5",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--from",
+        "snap_c0b9f6578bcc41f2834a54c047b7e056",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0432,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "Edit old shape"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1355,
+      "stdout_sha256": "5043df355e7808c0c7d04e519b85eb5ba6f3daf37313ee3874bda098437f301e",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "main",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0334,
+      "stdout_sha256": "df8accb5db7d7951bf861b5e21b0be1a80c447fd5b4c2251cded2240ce4e543a",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "switch",
+        "chg_ca74a96f2bb14de2b5466ea4ec9e6036",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0449,
+      "stdout_sha256": "f87e7e1e2a4ddaa3f6ba3f627934e9760ae24488150297e9257a0deb1110c124",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "main",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 1,
+      "expected_exit": 1,
+      "seconds": 0.0222,
+      "stdout_sha256": "62e073bdf26fbf7f5fa63c44c80158fdd700c66682ddfa96b81338d6d9f11dc3",
+      "stderr_sha256": "7ead1abb8a3e02e686c331fc5d46631f71002d95607c267579ce8f54892264ae"
+    },
+    {
+      "command": [
+        "rgit",
+        "conflict",
+        "resolve",
+        "conf_ee105dce25f842cdb21d1d0c2cedb009",
+        "--take",
+        "incoming",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0256,
+      "stdout_sha256": "7efb2f99d0783671c1cfca08864807e14cb5fb7d790b27497788e1d4ed7b1b45",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "main",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0326,
+      "stdout_sha256": "0cb9d4977abaffdae660d6dfc08a356b9c257af108174862d9bf18089f0615db",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--from",
+        "snap_e21434d8500f466899c97dda41fc710b",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0276,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--from",
+        "snap_e21434d8500f466899c97dda41fc710b",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0254,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "collision-probe",
+        "--target",
+        "main"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.032,
+      "stdout_sha256": "2d73bd20a7c5a8268f2a9cc56cdf4d62a0ddb00958caf4fc0428596d81df987b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "Add checkout collision target"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1462,
+      "stdout_sha256": "843dd117cf2b51d78c0cbe13a1659fc5d6337331a1338bc9bc9434fbf5d033df",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--from",
+        "snap_e21434d8500f466899c97dda41fc710b",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0295,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--from",
+        "snap_9b6f8edf521c4ca2bebc06f9cd14e448",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 1,
+      "seconds": 0.0301,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--from",
+        "snap_e21434d8500f466899c97dda41fc710b",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0582,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "untracked-collision-probe",
+        "--target",
+        "main"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0324,
+      "stdout_sha256": "83a309bfc8010d52a45e0fd4b9016def219b057de6c5bf4675d20d0a37c13d43",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--from",
+        "snap_9b6f8edf521c4ca2bebc06f9cd14e448",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 1,
+      "expected_exit": 1,
+      "seconds": 0.0077,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "1d73f2d96b1f031afae51bb3365cba8b940517ac9d1d0238d4bf66a60e6f8b00"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--from",
+        "snap_9b6f8edf521c4ca2bebc06f9cd14e448",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 1,
+      "expected_exit": 1,
+      "seconds": 0.0074,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "310d71e53920a33e15964b7a28bb74bc4ca332ea584a82c0ed71604b7511fa56"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--from",
+        "snap_e21434d8500f466899c97dda41fc710b",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0247,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "policy-trial",
+        "--target",
+        "main"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0293,
+      "stdout_sha256": "6d096d7410fd480d1456335b84e75c23b2b5d91920a58a3e7cb110930bc9859c",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "actor",
+        "set",
+        "reader",
+        "--domain",
+        "public"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0201,
+      "stdout_sha256": "9a0dc7610e66ad46de35e32aa98e64633321e858949f05120545b3db892fc753",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "actor",
+        "list"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0046,
+      "stdout_sha256": "56182e8fd3ee3eef6afa96391edfc2ceb41abb34c8a40b739fccdd16bf2c789e",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "access",
+        "path",
+        "private",
+        "--domain",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0221,
+      "stdout_sha256": "8016d9774e64aae3de1eae4cc15a5df18689ef1f996bc6a171be998f1b62aa91",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "access",
+        "list"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0047,
+      "stdout_sha256": "e940a32f9f4a7854856dec0319de7e8ec35946cdfcb11f97f594212361eafaea",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "Capture restricted file"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1409,
+      "stdout_sha256": "c9757ed243df141c70a80160f0c702bc44c7456d3072c02d1bde7591276112c2",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot-info",
+        "show",
+        "snap_de2040a16b9b4b81a78ffefe8b9f40df",
+        "--as",
+        "reader"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0061,
+      "stdout_sha256": "b16c96d29c49bd5f6058be246d69902a93fcfb16c7f6fb2090a6178946bf5def",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "status",
+        "--json",
+        "--as",
+        "reader"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0078,
+      "stdout_sha256": "c5fa37ed8d87a9e280f10fbc77c76d43ed03cb77a242fa2019ffb5cd1085ef61",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0391,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "restricted-change",
+        "--domain",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0312,
+      "stdout_sha256": "7ee95a8fa8cad37dbab560fd27af6312b84ef65becd29aa1ee6ab8da24f66525",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "Restricted snapshot metadata"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1452,
+      "stdout_sha256": "ac62a164656d7d2332f256e20bff8d5741224191632bdb6299ac90bf9b650cc7",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "show",
+        "chg_55768b6fa9be4def9c328063bf1b4840",
+        "--as",
+        "reader"
+      ],
+      "cwd": "app",
+      "exit_code": 1,
+      "expected_exit": 1,
+      "seconds": 0.0042,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "466090252e8cca0886cf57d1ee9a0bbbf2f42dc86e7123603f3b9a67c99925d6"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot-info",
+        "show",
+        "snap_45e08a54b3d44bd48f45d57cb23d1b25",
+        "--as",
+        "reader"
+      ],
+      "cwd": "app",
+      "exit_code": 1,
+      "expected_exit": 1,
+      "seconds": 0.0045,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "466090252e8cca0886cf57d1ee9a0bbbf2f42dc86e7123603f3b9a67c99925d6"
+    },
+    {
+      "command": [
+        "rgit",
+        "actor",
+        "set",
+        "self-granted",
+        "--domain",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0198,
+      "stdout_sha256": "4c8f51de18e852fd2e3c7c239b2bf5fac34dbf06582ec6dc1c02acb2567c08bc",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot-info",
+        "show",
+        "snap_45e08a54b3d44bd48f45d57cb23d1b25",
+        "--as",
+        "self-granted"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0049,
+      "stdout_sha256": "3182e96f3db2e33e32c41b662b4bde84a8e0678a12dc734c48cffe6547792d81",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--from",
+        "snap_e21434d8500f466899c97dda41fc710b",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0303,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "reset-trial",
+        "--target",
+        "main"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0289,
+      "stdout_sha256": "cc834823d37e692a5f70e680bf7554df83cf6750667c486a81119def56093198",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "create",
+        "reset-probe",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0249,
+      "stdout_sha256": "0aa68574728ce524cdf44f091604c815afecf3a733dcea09731fed16545779d4",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "reset",
+        "reset-probe",
+        "--to",
+        "snap_edf8b373e6a2449699e9cc7f875d2679",
+        "--expected-head",
+        "snap_edf8b373e6a2449699e9cc7f875d2679",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 1,
+      "expected_exit": 1,
+      "seconds": 0.0046,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "261e411e07fb740a5b4feb6591d431572e68b8af0d691f563b10f3198d6aece2"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "reset",
+        "reset-probe",
+        "--to",
+        "snap_edf8b373e6a2449699e9cc7f875d2679",
+        "--expected-head",
+        "snap_e21434d8500f466899c97dda41fc710b",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0231,
+      "stdout_sha256": "3fefd23be2d13ec66982ab2daa1d5085703aa71e52bd3314b04149a5aaa8cff1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "reset-probe",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 1,
+      "expected_exit": 1,
+      "seconds": 0.0046,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "0beb10d3516db60fde1bc0ddcdbd81f278b947f04623e8f7ad1faa60ff5383b3"
+    },
+    {
+      "command": [
+        "rgit",
+        "merge",
+        "preview",
+        "--into",
+        "reset-probe",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 1,
+      "expected_exit": 1,
+      "seconds": 0.0042,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "0beb10d3516db60fde1bc0ddcdbd81f278b947f04623e8f7ad1faa60ff5383b3"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "retarget",
+        "reset-probe",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0215,
+      "stdout_sha256": "fff05ab596474190d29d484c5889c4fc1a685657e9d3856b426db039a09a7992",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "retarget",
+        "main",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0221,
+      "stdout_sha256": "7628d06d24a6ee400b99c6e0710a663ab7fbf99136deac73c375fe7f4d9448c0",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "--version"
+      ],
+      "cwd": "app",
+      "exit_code": 2,
+      "expected_exit": 2,
+      "seconds": 0.0043,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "cfec33316c28d7d6d4d08d5fe6d5a94e844ea9f0e095a3a3045bbbededdfb0cb"
+    },
+    {
+      "command": [
+        "rgit",
+        "worktree",
+        "list"
+      ],
+      "cwd": "app",
+      "exit_code": 2,
+      "expected_exit": 2,
+      "seconds": 0.0038,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "5a96ae37742a88ef28f287a65038857f65350980edea7f0622de0633af420016"
+    },
+    {
+      "command": [
+        "rgit",
+        "status"
+      ],
+      "cwd": ".",
+      "exit_code": 1,
+      "expected_exit": 1,
+      "seconds": 0.0041,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "55622be4e06a9392e542823d8ad5d3ddf4da881180fdf0fef3c27d350d8f4085"
+    },
+    {
+      "command": [
+        "rgit",
+        "repo",
+        "verify",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0562,
+      "stdout_sha256": "2538de3a1322f6da4626037dd71ab4b4e9296f5941cc4a750b7ffaa8c6dc5662",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--from",
+        "snap_e21434d8500f466899c97dda41fc710b",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0267,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "new",
+        "ready-for-collaboration",
+        "--target",
+        "main"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0302,
+      "stdout_sha256": "bf6fe9d8cd240a4c289246ec47953594c7c4d567989a33ad3c261a21638b058b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "git",
+        "export",
+        "<sandbox>/remote.git",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 1.1273,
+      "stdout_sha256": "330a2d6ed9313499dfffdb66e52963db5f520d587d3e8550c968dccbbb76670d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "git",
+        "--git-dir",
+        "<sandbox>/remote.git",
+        "fsck",
+        "--strict"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0667,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "git",
+        "--git-dir",
+        "<sandbox>/remote.git",
+        "rev-parse",
+        "refs/heads/main"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0203,
+      "stdout_sha256": "dc8c260785a1bd2d3acbb2eb07c4fd569b4e59070a421b648f9a784e7bf81309",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "init"
+      ],
+      "cwd": "imported",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1099,
+      "stdout_sha256": "4a84d7f1708dc38aaea65f9dc35064f6658f2228ec9f480fc01b4b0a36a76413",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "git",
+        "import",
+        "<sandbox>/remote.git",
+        "--revision",
+        "refs/heads/main",
+        "--domain",
+        "public",
+        "--as",
+        "admin"
+      ],
+      "cwd": "imported",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.8823,
+      "stdout_sha256": "367c12359051196cabb10b2f267b5f5eeff59395b838b9c750955afc184eaec5",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--from",
+        "snap_8306d540c4c34550b00e14e4fbb3e783",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "imported",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.2412,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "repo",
+        "verify",
+        "--as",
+        "admin"
+      ],
+      "cwd": "imported",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0618,
+      "stdout_sha256": "36501a4471bfb3d27f20ab98887005e9695465728179d3ea06c993e4df9d2b93",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "git",
+        "clone",
+        "<sandbox>/remote.git",
+        "<sandbox>/peer-a",
+        "--domain",
+        "public"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 1.3929,
+      "stdout_sha256": "9f735b7364933a58048fdda2c2271241b3aa8697eaea9572ecc1d59871d5f598",
+      "stderr_sha256": "f5823f86ee7444897b580952f5d7273cc8a1903ccadf990c3a9a14805a6d092d"
+    },
+    {
+      "command": [
+        "rgit",
+        "identity",
+        "set",
+        "React Collaborator",
+        "collaborator@example.invalid"
+      ],
+      "cwd": "peer-a",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0245,
+      "stdout_sha256": "f19fa9d348d803cb5e109e5619ad3a1e3f1b2018531a58ce974addd688f653bc",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "git",
+        "clone",
+        "<sandbox>/remote.git",
+        "<sandbox>/peer-b",
+        "--domain",
+        "public"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 1.2999,
+      "stdout_sha256": "acff7664b0feb7e6c33e87876b6fa911503cb432d7e05c7e2a3f74b8d144cd6a",
+      "stderr_sha256": "f5823f86ee7444897b580952f5d7273cc8a1903ccadf990c3a9a14805a6d092d"
+    },
+    {
+      "command": [
+        "rgit",
+        "identity",
+        "set",
+        "React Collaborator",
+        "collaborator@example.invalid"
+      ],
+      "cwd": "peer-b",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0241,
+      "stdout_sha256": "f19fa9d348d803cb5e109e5619ad3a1e3f1b2018531a58ce974addd688f653bc",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "peer-a"
+      ],
+      "cwd": "peer-a",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1829,
+      "stdout_sha256": "e2a4b3407eb02afecef78b5932ee8b293014217cdfd857cd0a8fa98e8a5703e3",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "main",
+        "--as",
+        "admin"
+      ],
+      "cwd": "peer-a",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0359,
+      "stdout_sha256": "31f8e88f6a383dd720ba5f8b19ef92041624ba631b3c0d89747f64930a97de1c",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "peer-b"
+      ],
+      "cwd": "peer-b",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1584,
+      "stdout_sha256": "117196fd9c666abdd992cdb70da446ef3391de555a61fccca46087fc8d2d2585",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "main",
+        "--as",
+        "admin"
+      ],
+      "cwd": "peer-b",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0346,
+      "stdout_sha256": "626520a4a19a733c5b8517ba1793a4e394f8ce5a40ba286dc724d8536cd2df0d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "git",
+        "push",
+        "<sandbox>/remote.git",
+        "--as",
+        "admin"
+      ],
+      "cwd": "peer-a",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 1.1613,
+      "stdout_sha256": "41194e9d3718bb116c7f3baa9a40d2d2da811b81e344b4f87873dc3bc8004535",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "git",
+        "push",
+        "<sandbox>/remote.git",
+        "--as",
+        "admin"
+      ],
+      "cwd": "peer-b",
+      "exit_code": 1,
+      "expected_exit": 1,
+      "seconds": 1.0504,
+      "stdout_sha256": "bf21ead17e42acf9d94506f5ccd84a0bda5c4f0d076de5244795958803920d8b",
+      "stderr_sha256": "b9ece763d24665efe57dc0712cc724b17f59ea2ba5b9981dce1aaa5b9fad6ce5"
+    },
+    {
+      "command": [
+        "rgit",
+        "git",
+        "pull",
+        "<sandbox>/remote.git",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 1,
+      "expected_exit": 1,
+      "seconds": 0.595,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e165bded5024bcb2259e32ab6af8b378ccac638c70f56edfa4afe6a3184fd3ad"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0371,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "git",
+        "pull",
+        "<sandbox>/remote.git",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.7613,
+      "stdout_sha256": "4a433aa9915dd689b085d8c1f7bd471c498bce0c2632809948174dd7702db08e",
+      "stderr_sha256": "f5823f86ee7444897b580952f5d7273cc8a1903ccadf990c3a9a14805a6d092d"
+    },
+    {
+      "command": [
+        "rgit",
+        "git",
+        "fetch",
+        "<sandbox>/remote.git",
+        "--into",
+        "upstream",
+        "--domain",
+        "public",
+        "--as",
+        "admin"
+      ],
+      "cwd": "peer-b",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.3715,
+      "stdout_sha256": "646ffe9702161101fade2426c639a45f3eed9ae8e0dd1954bf2132f20538defe",
+      "stderr_sha256": "f5823f86ee7444897b580952f5d7273cc8a1903ccadf990c3a9a14805a6d092d"
+    },
+    {
+      "command": [
+        "rgit",
+        "change",
+        "retarget",
+        "upstream",
+        "--as",
+        "admin"
+      ],
+      "cwd": "peer-b",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0247,
+      "stdout_sha256": "70e2253280b3984d8fab6de84291cd25c7c3e3c32529b996ca10648f54a63486",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "integrate",
+        "upstream",
+        "--as",
+        "admin"
+      ],
+      "cwd": "peer-b",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0307,
+      "stdout_sha256": "60e5f9adc40ec8f83f7e1b8af2b23e287bf7a1380a5d23270cecafb82b86898c",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--from",
+        "snap_72368c2fa9af4d788d4f924215baae9c",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "peer-b",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0355,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "git",
+        "push",
+        "<sandbox>/remote.git",
+        "--line",
+        "upstream",
+        "--as",
+        "admin"
+      ],
+      "cwd": "peer-b",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 1.1845,
+      "stdout_sha256": "3fd8a80710b6d06f1c5da65e8924fe50f694a0265a8ab4bfd814956c719dcea3",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "git",
+        "pull",
+        "<sandbox>/remote.git",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.6192,
+      "stdout_sha256": "9f5bd5f142ee4cdebfc65e9cd9b054add280718fa776593809e6feeef83ddf66",
+      "stderr_sha256": "f5823f86ee7444897b580952f5d7273cc8a1903ccadf990c3a9a14805a6d092d"
+    },
+    {
+      "command": [
+        "rgit",
+        "git",
+        "pull",
+        "<sandbox>/remote.git",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.5996,
+      "stdout_sha256": "6d184d63bc72728105188c7fb6c85c811cd9d37bedd921e2f9c23703fa46e06f",
+      "stderr_sha256": "f5823f86ee7444897b580952f5d7273cc8a1903ccadf990c3a9a14805a6d092d"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0402,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "git",
+        "clone",
+        "<sandbox>/remote.git",
+        "<sandbox>/peer-a",
+        "--resume",
+        "--domain",
+        "public"
+      ],
+      "cwd": ".",
+      "exit_code": 1,
+      "expected_exit": 1,
+      "seconds": 0.008,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "788e9781cbe93a095dc57dbf1da115e45a1116a9d79d3c8c392d55f4011c97d2"
+    },
+    {
+      "command": [
+        "rgit",
+        "git",
+        "export",
+        "<sandbox>/roundtrip.git",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 1.0066,
+      "stdout_sha256": "98914a7aada4dd3524b0d569ea7bf0c1e4bc5e97a377604c22835cc3aa25b600",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "git",
+        "--git-dir",
+        "<sandbox>/roundtrip.git",
+        "rev-parse",
+        "refs/heads/main"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0113,
+      "stdout_sha256": "4671e2c834abcefe44e1b1ecc76dcc0dad85999f66342c397621ea25680039c3",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "git",
+        "--git-dir",
+        "<sandbox>/remote.git",
+        "rev-parse",
+        "refs/heads/main"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.01,
+      "stdout_sha256": "4671e2c834abcefe44e1b1ecc76dcc0dad85999f66342c397621ea25680039c3",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "git",
+        "--git-dir",
+        "<sandbox>/roundtrip.git",
+        "fsck",
+        "--strict"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0287,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.6152,
+      "stdout_sha256": "0c78b6052c7667a46f8b29dd3ee87c4ab480ec3d256cab5303292baedc58b1cb",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "lint"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.2006,
+      "stdout_sha256": "8662128122406ecd902cdf7ce94333867fc5bd7b6590aa4013d81153ef078ca5",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "repo",
+        "verify",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0885,
+      "stdout_sha256": "ecd3b109b7168e2f6b4c5a584c1654170f5a94bf2f48f683bf2d44bcd49e7ca9",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "repo",
+        "backup",
+        "<sandbox>/backup",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 5.9259,
+      "stdout_sha256": "56cdbff6585fa3d24bdaf075a6658bd44619b54ba25180b6c800ad9f22abba16",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "repo",
+        "verify",
+        "--as",
+        "admin"
+      ],
+      "cwd": "backup",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1401,
+      "stdout_sha256": "ecd3b109b7168e2f6b4c5a584c1654170f5a94bf2f48f683bf2d44bcd49e7ca9",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "workspace",
+        "restore",
+        "--discard-changes",
+        "--as",
+        "admin"
+      ],
+      "cwd": "backup",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.3144,
+      "stdout_sha256": "cdf0d94a4c4325bd5ed9c1cedbe1aa5f83c02b7d98f1176014ff8ddc0a96c6e1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "npm",
+        "ci",
+        "--no-audit",
+        "--no-fund"
+      ],
+      "cwd": "backup",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 2.383,
+      "stdout_sha256": "42655418c228288a9dba4735657fb971df86f631b04c4ca47178142ac98df7fb",
+      "stderr_sha256": "e930ff10c51f08bfe040b0bcb5d52bf20c7606f588275af44ab00e9f717a95c8"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "cwd": "backup",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 2.5674,
+      "stdout_sha256": "617daf1f45a34f1d5d8f25ece8e75dbb549b222593622a597c43afad52795d2b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "lint"
+      ],
+      "cwd": "backup",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 1.4466,
+      "stdout_sha256": "8662128122406ecd902cdf7ce94333867fc5bd7b6590aa4013d81153ef078ca5",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "repo",
+        "verify",
+        "--as",
+        "admin"
+      ],
+      "cwd": "backup",
+      "exit_code": 1,
+      "expected_exit": 1,
+      "seconds": 0.0243,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "dfab0935a97299ccbe1a050803c879937758a3bb188152444ee287b83958b3a3"
+    },
+    {
+      "command": [
+        "rgit",
+        "repo",
+        "verify",
+        "--as",
+        "admin"
+      ],
+      "cwd": "backup",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0974,
+      "stdout_sha256": "8a854cab1741bd537872bcf21b439cad2b70bcd824a4ebb74fba1c5f6ff7434a",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "op",
+        "log",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0262,
+      "stdout_sha256": "e407578466db2cd004c655ba89e68ca42244d4970a95766afc213fcf542b7941",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "repo",
+        "verify",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1046,
+      "stdout_sha256": "ecd3b109b7168e2f6b4c5a584c1654170f5a94bf2f48f683bf2d44bcd49e7ca9",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "status",
+        "--json",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0109,
+      "stdout_sha256": "743c75a674b33e25c372a8c35bc822b5ce5f9354af1207bd85a7fe5c833d1127",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "create",
+        "restricted-export",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0655,
+      "stdout_sha256": "5125d3dcd6f6b06656e36513d7430fae0650f080de42cbd7b7ca70506bed6a8b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "line",
+        "reset",
+        "restricted-export",
+        "--to",
+        "snap_45e08a54b3d44bd48f45d57cb23d1b25",
+        "--expected-head",
+        "snap_7c2b16cce92c44968d6f10f7c183f25d",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.2363,
+      "stdout_sha256": "cc739fd6841a3e70486de0005069a151eb2932e93b4225cd06989c23055ddb38",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "git",
+        "export",
+        "<sandbox>/restricted.git",
+        "--line",
+        "restricted-export",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 1,
+      "expected_exit": 1,
+      "seconds": 0.1598,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "daace0f4502c97d0c544b729d570c7acebbd5ba99f47faec89f7fab722132e02"
+    },
+    {
+      "command": [
+        "rgit",
+        "git",
+        "export",
+        "<sandbox>/restricted.git",
+        "--line",
+        "restricted-export",
+        "--as",
+        "admin",
+        "--allow-restricted"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 2.0132,
+      "stdout_sha256": "423fa1232286dcf304b8c9f59861f71b0c3ecdea591503736be3177ba622e518",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "git",
+        "--git-dir",
+        "<sandbox>/restricted.git",
+        "fsck",
+        "--strict"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0311,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "parallel-snapshot-a"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.148,
+      "stdout_sha256": "8e6a55663894bcffb9250cfbb307fe6ab43429b936ee6811c536fbae17c213d9",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "concurrent_group": "same-workspace-snapshots"
+    },
+    {
+      "command": [
+        "rgit",
+        "snapshot",
+        "--message",
+        "parallel-snapshot-b"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.307,
+      "stdout_sha256": "f9211e8236045022ec4cf50e18a077de454e1589ccc297074f1e04cff25654d5",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "concurrent_group": "same-workspace-snapshots"
+    },
+    {
+      "command": [
+        "rgit",
+        "repo",
+        "verify",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.1185,
+      "stdout_sha256": "cf3adc518f1ff3ab22f806d4bf12001e7337aabeac074c6f592da8223d2f14eb",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "rgit",
+        "status",
+        "--json",
+        "--as",
+        "admin"
+      ],
+      "cwd": "app",
+      "exit_code": 0,
+      "expected_exit": 0,
+      "seconds": 0.0085,
+      "stdout_sha256": "811f304654b2e312de01a366a8add7a1133962f79a06b2d329a51dc20c738dc5",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "checks": [
+    "React build and Oxlint pass",
+    "node_modules, dist and .env excluded from capture",
+    "binary bytes, executable mode and symlink target captured",
+    "JSON status reports modified React source",
+    "Unified workspace diff contains unsaved edit",
+    "Dirty switch refusal preserves metadata and source",
+    "Explicit discard restores saved React source",
+    "Restore recovers binary, executable and symlink",
+    "Integration leaves working files unchanged",
+    "Automatic same-file merge preserves independent React edits",
+    "Conflicting integration preserves line head",
+    "Custom working-content conflict resolution appears in integrated app",
+    "Conflict side selection: base",
+    "Conflict side selection: line",
+    "Conflict side selection: incoming",
+    "Conflict side selection: delete",
+    "Browser renders merged React app and button click increments counter",
+    "Previously tracked files survive added ignore rules",
+    "Directory-to-file checkout restores old shape",
+    "File-to-directory checkout restores new shape",
+    "File/directory collision produces an explicit structural conflict",
+    "Structural resolution restores chosen subtree",
+    "Discard flag still preserves an untracked collision",
+    "Portable case-alias collision is refused",
+    "Public snapshot view redacts restricted path",
+    "JSON status hides restricted file path",
+    "Restricted direct reads return nonzero",
+    "Actor administration is local configuration, not authentication",
+    "Stale compare-and-swap reset preserves records",
+    "Successful line reset preserves working files",
+    "Missing version flag and native worktree command confirmed",
+    "Git export binds the exact published tip",
+    "Git import restores the React source",
+    "Stale collaborator push is rejected",
+    "Dirty pull preserves saved records and working edits",
+    "Fast-forward pull materializes collaborator work",
+    "Fetch, retarget, merge and push reconcile two collaborators",
+    "Unchanged-tip pull preserves dirty workspace and current change",
+    "Clone resume refuses an already completed destination without overwriting it",
+    "Git round-trip preserves exact remote commit identity",
+    "Backup restoration reproduces React sources",
+    "Restored backup installs, builds and lints independently",
+    "Verification detects blob corruption without changing saved records",
+    "Final app workspace is clean",
+    "Restricted export requires explicit policy-loss acknowledgement",
+    "Explicit restricted export succeeds to disposable local Git destination",
+    "Two simultaneous snapshot commands serialize without losing either revision",
+    "Workspace remains clean after concurrent snapshots"
+  ],
+  "observations": [
+    "Scaffold lint inherited the parent Git target/ exclusion and found no files. Scoped oxlint to src and vite.config.js with --no-ignore; fixture-placement issue, not rgit failure.",
+    "Unexpected refusal: after restoring an older file-shaped snapshot while the current change still points at a directory-shaped snapshot, restoring the latter reports checkout path has an unsafe parent. No overwrite occurred. Trial workaround: snapshot the restored baseline, then restore the nested snapshot and snapshot it before integration.",
+    "Second shape refusal: change new changes the tracking baseline without materializing files. Starting a file-based change while a saved directory-shaped change is on disk makes those nested files appear untracked; restore refuses. Preserved the carried files with a snapshot, restored main, and changed subsequent trial setup to restore the intended line before creating the new change.",
+    "Harness correction: the first untracked-collision probe used a path still tracked by the active change, so --discard-changes correctly allowed replacement (exit 0). Retried after creating a change whose saved baseline omits that path; only the corrected probe tests untracked protection."
+  ],
+  "initial_change": "chg_1033b51111d040948d8b5a4628db3f28",
+  "initial_snapshot": "snap_6f634e9ee9eb4536a28e2bba1530c00a",
+  "initial_line_head": "snap_edf8b373e6a2449699e9cc7f875d2679",
+  "packages": {
+    "name": "app",
+    "private": true,
+    "version": "0.0.0",
+    "type": "module",
+    "scripts": {
+      "dev": "vite",
+      "build": "vite build",
+      "lint": "oxlint --no-ignore src vite.config.js",
+      "preview": "vite preview"
+    },
+    "dependencies": {
+      "react": "^19.2.8",
+      "react-dom": "^19.2.8"
+    },
+    "devDependencies": {
+      "@types/react": "^19.2.18",
+      "@types/react-dom": "^19.2.7",
+      "@vitejs/plugin-react": "^6.1.1",
+      "oxlint": "^1.81.0",
+      "vite": "^8.3.0"
+    }
+  },
+  "lock_sha256": "7967291149dea9c2f2b93966c67b86220d04726148d92103b4bda5dcd96d4f14",
+  "browser": {
+    "url": "http://127.0.0.1:5179",
+    "heading": "Resolved React Counter",
+    "footer": "Independent footer edit",
+    "before_click": "Count: 0",
+    "after_click": "Count: 1"
+  },
+  "final_verification": "repository verified: 29 changes, 7 lines, 43 snapshots, 6 conflicts, 159 operations, 37 blobs (0 unreferenced)",
+  "final_status": {
+    "schema_version": 1,
+    "command": "status",
+    "actor": "admin",
+    "change": {
+      "id": "chg_f9982a2dd7454034a3e25890c007cce8",
+      "name": "pull main"
+    },
+    "base_snapshot": {
+      "state": "visible",
+      "id": "snap_6d53117c14044e4eba1cef88e16c6f92"
+    },
+    "changes": {
+      "added": [],
+      "modified": [],
+      "deleted": [],
+      "hidden_count": 0
+    }
+  },
+  "coverage": {
+    "command_paths": [
+      "access list",
+      "access path",
+      "actor list",
+      "actor set",
+      "change list",
+      "change new",
+      "change retarget",
+      "change show",
+      "conflict list",
+      "conflict resolve",
+      "conflict show",
+      "diff line",
+      "diff snapshot",
+      "diff workspace",
+      "git clone",
+      "git export",
+      "git fetch",
+      "git import",
+      "git pull",
+      "git push",
+      "identity set",
+      "identity show",
+      "init",
+      "line create",
+      "line history",
+      "line integrate",
+      "line list",
+      "line reset",
+      "line view",
+      "merge preview",
+      "op log",
+      "repo backup",
+      "repo verify",
+      "snapshot",
+      "snapshot-info list",
+      "snapshot-info show",
+      "status",
+      "workspace info",
+      "workspace restore",
+      "workspace switch"
+    ],
+    "covered_count": 40,
+    "assertion_count": 48,
+    "limitations": [
+      "macOS arm64 only for this trial",
+      "Local bare Git remotes; no network credential or authorization testing",
+      "No interrupted transfer or power-loss injection in the React app",
+      "Command-path coverage is not exhaustive flag/state coverage",
+      "Existing Rust suite separately covers additional process-interruption and concurrency cases"
+    ]
+  },
+  "full_workspace_tests": {
+    "command": "cargo test --workspace --locked",
+    "exit_code": 0,
+    "log_sha256": "75cafb367933ce72b99112fec0d31205ac0bed4e0788640617a245dde647e6ff"
+  },
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "node": "v24.16.0",
+    "npm": "11.16.0",
+    "git": "git version 2.50.1 (Apple Git-155)",
+    "rust": "rustc 1.97.0 (2d8144b78 2026-07-07)"
+  },
+  "installed_versions": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "vite": "8.3.0",
+    "oxlint": "1.82.0",
+    "@vitejs/plugin-react": "6.1.1"
+  },
+  "resolved_conflicts": true,
+  "fixture_command_log_sha256": "7a8c393be1ce17bc220c2089aa140891354cd8b294611e30a6598e8da8228e2c",
+  "recorded_at_utc": "2026-09-12T18:33:37Z",
+  "cleanup": {
+    "sandbox_relative_path": "target/react-vcs-evaluation-e27af17fb0db4b1884c6988f932cd0d2",
+    "parent_git_ignored_before_removal": true,
+    "parent_git_tracked_app_files": 0,
+    "removed_entire_sandbox_including_native_histories_backups_peers_and_bare_remotes": true,
+    "sandbox_absent": true,
+    "dev_server_stopped": true,
+    "root_native_repository_not_created": true,
+    "remote_publication": "disposable local bare repositories only; no app pushed to GitHub",
+    "temporary_harness_and_logs_removed": true,
+    "temporary_files_removed": 19
+  }
+}
