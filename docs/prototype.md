@@ -317,7 +317,7 @@ Snapshots preserve UTF-8 filenames exactly, including spaces and literal Unix ba
 
 The compatibility scanner preserves UTF-8 names, regular files, executable bits and symlink targets. Special files and non-UTF-8 names are refused instead of silently omitted. Portable collision checks and capture-race qualification remain pending.
 
-Before reusing an existing blob, snapshot creation verifies its contents against the captured bytes and refuses a mismatch without advancing the change. This detects preexisting corruption; it does not make the legacy multi-file write sequence transactional or safe against concurrent hostile filesystem changes.
+Before reusing an existing blob, snapshot creation verifies its contents against the captured bytes and refuses a mismatch without advancing the change. This detects preexisting corruption. Command metadata and working-file publication now use the recovery journal described below; concurrent hostile filesystem changes remain outside its qualified guarantees.
 
 ## Policy changes in merges and diffs
 
@@ -348,7 +348,8 @@ must be visible to the resolver. If the file sides have different access policie
 selected content conservatively becomes admin-only; choosing public content does
 not silently remove a concurrent restriction. Resolution operation records are
 admin-only. This remains the prototype actor model, not authenticated identity.
-Custom merged content and external merge-tool integration are not yet supported.
+Custom merged content is captured with `--from-working` as described below.
+Automatic external merge-tool invocation is not yet supported.
 
 ### Switching and restoring working files
 
@@ -366,21 +367,21 @@ Working-file updates and the workspace pointer share a durable recovery journal.
 The next command finishes interrupted publication before reading repository state.
 If files were edited after an interruption, recovery stops and retains the journal
 instead of overwriting the new edits. Preserve the whole repository and those edits
-before manually reconciling that state. Journal schema 2 upgrades schema 1 on open;
-older transaction clients refuse the newer schema.
+before manually reconciling that state. Current journal schema 4 upgrades older
+schemas under the command lock; older transaction clients refuse the newer schema.
 
 Snapshots record file bytes, access policies, the executable bit and symlink type.
 Unix snapshots detect mode-only edits; checkout restores the executable bit while
 preserving existing read/write permissions. Recreated files use the process umask.
 Legacy records without the bit remain non-executable and keep their manifest hash.
-Windows snapshots retain executable metadata from their current snapshot because
-the filesystem does not expose Unix execute bits. Symlinks remain unsupported. File to
-directory transitions are refused. These limitations still prevent a claim of full
+Windows snapshots retain logical modes from the materialized snapshot because
+the filesystem does not expose Unix execute bits. Symlinks use the target-text
+fallback described below. File to directory transitions are refused. These limitations still prevent a claim of full
 Git checkout compatibility. Windows power-loss durability remains unqualified.
 
-Executable-aware recovery uses journal schema 3. It includes expected and target
-execute bits so mode-only updates are recovered with file contents. Schema 1/2
-journals upgrade under the command lock; older clients refuse schema 3.
+Executable-aware recovery introduced journal schema 3, including expected and
+target execute bits so mode-only updates recover with file contents. Current schema
+4 additionally records symlink type, as described below.
 
 ### Checking repository integrity
 
