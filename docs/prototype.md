@@ -294,3 +294,9 @@ Operations record how state changed over time.
 Actors and path policies decide which objects are visible in commands that accept `--as`.
 
 This is not cryptographic security yet. It is the local policy and view model that real encrypted sync would enforce later.
+
+## Repository validation
+
+The CLI accepts only repository format 2 and refuses missing, malformed, older, or newer configuration before running commands. There is no automatic migration. Object IDs must use the expected object-kind prefix and a lowercase hexadecimal suffix. Stored object identities must match the requested identity.
+
+Actor and line keys use nonempty slash-separated ASCII components containing letters, digits, dots, underscores, and hyphens; trailing dots and reserved Windows device names are rejected. Encoded keys are limited to 200 bytes. The legacy filename encoding is retained, but an alias such as `team__alice` cannot read or replace `team/alice`. Existing nonconforming actor or line names must be repaired explicitly; this is not an authentication mechanism.
