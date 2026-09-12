@@ -256,3 +256,32 @@ fn structural_resolution_preserves_descendant_restrictions_and_rejects_stale_sou
     );
     repo.ok(&["repo", "verify", "--as", "admin"]);
 }
+
+#[test]
+fn saved_parent_resolution_cannot_publish_a_file_above_merged_descendants() {
+    let repo = Repo::new();
+    repo.change();
+    fs::write(repo.0.join("a"), "base").unwrap();
+    repo.ok(&["snapshot"]);
+    repo.ok(&["line", "integrate"]);
+    let incoming = repo.change();
+    fs::write(repo.0.join("a"), "incoming").unwrap();
+    repo.ok(&["snapshot"]);
+    repo.change();
+    fs::remove_file(repo.0.join("a")).unwrap();
+    fs::create_dir(repo.0.join("a")).unwrap();
+    fs::write(repo.0.join("a/b"), "child").unwrap();
+    repo.ok(&["snapshot"]);
+    repo.ok(&["line", "integrate"]);
+    repo.ok(&["workspace", "switch", &incoming]);
+    assert!(!repo.run(&["line", "integrate"]).status.success());
+    let conflicts = repo.ok(&["conflict", "list"]);
+    let id = conflicts.split_whitespace().next().unwrap();
+    repo.ok(&["conflict", "resolve", id, "--take", "incoming"]);
+    assert!(repo.ok(&["merge", "preview"]).contains("result: clean"));
+    repo.ok(&["line", "integrate"]);
+    let snapshot = repo.json(&format!("snapshots/{}.json", repo.head()));
+    assert_eq!(snapshot["files"].as_array().unwrap().len(), 1);
+    assert_eq!(snapshot["files"][0]["path"], "a");
+    repo.ok(&["repo", "verify", "--as", "admin"]);
+}

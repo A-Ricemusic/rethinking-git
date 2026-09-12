@@ -101,7 +101,7 @@ fn verified_files(
         bail!("blob directory is unsafe");
     }
     for file in &snapshot.files {
-        transaction::working_path(&repo.root, &file.path)?;
+        transaction::validate_working_key(&file.path)?;
         if file.hash.len() != 64
             || !file
                 .hash
@@ -154,48 +154,18 @@ fn stage_checkout(
     let before = verified_files(repo, actor, before)?;
     let after = verified_files(repo, actor, after)?;
     #[cfg(not(unix))]
-    let materialized =
-        read_optional_snapshot(repo, read_workspace(repo)?.mode_snapshot.as_deref())?;
-    let paths: BTreeSet<&String> = before.keys().chain(after.keys()).collect();
-    checkout_paths::validate(paths.iter().map(|path| path.as_str()))?;
-    checkout_paths::validate_existing(&repo.root, paths.iter().map(|path| path.as_str()))?;
-    for path in paths {
-        let current = transaction::read_working(&repo.root, path)?;
-        let previous = before.get(path).map(|v| &v.0);
-        let target = after.get(path).map(|v| &v.0);
-        let current_flags = transaction::working_flags(&repo.root.join(path))?;
-        let before_flags = before.get(path).map(|v| v.1).unwrap_or_default();
-        let after_flags = after.get(path).map(|v| v.1).unwrap_or_default();
-        #[cfg(not(unix))]
-        let current_flags = if current.is_some() {
-            let saved = materialized
-                .as_ref()
-                .and_then(|s| s.files.iter().find(|f| f.path == *path));
-            let mut flags = if materialized.is_some() {
-                saved.map(FileEntry::flags).unwrap_or_default()
-            } else {
-                before_flags
-            };
-            flags.symlink |= current_flags.symlink;
-            flags
-        } else {
-            current_flags
-        };
-        if previous.is_none() && current.is_some() {
-            bail!("checkout would overwrite an untracked file: {path}");
-        }
-        if !discard && (current.as_ref() != previous || current_flags != before_flags) {
-            bail!("tracked file has local changes: {path}; snapshot first or explicitly restore with --discard-changes");
-        }
-        if current.as_ref() != target || current_flags != after_flags {
-            repo.transaction.stage_working(
-                path,
-                current,
-                target.cloned(),
-                current_flags,
-                after_flags,
-            )?;
-        }
-    }
-    Ok(())
+    let current_modes =
+        read_optional_snapshot(repo, read_workspace(repo)?.mode_snapshot.as_deref())?.map(
+            |snapshot| {
+                snapshot
+                    .files
+                    .iter()
+                    .map(|file| (file.path.clone(), file.flags()))
+                    .collect()
+            },
+        );
+    #[cfg(unix)]
+    let current_modes = None;
+    repo.transaction
+        .stage_checkout(&before, &after, current_modes.as_ref(), discard)
 }

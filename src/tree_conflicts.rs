@@ -120,3 +120,69 @@ pub(super) fn resolved_files(
     verify::verify_manifest(repo, &chosen)?;
     Ok(chosen)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_small_valid_tree_combinations_produce_disjoint_files_and_conflict_groups() {
+        let paths = ["a", "a/b", "a/b/c", "d", "d/e", "f"];
+        let trees: Vec<Vec<FileEntry>> = (0..1 << paths.len())
+            .filter_map(|mask| {
+                let selected: Vec<_> = paths
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, path)| (mask & (1 << i) != 0).then_some(*path))
+                    .collect();
+                if selected
+                    .iter()
+                    .any(|a| selected.iter().any(|b| a != b && contains(a, b)))
+                {
+                    return None;
+                }
+                Some(
+                    selected
+                        .into_iter()
+                        .map(|path| FileEntry {
+                            path: path.to_string(),
+                            hash: "same-content".to_string(),
+                            bytes: 1,
+                            executable: false,
+                            symlink: false,
+                            policy: public_policy(),
+                        })
+                        .collect(),
+                )
+            })
+            .collect();
+        for base in &trees {
+            for line in &trees {
+                for incoming in &trees {
+                    let plan = plan_merge(base.clone(), line.clone(), incoming.clone());
+                    let outputs: Vec<_> = plan
+                        .merged_files
+                        .iter()
+                        .map(|file| &file.path)
+                        .chain(plan.conflicts.iter().map(|conflict| &conflict.path))
+                        .collect();
+                    for (i, a) in outputs.iter().enumerate() {
+                        for b in &outputs[i + 1..] {
+                            assert!(
+                                !contains(a, b) && !contains(b, a),
+                                "{base:?} {line:?} {incoming:?}"
+                            );
+                        }
+                    }
+                    if base == line || base == incoming || line == incoming {
+                        assert!(plan.conflicts.is_empty());
+                        assert_eq!(
+                            &plan.merged_files,
+                            if base == line { incoming } else { line }
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
