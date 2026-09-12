@@ -75,8 +75,9 @@ pub(super) fn export(
     author: Option<&str>,
     actor: &str,
     allow_restricted: bool,
+    quiet: bool,
 ) -> Result<()> {
-    verify::verify(repo, actor)?;
+    verify::check(repo, actor)?;
     if let Some(author) = author {
         validate_author(author)?;
     }
@@ -149,7 +150,7 @@ pub(super) fn export(
                 ".",
             ],
         )?;
-        write_history(
+        let bindings = write_history(
             &destination,
             repo,
             &history,
@@ -159,6 +160,24 @@ pub(super) fn export(
         )?;
         run(&destination, &["symbolic-ref", "HEAD", &reference])?;
         run(&destination, &["fsck", "--full", "--strict"])?;
+        for snapshot in bindings {
+            write_json(repo, &snapshot_path(repo, &snapshot.id)?, &snapshot)?;
+            record_operation(
+                repo,
+                OperationKind::BindGitIdentity {
+                    snapshot_id: snapshot.id.clone(),
+                    object_id: snapshot
+                        .git
+                        .as_ref()
+                        .context("missing export provenance")?
+                        .object_id
+                        .clone(),
+                },
+                admin_policy(),
+                format!("bound Git identity for `{}`", snapshot.id),
+                None,
+            )?;
+        }
         fs::remove_file(destination.join("RGIT_EXPORT_INCOMPLETE"))?;
         Ok(())
     })();
@@ -166,11 +185,13 @@ pub(super) fn export(
         let _ = fs::remove_dir_all(&destination);
     }
     result?;
-    println!(
-        "exported {} snapshots to Git at {}",
-        history.len(),
-        destination.display()
-    );
+    if !quiet {
+        println!(
+            "exported {} snapshots to Git at {}",
+            history.len(),
+            destination.display()
+        );
+    }
     Ok(())
 }
 
@@ -241,8 +262,9 @@ fn write_history(
     reference: &str,
     author: Option<&str>,
     format: &str,
-) -> Result<()> {
+) -> Result<Vec<Snapshot>> {
     let mut commits = BTreeMap::new();
+    let mut bindings = Vec::new();
     let mut written = BTreeSet::new();
     for snapshot in history {
         let (tree, objects) = git_objects::tree(repo, &snapshot.files, format)?;
@@ -267,9 +289,10 @@ fn write_history(
                 header.push_str(&format!("parent {parent}\n"));
             }
             header.push_str(&format!(
-                "author {author} {} +0000\ncommitter {author} {} +0000\n\n",
+                "author {author} {} +0000\ncommitter {author} {} +0000\nrgit-snapshot {}\n\n",
                 snapshot.created_at / 1000,
-                snapshot.created_at / 1000
+                snapshot.created_at / 1000,
+                snapshot.id
             ));
             header.push_str(&snapshot.message);
             header.into_bytes()
@@ -281,10 +304,20 @@ fn write_history(
             }
         }
         write_object(destination, "commit", &bytes, &id)?;
+        if snapshot.git.is_none() {
+            let mut bound = snapshot.clone();
+            bound.git = Some(git_objects::CommitMetadata {
+                object_id: id.clone(),
+                object_format: format.to_string(),
+                raw_commit: bytes,
+            });
+            bindings.push(bound);
+        }
         commits.insert(snapshot.id.clone(), id);
     }
     let head = history.last().context("empty export history")?;
-    run(destination, &["update-ref", reference, &commits[&head.id]])
+    run(destination, &["update-ref", reference, &commits[&head.id]])?;
+    Ok(bindings)
 }
 
 pub(super) fn import(
@@ -295,7 +328,19 @@ pub(super) fn import(
     actor_name: &str,
     policy: AccessPolicy,
 ) -> Result<()> {
-    verify::verify(repo, actor_name)?;
+    import_history(repo, source, revision, into, actor_name, policy, false)
+}
+
+pub(super) fn import_history(
+    repo: &Repo,
+    source: &Path,
+    revision: &str,
+    into: &str,
+    actor_name: &str,
+    policy: AccessPolicy,
+    allow_update: bool,
+) -> Result<()> {
+    verify::check(repo, actor_name)?;
     validate_named_key(into)?;
     let source = fs::canonicalize(source).context("Git import requires a local repository path")?;
     run(&source, &["fsck", "--full", "--strict"])?;
@@ -328,13 +373,24 @@ pub(super) fn import(
             created_at: now()?,
         }
     };
-    if line.head_snapshot.is_some() {
+    if line.head_snapshot.is_some() && !allow_update {
         bail!("Git import target line must be empty");
     }
     let revisions = String::from_utf8(output(
         &source,
         &["rev-list", "--reverse", "--topo-order", &tip],
     )?)?;
+    if let Some(previous) = &line.head_snapshot {
+        let previous = read_snapshot(repo, previous)?;
+        let provenance = previous
+            .git
+            .context("fetch target contains native work; use a separate tracking line")?;
+        if provenance.object_format != format
+            || !revisions.lines().any(|id| id == provenance.object_id)
+        {
+            bail!("remote branch is not a fast-forward of the tracking line; fetch into a new line to inspect it");
+        }
+    }
     let mut mapped = BTreeMap::new();
     for snapshot in read_dir_json::<Snapshot>(repo, &repo.path(&["snapshots"]))? {
         if let Some(metadata) = &snapshot.git {
@@ -373,6 +429,37 @@ pub(super) fn import(
                     .context("Git history is incomplete or shallow")
             })
             .collect::<Result<_>>()?;
+        // Reconcile an acknowledged/ambiguous native push without inventing a second history.
+        if let Some(id) = &parsed.native_snapshot {
+            if let Ok(mut candidate) = read_snapshot(repo, id) {
+                if candidate.git.is_none()
+                    && ancestry::parents(&candidate).cloned().collect::<Vec<_>>() == parents
+                    && candidate.message.as_bytes() == parsed.message
+                    && candidate.created_at / 1000 == parsed.timestamp
+                {
+                    let (tree, _) = git_objects::tree(repo, &candidate.files, &format)?;
+                    if tree == parsed.tree {
+                        candidate.git = Some(metadata.clone());
+                        write_json(repo, &snapshot_path(repo, id)?, &candidate)?;
+                        record_operation(
+                            repo,
+                            OperationKind::BindGitIdentity {
+                                snapshot_id: id.clone(),
+                                object_id: oid.to_string(),
+                            },
+                            admin_policy(),
+                            format!("reconciled Git identity for `{id}`"),
+                            None,
+                        )?;
+                        mapped.insert(oid.to_string(), id.clone());
+                        if oid == tip {
+                            tip_change = Some(candidate.change_id);
+                        }
+                        continue;
+                    }
+                }
+            }
+        }
         let files = import_files(repo, &source, oid, &format, &policy)?;
         let (tree, _) = git_objects::tree(repo, &files, &format)?;
         if tree != parsed.tree {
@@ -440,7 +527,7 @@ pub(super) fn import(
         format!("imported Git revision into `{into}`"),
         None,
     )?;
-    verify::verify(repo, actor_name)?;
+    verify::check(repo, actor_name)?;
     println!(
         "imported {} Git commits into {into}; working files are unchanged",
         imported

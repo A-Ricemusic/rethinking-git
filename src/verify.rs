@@ -38,6 +38,12 @@ fn snapshot_reference(id: Option<&str>, snapshots: &BTreeMap<String, Snapshot>) 
 }
 
 pub(super) fn verify(repo: &Repo, actor_name: &str) -> Result<()> {
+    verify_with_output(repo, actor_name, true)
+}
+pub(super) fn check(repo: &Repo, actor_name: &str) -> Result<()> {
+    verify_with_output(repo, actor_name, false)
+}
+fn verify_with_output(repo: &Repo, actor_name: &str, report: bool) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
     if !actor.domains.iter().any(|domain| domain == ADMIN_DOMAIN) {
         return Err(CliFailure::OperationUnavailable.into());
@@ -132,7 +138,7 @@ pub(super) fn verify(repo: &Repo, actor_name: &str) -> Result<()> {
                 "Git provenance message",
             )?;
             require(
-                parsed.timestamp.checked_mul(1000) == Some(snapshot.created_at),
+                parsed.timestamp == snapshot.created_at / 1000,
                 "Git provenance timestamp",
             )?;
             let (tree, _) = git_objects::tree(repo, &snapshot.files, &metadata.object_format)?;
@@ -170,6 +176,25 @@ pub(super) fn verify(repo: &Repo, actor_name: &str) -> Result<()> {
     for (key, operation) in &operations {
         identity(key, &operation.id, "op_")?;
         match &operation.kind {
+            OperationKind::BindGitIdentity {
+                snapshot_id,
+                object_id,
+            } => {
+                snapshot_reference(Some(snapshot_id), &snapshots)?;
+                require(
+                    snapshots[snapshot_id]
+                        .git
+                        .as_ref()
+                        .is_some_and(|metadata| metadata.object_id == *object_id),
+                    "Git identity operation",
+                )?;
+            }
+            OperationKind::RetargetChange { change_id, line } => {
+                require(
+                    changes.contains_key(change_id) && lines.contains_key(line),
+                    "retarget operation source",
+                )?;
+            }
             OperationKind::InitRepo | OperationKind::SetPathPolicy { .. } => {}
             OperationKind::SetActor { actor } => {
                 read_actor(repo, actor)?;
@@ -243,8 +268,10 @@ pub(super) fn verify(repo: &Repo, actor_name: &str) -> Result<()> {
         blob_count += 1;
     }
     read_path_policies(repo)?;
-    println!("repository verified: {} changes, {} lines, {} snapshots, {} conflicts, {} operations, {} blobs ({} unreferenced)",
+    if report {
+        println!("repository verified: {} changes, {} lines, {} snapshots, {} conflicts, {} operations, {} blobs ({} unreferenced)",
         changes.len(), lines.len(), snapshots.len(), conflicts.len(), operations.len(), blob_count, blob_count - referenced_blobs.len());
+    }
     Ok(())
 }
 
