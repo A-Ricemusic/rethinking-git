@@ -87,8 +87,12 @@ pub(super) fn export(
         .as_deref()
         .context("line has no saved history")?;
     let history = ordered_history(repo, head)?;
-    if author.is_none() && history.iter().any(|snapshot| snapshot.git.is_none()) {
-        bail!("native snapshots require --author 'Name <email>'");
+    if author.is_none()
+        && history
+            .iter()
+            .any(|snapshot| snapshot.git.is_none() && snapshot.author.is_none())
+    {
+        bail!("native snapshots without recorded authors require --author 'Name <email>'");
     }
     let formats: BTreeSet<_> = history
         .iter()
@@ -195,7 +199,7 @@ pub(super) fn export(
     Ok(())
 }
 
-fn validate_author(author: &str) -> Result<()> {
+pub(super) fn validate_author(author: &str) -> Result<()> {
     let Some((name, email)) = author.rsplit_once(" <") else {
         bail!("author must be Name <email>");
     };
@@ -283,7 +287,11 @@ fn write_history(
             }
             metadata.raw_commit.clone()
         } else {
-            let author = author.context("native export requires author")?;
+            let author = snapshot
+                .author
+                .as_deref()
+                .or(author)
+                .context("native export requires author")?;
             let mut header = format!("tree {tree}\n");
             for parent in &parents {
                 header.push_str(&format!("parent {parent}\n"));
@@ -437,6 +445,9 @@ pub(super) fn import_history(
                 if candidate.git.is_none()
                     && ancestry::parents(&candidate).cloned().collect::<Vec<_>>() == parents
                     && candidate.message.as_bytes() == parsed.message
+                    && candidate.author.as_ref().is_none_or(|author| {
+                        parsed.author_identity.as_deref() == Some(author.as_bytes())
+                    })
                     && candidate.created_at / 1000 == parsed.timestamp
                 {
                     let (tree, _) = git_objects::tree(repo, &candidate.files, &format)?;
@@ -491,6 +502,7 @@ pub(super) fn import_history(
                 .context("Git timestamp exceeds native range")?,
         };
         let snapshot = Snapshot {
+            author: None,
             git: Some(metadata),
             id: snapshot_id.clone(),
             change_id: change_id.clone(),
