@@ -75,7 +75,7 @@ fn verified_files(
     repo: &Repo,
     actor: &Actor,
     snapshot: &Option<Snapshot>,
-) -> Result<BTreeMap<String, Vec<u8>>> {
+) -> Result<BTreeMap<String, (Vec<u8>, bool)>> {
     let Some(snapshot) = snapshot else {
         return Ok(BTreeMap::new());
     };
@@ -115,7 +115,10 @@ fn verified_files(
         if bytes.len() as u64 != file.bytes || hash_bytes(&bytes) != file.hash {
             bail!("stored blob failed verification");
         }
-        if files.insert(file.path.clone(), bytes).is_some() {
+        if files
+            .insert(file.path.clone(), (bytes, file.executable))
+            .is_some()
+        {
             bail!("snapshot contains duplicate paths");
         }
     }
@@ -143,17 +146,32 @@ fn stage_checkout(
     let paths: BTreeSet<&String> = before.keys().chain(after.keys()).collect();
     for path in paths {
         let current = transaction::read_working(&repo.root, path)?;
-        let previous = before.get(path);
-        let target = after.get(path);
+        let previous = before.get(path).map(|v| &v.0);
+        let target = after.get(path).map(|v| &v.0);
+        let current_executable = if current.is_some() {
+            transaction::is_executable(&repo.root.join(path))?
+        } else {
+            false
+        };
+        let before_executable = before.get(path).is_some_and(|v| v.1);
+        let after_executable = after.get(path).is_some_and(|v| v.1);
         if previous.is_none() && current.is_some() {
             bail!("checkout would overwrite an untracked file: {path}");
         }
-        if !discard && current.as_ref() != previous {
+        if !discard
+            && (current.as_ref() != previous
+                || (cfg!(unix) && current_executable != before_executable))
+        {
             bail!("tracked file has local changes: {path}; snapshot first or explicitly restore with --discard-changes");
         }
-        if current.as_ref() != target {
-            repo.transaction
-                .stage_working(path, current, target.cloned())?;
+        if current.as_ref() != target || (cfg!(unix) && current_executable != after_executable) {
+            repo.transaction.stage_working(
+                path,
+                current,
+                target.cloned(),
+                current_executable,
+                after_executable,
+            )?;
         }
     }
     Ok(())

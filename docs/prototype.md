@@ -359,8 +359,15 @@ instead of overwriting the new edits. Preserve the whole repository and those ed
 before manually reconciling that state. Journal schema 2 upgrades schema 1 on open;
 older transaction clients refuse the newer schema.
 
-The current snapshot format records regular-file bytes and access policies. It
-does not record executable bits or symlinks; existing destination permissions are
-preserved, but permissions of recreated files come from the process umask. File to
+Snapshots record regular-file bytes, access policies, and the executable bit.
+Unix snapshots detect mode-only edits; checkout restores the executable bit while
+preserving existing read/write permissions. Recreated files use the process umask.
+Legacy records without the bit remain non-executable and keep their manifest hash.
+Windows snapshots retain executable metadata from their current snapshot because
+the filesystem does not expose Unix execute bits. Symlinks remain unsupported. File to
 directory transitions are refused. These limitations still prevent a claim of full
 Git checkout compatibility. Windows power-loss durability remains unqualified.
+
+Executable-aware recovery uses journal schema 3. It includes expected and target
+execute bits so mode-only updates are recovered with file contents. Schema 1/2
+journals upgrade under the command lock; older clients refuse schema 3.
