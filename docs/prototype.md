@@ -409,3 +409,22 @@ missing records, duplicates and cycles.
 Older snapshots omitted some ancestry edges; their declared change base remains a
 compatibility fallback when no shared ancestor can be found. Multiple best merge
 bases (criss-cross history) are refused pending recursive merge support.
+
+### Exporting native history to Git
+
+`rgit git export /outside/path/new.git --line main --author 'Name <email>' --as admin`
+creates a new bare Git repository containing the selected line's saved ancestry,
+messages, regular-file bytes, executable modes and merge parents. Git must be installed.
+The explicit identity is required because historical native snapshots did not record
+per-snapshot authors. The result is checked with `git fsck --full --strict` and can
+be cloned with Git after export succeeds.
+
+Restricted history is refused unless `--allow-restricted` explicitly authorizes
+export without rgit access policies. Git has no equivalent per-object domain model.
+The exporter never overwrites an existing destination and removes ambient `GIT_*`
+repository variables so they cannot redirect writes. An interrupted export bearing
+`RGIT_EXPORT_INCOMPLETE` must not be used; preserve the source and retry elsewhere.
+
+This is export of native history, not yet lossless Git import/export: original Git
+commit identities/signatures, tags, other refs, symlinks and submodules require further
+work. The stream follows Git's [fast-import interface](https://git-scm.com/docs/git-fast-import).
