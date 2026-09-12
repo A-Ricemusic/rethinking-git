@@ -338,13 +338,12 @@ pub(super) fn import(
     let mut mapped = BTreeMap::new();
     for snapshot in read_dir_json::<Snapshot>(repo, &repo.path(&["snapshots"]))? {
         if let Some(metadata) = &snapshot.git {
-            if metadata.object_format == format {
-                if mapped
+            if metadata.object_format == format
+                && mapped
                     .insert(metadata.object_id.clone(), snapshot.id)
                     .is_some()
-                {
-                    bail!("duplicate Git provenance requires reconciliation before import");
-                }
+            {
+                bail!("duplicate Git provenance requires reconciliation before import");
             }
         }
     }
