@@ -294,3 +294,11 @@ Operations record how state changed over time.
 Actors and path policies decide which objects are visible in commands that accept `--as`.
 
 This is not cryptographic security yet. It is the local policy and view model that real encrypted sync would enforce later.
+
+## Snapshot fidelity limits
+
+Snapshots preserve UTF-8 filenames exactly, including spaces and literal Unix backslashes. Access path policies use host path separators and repository-relative paths; they reject absolute paths and parent traversal. On Unix, a backslash is a literal filename character.
+
+The JSON prototype cannot represent symlinks, special files, or non-UTF-8 names faithfully, so scanning now refuses them instead of publishing an incomplete snapshot. This is a temporary safety boundary until those entry types are implemented. File modes, ignore rules, and cross-platform filename collision checks are still pending.
+
+Before reusing an existing blob, snapshot creation verifies its contents against the captured bytes and refuses a mismatch without advancing the change. This detects preexisting corruption; it does not make the legacy multi-file write sequence transactional or safe against concurrent hostile filesystem changes.

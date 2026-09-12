@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -735,7 +735,7 @@ fn list_actors(repo: &Repo) -> Result<()> {
 
 fn set_path_policy(repo: &Repo, prefix: &str, domains: Vec<String>) -> Result<()> {
     let mut policies = read_path_policies(repo)?;
-    let normalized_prefix = normalize_path(prefix);
+    let normalized_prefix = repository_relative_path(Path::new(prefix))?;
     let policy = AccessPolicy {
         domains: normalize_domains(domains),
         redaction: Redaction::Placeholder,
@@ -1897,23 +1897,32 @@ fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
         .filter_entry(|entry| should_scan(entry.path()))
     {
         let entry = entry.context("failed to read directory entry")?;
-        if !entry.file_type().is_file() {
+        if entry.file_type().is_dir() {
             continue;
+        }
+        if !entry.file_type().is_file() {
+            bail!("unsupported filesystem entry; symlinks and special files cannot be captured by this prototype");
         }
 
         let path = entry.path();
         let bytes = fs::read(path).with_context(|| format!("failed to read {}", path.display()))?;
         let hash = hash_bytes(&bytes);
-        let relative_path = normalize_path(
-            &path
-                .strip_prefix(&repo.root)
-                .context("failed to compute relative path")?
-                .to_string_lossy(),
-        );
+        let relative_path = repository_relative_path(
+            path.strip_prefix(&repo.root)
+                .context("failed to compute relative path")?,
+        )?;
 
         if store_blobs {
             let blob_path = repo.path(&["blobs", &hash]);
-            if !blob_path.exists() {
+            if blob_path
+                .try_exists()
+                .context("failed to inspect stored blob")?
+            {
+                let stored = fs::read(&blob_path).context("failed to read stored blob")?;
+                if stored != bytes {
+                    bail!("stored blob failed verification; snapshot was not published");
+                }
+            } else {
                 fs::write(&blob_path, &bytes)
                     .with_context(|| format!("failed to write {}", blob_path.display()))?;
             }
@@ -2106,8 +2115,23 @@ fn normalize_domains(domains: Vec<String>) -> Vec<String> {
     normalized.into_iter().collect()
 }
 
-fn normalize_path(path: &str) -> String {
-    path.trim().trim_start_matches("./").replace('\\', "/")
+// Convert actual host path components; never trim names or reinterpret a Unix
+// backslash as a separator. The JSON prototype cannot losslessly encode non-UTF-8.
+fn repository_relative_path(path: &Path) -> Result<String> {
+    let mut segments = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::Normal(name) => {
+                segments.push(name.to_str().context("non-UTF-8 paths are not supported")?);
+            }
+            _ => bail!("path must be a nonempty repository-relative path without parent traversal"),
+        }
+    }
+    if segments.is_empty() {
+        bail!("path must be a nonempty repository-relative path without parent traversal");
+    }
+    Ok(segments.join("/"))
 }
 
 fn manifest_hash(files: &[FileEntry]) -> Result<String> {
@@ -2216,6 +2240,14 @@ fn now() -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn relative_paths_reject_non_utf8_without_lossy_replacement() {
+        use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+        let path = PathBuf::from(OsString::from_vec(vec![b'f', 0xff]));
+        assert!(repository_relative_path(&path).is_err());
+    }
 
     fn actor(name: &str, domains: &[&str]) -> Actor {
         Actor {
