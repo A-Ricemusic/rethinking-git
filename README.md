@@ -5,8 +5,8 @@ An experimental source-control tool built around stable **changes**, saved
 Snapshots are captured explicitly with `rgit snapshot`; there is no background watcher.
 
 The CLI now supports a local edit/snapshot/integrate workflow, workspace restore and
-switch, conflict resolution, verified backups, and selected-branch Git import,
-export, clone, fetch and push. Git interoperability and transport require installed Git.
+switch, native linked worktrees, conflict resolution, verified backups, and selected-branch Git import,
+export, clone, fetch, pull and push. Git interoperability and transport require installed Git.
 
 **This remains experimental and is not qualified as a production Git replacement.**
 Local actor filtering is not authentication or encryption. The executable uses its
@@ -25,6 +25,10 @@ rgit --help
 The [working CLI guide](docs/getting-started.md) walks through saving a change,
 restoring a backup, and collaborating through Git. Use a disposable repository for
 evaluation and keep the original Git repository when trying an import.
+
+Commands support `--output json` for [automation](docs/automation.md).
+Use [native worktrees](docs/worktrees.md) to give concurrent tasks separate working
+directories with shared history.
 
 ## Repository map
 

@@ -405,7 +405,7 @@ pub(super) fn clone_repository(args: &GitCloneArgs) -> Result<()> {
     })?;
     output::record(
         "git_clone",
-        serde_json::json!({"destination":repo.root,"branch":args.branch,"snapshot_id":read_line(&repo,DEFAULT_LINE)?.head_snapshot}),
+        serde_json::json!({"destination":repo.root.to_str(),"destination_display":repo.root.display().to_string(),"branch":args.branch,"snapshot_id":read_line(&repo,DEFAULT_LINE)?.head_snapshot}),
     );
     println!(
         "cloned Git branch {} into {}",

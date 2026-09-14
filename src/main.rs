@@ -41,6 +41,7 @@ mod text_merge;
 mod transaction;
 mod tree_conflicts;
 mod verify;
+mod worktrees;
 
 use cli_failure::CliFailure;
 
@@ -69,6 +70,11 @@ enum OutputFormat {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Manage native linked working directories sharing history and lines.
+    Worktree {
+        #[command(subcommand)]
+        command: worktrees::WorktreeCommand,
+    },
     /// Configure author metadata for future native snapshots (not authentication).
     Identity {
         #[command(subcommand)]
@@ -770,6 +776,7 @@ enum OperationKind {
 }
 
 struct Repo {
+    workspace_id: Option<String>,
     root: PathBuf,
     meta: PathBuf,
     transaction: transaction::CommandTransaction,
@@ -824,6 +831,9 @@ fn main() -> Result<()> {
 }
 
 fn run(cli: Cli) -> Result<()> {
+    if let Command::Worktree { command } = &cli.command {
+        return worktrees::run(command);
+    }
     if let Command::Init { resume } = &cli.command {
         let repo = initialization::initialize(std::env::current_dir()?, *resume)?;
         let config: RepoConfig = read_json(&repo, &repo.path(&["repo.json"]))?;
@@ -847,7 +857,8 @@ fn run(cli: Cli) -> Result<()> {
         Command::Identity {
             command: IdentityCommand::Show,
         } => identity::show(&repo),
-        Command::Init { .. }
+        Command::Worktree { .. }
+        | Command::Init { .. }
         | Command::Git {
             command: GitCommand::Clone(_),
         } => unreachable!(),
@@ -1051,7 +1062,8 @@ impl Repo {
         Self::discover_from(std::env::current_dir().context("failed to read current directory")?)
     }
 
-    fn discover_from(mut dir: PathBuf) -> Result<Self> {
+    fn discover_from(dir: PathBuf) -> Result<Self> {
+        let mut dir = fs::canonicalize(dir)?;
         loop {
             let meta = dir.join(META_DIR);
             let exists = match fs::symlink_metadata(&meta) {
@@ -1060,9 +1072,13 @@ impl Repo {
                 Err(error) => return Err(error.into()),
             };
             if exists {
+                if meta.join("linked.json").try_exists()? {
+                    return worktrees::discover(&dir);
+                }
                 initialization::preflight(&meta)?;
                 let transaction = transaction::CommandTransaction::open(&meta)?;
                 let repo = Self {
+                    workspace_id: None,
                     root: dir,
                     meta,
                     transaction,
@@ -1086,6 +1102,11 @@ impl Repo {
     }
 
     fn path(&self, parts: &[&str]) -> PathBuf {
+        if parts == ["workspace.json"] {
+            if let Some(id) = &self.workspace_id {
+                return self.meta.join("worktrees").join(id).join("workspace.json");
+            }
+        }
         parts
             .iter()
             .fold(self.meta.clone(), |path, part| path.join(part))

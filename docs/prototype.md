@@ -12,8 +12,9 @@ It implements the first source-control primitives:
 - `actor`: a person or tool with domain grants
 - `path policy`: file-level access control
 
-Named lines and Git-backed clone/fetch/pull/push are implemented. Native linked
-worktrees, tags, encrypted storage and native authenticated hosting remain open.
+Named lines and Git-backed clone/fetch/pull/push are implemented. Tags, encrypted
+storage and native authenticated hosting remain open. Native linked
+worktrees now share history with independent workspace pointers; see [the guide](worktrees.md).
 
 ## Install Rust
 
@@ -556,7 +557,7 @@ OS links or an explicit Windows link-to-regular conversion command. Unix target 
 may be non-UTF-8; tracked path names must still be UTF-8. Empty/NUL-containing targets,
 executable symlink metadata and symlinked ignore-rule files are refused.
 
-Command journal schema 4 records old/new link type with content and executable mode.
+Command journal schema 4 introduced records for old/new link type with content and executable mode.
 Recovery accepts only the old or new entry state; a later type change stops recovery
 even when bytes match. Older journals migrate their regular-file records. Older
 binaries refuse the new journal version, so preserve a verified backup before
@@ -666,7 +667,8 @@ hardware power-loss behavior.
 
 `rgit status --json` exposes versioned, permission-filtered status for automation.
 See [the JSON contract](automation.md) for fields, empty/restricted states and exit
-semantics. Default text output remains unchanged.
+semantics. `--output json` also provides versioned outcomes and typed records for
+the full command surface. Default text output remains unchanged.
 
 
 ### Checkout filename aliases

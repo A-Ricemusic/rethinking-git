@@ -50,3 +50,7 @@ command paths against a temporary React app, records workflow limitations and an
 agent-adoption recommendation, and confirms removal of the app and its histories.
 Its [receipt](react-vcs-trial-2026-09-12.json) preserves command outcomes and cleanup
 metadata without retaining the app.
+
+[Workflow improvements](workflow-improvements.md) records the implemented fixes and
+regression evidence following the React trial, including structured outcomes and
+native linked worktrees.

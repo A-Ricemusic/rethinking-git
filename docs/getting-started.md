@@ -182,3 +182,15 @@ Case-only transitions and ambiguous criss-cross merge bases remain unsupported. 
 migration, complete operation undo, large-repository qualification and release
 security/durability reviews remain open. The [readiness audit](production-readiness.md)
 tracks these gaps; passing this guide is a workflow check, not release approval.
+
+## Concurrent tasks and automation
+
+Use `rgit worktree add ../task --name task --from main` to create a native linked
+working directory with its own change. Shared lines and history are immediately
+visible from all linked directories. See [worktrees](worktrees.md) for resuming
+creation, independent workspace pointers, and detaching while preserving files.
+
+Use `rgit --output json workspace start task` and `rgit --output json snapshot`
+when driving the CLI from an agent. Read IDs from typed records instead of parsing
+terminal text or opening `.rgit` files; [automation](automation.md) defines errors,
+conflict outcomes, schema compatibility, and text truncation.

@@ -1,7 +1,7 @@
 //! Recoverable command publication for the format-2 compatibility repository.
 //! The lock connection remains in a write transaction across journal commits.
 use anyhow::{bail, Context, Result};
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
@@ -15,6 +15,7 @@ mod working_plan;
 
 pub(crate) struct CommandTransaction {
     root: PathBuf,
+    workspace_id: Option<String>,
     _lock: Connection,
     journal: Connection,
     pending: RefCell<BTreeMap<PathBuf, Vec<u8>>>,
@@ -28,6 +29,7 @@ impl CommandTransaction {
         lock.execute_batch("BEGIN IMMEDIATE")
             .context("repository is busy; another command holds its transaction lock")?;
         let journal = open_database(&root.join("command-journal.sqlite3"))?;
+        journal.execute_batch("CREATE TABLE IF NOT EXISTS workspace_context (id INTEGER PRIMARY KEY CHECK(id=1), workspace TEXT NOT NULL)")?;
         journal.execute_batch("CREATE TABLE IF NOT EXISTS pending (path TEXT PRIMARY KEY NOT NULL, bytes BLOB NOT NULL)")?;
         journal.execute_batch("CREATE TABLE IF NOT EXISTS working (path TEXT PRIMARY KEY NOT NULL, before_bytes BLOB, after_bytes BLOB)")?;
         let columns: i64 = journal.query_row(
@@ -48,6 +50,7 @@ impl CommandTransaction {
         }
         let result = Self {
             root: root.to_path_buf(),
+            workspace_id: None,
             _lock: lock,
             journal,
             pending: RefCell::new(BTreeMap::new()),
@@ -55,6 +58,13 @@ impl CommandTransaction {
         };
         result.recover()?;
         Ok(result)
+    }
+
+    pub(crate) fn open_for(root: &Path, id: &str) -> Result<Self> {
+        let mut transaction = Self::open(root)?;
+        super::worktrees::resolve_root(root, id)?;
+        transaction.workspace_id = Some(id.to_owned());
+        Ok(transaction)
     }
 
     fn key(&self, path: &Path) -> Result<String> {
@@ -126,6 +136,10 @@ impl CommandTransaction {
             }
         }
         let transaction = self.journal.unchecked_transaction()?;
+        transaction.execute(
+            "INSERT INTO workspace_context(id, workspace) VALUES (1, ?1)",
+            [self.workspace_id.as_deref().unwrap_or("")],
+        )?;
         for (key, update) in self.working.borrow().iter() {
             transaction.execute(
                 "INSERT INTO working VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -189,11 +203,34 @@ impl CommandTransaction {
             })?;
             rows.collect::<std::result::Result<BTreeMap<_, _>, _>>()?
         };
+        let context: Option<String> = self
+            .journal
+            .query_row(
+                "SELECT workspace FROM workspace_context WHERE id=1",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let workspace_root = if !working.is_empty() {
+            match context.as_deref().filter(|id| !id.is_empty()) {
+                Some(id) => super::worktrees::resolve_root(&self.root, id)?,
+                None => self
+                    .root
+                    .parent()
+                    .context("control directory has no parent")?
+                    .to_path_buf(),
+            }
+        } else {
+            self.root
+                .parent()
+                .context("control directory has no parent")?
+                .to_path_buf()
+        };
         let shape = working_plan::ShapePlan::from_updates(&working)?;
-        shape.validate_aliases(&self.workspace_root()?)?;
+        shape.validate_aliases(&workspace_root)?;
         working_plan::validate_updates(&working)?;
         for (key, update) in &working {
-            let current = shape.current(&self.workspace_root()?, key)?;
+            let current = shape.current(&workspace_root, key)?;
             if !current.matches(
                 &update.before,
                 update.before_executable,
@@ -211,14 +248,16 @@ impl CommandTransaction {
             }
             check_path(&self.root, &path)?;
         }
-        working_plan::publish(&self.workspace_root()?, &working, &shape, hook)?;
+        working_plan::publish(&workspace_root, &working, &shape, hook)?;
         for (key, bytes) in &entries {
             publish_file(&self.root.join(key), bytes)?;
             hook()?;
         }
-        if !entries.is_empty() || !working.is_empty() {
+        if !entries.is_empty() || !working.is_empty() || context.is_some() {
             let transaction = self.journal.unchecked_transaction()?;
-            transaction.execute_batch("DELETE FROM pending; DELETE FROM working;")?;
+            transaction.execute_batch(
+                "DELETE FROM pending; DELETE FROM working; DELETE FROM workspace_context;",
+            )?;
             transaction.commit()?;
         }
         Ok(())
@@ -247,12 +286,12 @@ fn open_database(path: &Path) -> Result<Connection> {
             if tables != 0 {
                 bail!("unrecognized command transaction database");
             }
-            connection.execute_batch("PRAGMA application_id=1380402004; PRAGMA user_version=5;")?;
+            connection.execute_batch("PRAGMA application_id=1380402004; PRAGMA user_version=6;")?;
         }
-        (1380402004, 1..=4) => {
-            connection.execute_batch("PRAGMA user_version=5;")?;
+        (1380402004, 1..=5) => {
+            connection.execute_batch("PRAGMA user_version=6;")?;
         }
-        (1380402004, 5) => {}
+        (1380402004, 6) => {}
         _ => bail!("unsupported command transaction database format"),
     }
     connection.execute_batch("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;")?;
@@ -270,7 +309,7 @@ fn ensure_directory(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn check_path(root: &Path, path: &Path) -> Result<()> {
+pub(crate) fn check_path(root: &Path, path: &Path) -> Result<()> {
     let relative = path.strip_prefix(root)?;
     let mut current = root.to_path_buf();
     let count = relative.components().count();
@@ -361,6 +400,9 @@ struct WorkingUpdate {
 
 impl CommandTransaction {
     fn workspace_root(&self) -> Result<PathBuf> {
+        if let Some(id) = &self.workspace_id {
+            return super::worktrees::resolve_root(&self.root, id);
+        }
         Ok(self
             .root
             .parent()
@@ -614,8 +656,8 @@ mod tests {
             let version: i64 = connection
                 .query_row("PRAGMA user_version", [], |row| row.get(0))
                 .unwrap();
-            assert_eq!(version, 5);
-            connection.execute_batch("PRAGMA user_version=6;").unwrap();
+            assert_eq!(version, 6);
+            connection.execute_batch("PRAGMA user_version=7;").unwrap();
         }
         assert!(open_database(&database).is_err());
     }
