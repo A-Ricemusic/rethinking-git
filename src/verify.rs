@@ -295,6 +295,10 @@ fn verify_with_output(repo: &Repo, actor_name: &str, report: bool) -> Result<()>
     }
     read_path_policies(repo)?;
     if report {
+        output::record(
+            "verification",
+            serde_json::json!({"valid":true,"changes":changes.len(),"lines":lines.len(),"snapshots":snapshots.len(),"conflicts":conflicts.len(),"operations":operations.len(),"blobs":blob_count,"unreferenced_blobs":blob_count-referenced_blobs.len()}),
+        );
         println!("repository verified: {} changes, {} lines, {} snapshots, {} conflicts, {} operations, {} blobs ({} unreferenced)",
         changes.len(), lines.len(), snapshots.len(), conflicts.len(), operations.len(), blob_count, blob_count - referenced_blobs.len());
     }

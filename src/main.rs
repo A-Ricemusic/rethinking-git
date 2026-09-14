@@ -6,12 +6,19 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Context, Result};
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use walkdir::WalkDir;
 
+macro_rules! println {
+    () => { crate::output::text("\n".to_string()) };
+    ($($arg:tt)*) => { crate::output::text(format!("{}\n", format_args!($($arg)*))) };
+}
+macro_rules! print {
+    ($($arg:tt)*) => { crate::output::text(format!($($arg)*)) };
+}
 mod ancestry;
 mod backup;
 mod blob_io;
@@ -26,6 +33,7 @@ mod identity;
 mod ignore_rules;
 mod initialization;
 mod lines;
+mod output;
 mod resolution;
 mod status_json;
 mod text_diff;
@@ -43,11 +51,20 @@ const ADMIN_DOMAIN: &str = "admin";
 const DEFAULT_LINE: &str = "main";
 
 #[derive(Parser)]
-#[command(name = "rgit")]
+#[command(name = "rgit", version)]
 #[command(about = "A permission-aware, jj-inspired source control prototype.")]
 struct Cli {
+    /// Emit a versioned JSON outcome with typed records after command completion.
+    #[arg(long, global = true, value_enum, default_value = "text")]
+    output: OutputFormat,
     #[command(subcommand)]
     command: Command,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum OutputFormat {
+    Text,
+    Json,
 }
 
 #[derive(Subcommand)]
@@ -786,10 +803,35 @@ struct PendingConflict {
 }
 
 fn main() -> Result<()> {
-    let cli = Cli::parse();
+    let matches = Cli::command().get_matches();
+    let cli = Cli::from_arg_matches(&matches)?;
+    let json = cli.output == OutputFormat::Json;
+    let mut names = Vec::new();
+    let mut level = &matches;
+    while let Some((name, child)) = level.subcommand() {
+        names.push(name);
+        level = child;
+    }
+    let command = names.join(" ");
+    if json {
+        output::begin();
+    }
+    let result = run(cli);
+    if json {
+        output::finish(&command, &result)?;
+    }
+    result
+}
 
+fn run(cli: Cli) -> Result<()> {
     if let Command::Init { resume } = &cli.command {
-        return initialization::initialize(std::env::current_dir()?, *resume).map(|_| ());
+        let repo = initialization::initialize(std::env::current_dir()?, *resume)?;
+        let config: RepoConfig = read_json(&repo, &repo.path(&["repo.json"]))?;
+        output::record(
+            "repository",
+            serde_json::json!({"id":config.repo_id,"format_version":config.format_version}),
+        );
+        return Ok(());
     }
     if let Command::Git {
         command: GitCommand::Clone(args),
@@ -1052,6 +1094,7 @@ impl Repo {
 
 impl FileDiff {
     fn print(&self) {
+        output::record("diff", serde_json::json!(self));
         print_paths("added", &self.added);
         print_paths("modified", &self.modified);
         print_paths("deleted", &self.deleted);
@@ -1097,6 +1140,10 @@ fn set_actor(repo: &Repo, name: &str, domains: Vec<String>) -> Result<()> {
         None,
     )?;
 
+    output::record(
+        "actor",
+        serde_json::json!({"name":actor.name,"domains":actor.domains}),
+    );
     println!("actor: {}", actor.name);
     println!("domains: {}", actor.domains.join(", "));
     Ok(())
@@ -1107,6 +1154,10 @@ fn list_actors(repo: &Repo) -> Result<()> {
     actors.sort_by(|a, b| a.name.cmp(&b.name));
 
     for actor in actors {
+        output::record(
+            "actor",
+            serde_json::json!({"name":actor.name,"domains":actor.domains}),
+        );
         println!("{} domains:{}", actor.name, actor.domains.join(","));
     }
 
@@ -1146,6 +1197,10 @@ fn set_path_policy(repo: &Repo, prefix: &str, domains: Vec<String>) -> Result<()
 
 fn list_path_policies(repo: &Repo) -> Result<()> {
     for policy in read_path_policies(repo)? {
+        output::record(
+            "path_policy",
+            serde_json::json!({"prefix":policy.prefix,"domains":policy.policy.domains}),
+        );
         println!(
             "{} domains:{}",
             policy.prefix,
@@ -1193,6 +1248,10 @@ fn create_change(repo: &Repo, name: &str, target_line: &str, policy: AccessPolic
         None,
     )?;
 
+    output::record(
+        "change_created",
+        serde_json::json!({"id":change.id,"name":change.name,"target_line":change.target_line}),
+    );
     println!("created change {}", change.id);
     println!("workspace now points at `{}`", change.name);
     println!("target line: {}", change.target_line);
@@ -1210,6 +1269,10 @@ fn list_changes(repo: &Repo, actor_name: &str) -> Result<()> {
             continue;
         }
 
+        output::record(
+            "change",
+            serde_json::json!({"id":change.id,"name":change.name,"target_line":change.target_line,"current_snapshot":visible_snapshot_id(repo, change.current_snapshot.as_deref(), &actor)?}),
+        );
         let marker = if workspace.current_change.as_deref() == Some(change.id.as_str()) {
             "*"
         } else {
@@ -1235,6 +1298,10 @@ fn show_change(repo: &Repo, change_id: &str, actor_name: &str) -> Result<()> {
         return Err(CliFailure::OperationUnavailable.into());
     }
 
+    output::record(
+        "change",
+        serde_json::json!({"id":change.id,"name":change.name,"target_line":change.target_line,"current_snapshot":visible_snapshot_id(repo, change.current_snapshot.as_deref(), &actor)?}),
+    );
     println!("change: {} ({})", change.name, change.id);
     println!("target line: {}", change.target_line);
     println!("domains: {}", change.policy.domains.join(","));
@@ -1295,6 +1362,10 @@ fn create_snapshot(repo: &Repo, message: &str, requested_policy: AccessPolicy) -
         None,
     )?;
 
+    output::record(
+        "snapshot_created",
+        serde_json::json!({"id":snapshot.id,"change_id":change.id}),
+    );
     println!("created snapshot {}", snapshot.id);
     println!("change: {}", change.name);
     Ok(())
@@ -1311,6 +1382,15 @@ fn list_snapshots(repo: &Repo, actor_name: &str) -> Result<()> {
         }
 
         let (visible, hidden) = visible_files_with_hidden(snapshot.files, &actor);
+        output::record(
+            "snapshot",
+            serde_json::json!({
+                "id": snapshot.id,
+                "change_id": visible_change_id(repo, &snapshot.change_id, &actor)?,
+                "file_count": visible.len(), "hidden_count": hidden,
+                "message": snapshot.message,
+            }),
+        );
         println!(
             "{} change:{} files:{} hidden:{} domains:{} message:{}",
             snapshot.id,
@@ -1337,6 +1417,10 @@ fn show_snapshot(repo: &Repo, snapshot_id: &str, actor_name: &str) -> Result<()>
     let (visible, hidden) = visible_files_with_hidden(snapshot.files, &actor);
 
     for file in visible {
+        output::record(
+            "file",
+            serde_json::json!({"path":file.path,"bytes":file.bytes,"hash":file.hash,"executable":file.executable,"symlink":file.symlink}),
+        );
         println!("{} {} bytes", file.path, file.bytes);
     }
 
@@ -1348,6 +1432,7 @@ fn show_snapshot(repo: &Repo, snapshot_id: &str, actor_name: &str) -> Result<()>
 }
 
 fn status(repo: &Repo, actor_name: &str, json: bool) -> Result<()> {
+    let json = json || output::enabled();
     let actor = read_actor(repo, actor_name)?;
     let workspace = read_workspace(repo)?;
     let Some(change_id) = workspace.current_change else {
@@ -1551,6 +1636,10 @@ fn merge_preview(
     );
     println!("incoming snapshot: {incoming_snapshot_id}");
 
+    output::record(
+        "merge_preview",
+        serde_json::json!({"clean":plan.conflicts.is_empty(),"merged_file_count":plan.merged_files.len(),"conflicts":plan.conflicts.iter().filter(|c|can_access_pending_conflict(&actor,c)).map(|c|serde_json::json!({"path":c.path,"kind":conflict_kind(&c.kind)})).collect::<Vec<_>>()}),
+    );
     if plan.conflicts.is_empty() {
         println!("result: clean");
         println!("merged files: {}", plan.merged_files.len());
@@ -1589,6 +1678,7 @@ fn show_conflict(repo: &Repo, conflict_id: &str, actor_name: &str) -> Result<()>
     let conflict = read_conflict(repo, conflict_id).map_err(cli_failure::unavailable_if_missing)?;
 
     if can_access_conflict(&actor, &conflict) {
+        output::record("conflict", serde_json::json!(&conflict));
         println!("conflict: {}", conflict.id);
         println!("line: {}", conflict.line);
         println!("change: {}", conflict.change_id);
@@ -1614,6 +1704,7 @@ fn show_conflict(repo: &Repo, conflict_id: &str, actor_name: &str) -> Result<()>
 
 fn print_conflict_for_actor(conflict: &Conflict, actor: &Actor) {
     if can_access_conflict(actor, conflict) {
+        output::record("conflict", serde_json::json!(conflict));
         println!(
             "{} {} {} line:{} change:{}",
             conflict.id,
@@ -1637,6 +1728,10 @@ fn list_lines(repo: &Repo, actor_name: &str) -> Result<()> {
             continue;
         }
 
+        output::record(
+            "line",
+            serde_json::json!({"name":line.name,"head_snapshot":visible_snapshot_id(repo,line.head_snapshot.as_deref(),&actor)?}),
+        );
         println!(
             "{} head:{} domains:{}",
             line.name,
@@ -1781,6 +1876,10 @@ fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> 
         public_integration_message,
     )?;
 
+    output::record(
+        "integration",
+        serde_json::json!({"line":line.name,"change_id":change.id,"snapshot_id":integrated_snapshot.id}),
+    );
     println!("integrated {} into {}", change.id, line.name);
     println!("line head: {}", integrated_snapshot.id);
     Ok(())
@@ -1794,6 +1893,10 @@ fn view_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> {
         return Err(CliFailure::OperationUnavailable.into());
     }
 
+    output::record(
+        "line",
+        serde_json::json!({"name":line.name,"head_snapshot":visible_snapshot_id(repo,line.head_snapshot.as_deref(),&actor)?}),
+    );
     let Some(snapshot_id) = line.head_snapshot.as_deref() else {
         println!("line `{line_name}` has no head snapshot");
         return Ok(());
@@ -1810,6 +1913,10 @@ fn view_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> {
     }
 
     for file in visible {
+        output::record(
+            "file",
+            serde_json::json!({"path":file.path,"bytes":file.bytes,"hash":file.hash,"executable":file.executable,"symlink":file.symlink}),
+        );
         println!("{} {} bytes", file.path, file.bytes);
     }
 
@@ -1841,8 +1948,17 @@ fn line_history(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> {
         }
 
         if can_access(&actor, &operation.policy) {
-            println!("{}", integration_history_message(repo, &operation)?);
+            let message = integration_history_message(repo, &operation)?;
+            output::record(
+                "operation",
+                serde_json::json!({"id":operation.id,"kind":operation_kind(&operation.kind),"message":message}),
+            );
+            println!("{message}");
         } else if let Some(public_message) = operation.public_message {
+            output::record(
+                "public_operation",
+                serde_json::json!({"message":public_message}),
+            );
             println!("{}", public_message);
         }
     }
@@ -1874,6 +1990,10 @@ fn print_snapshot_summary(repo: &Repo, snapshot: &Snapshot, actor: &Actor) -> Re
     }
     let (_, hidden) = visible_files_with_hidden(snapshot.files.clone(), actor);
 
+    output::record(
+        "snapshot",
+        serde_json::json!({"id":snapshot.id,"change_id":visible_change_id(repo,&snapshot.change_id,actor)?,"parent":visible_snapshot_id(repo,snapshot.parent_snapshot.as_deref(),actor)?,"message":snapshot.message,"author":identity::snapshot_author(snapshot)?,"hidden_count":hidden}),
+    );
     println!("snapshot: {}", snapshot.id);
     println!(
         "change: {}",
@@ -1926,6 +2046,10 @@ fn workspace_info(repo: &Repo, actor_name: &str) -> Result<()> {
                 println!("change is hidden from actor `{}`", actor.name);
                 return Ok(());
             }
+            output::record(
+                "workspace",
+                serde_json::json!({"change_id":change.id,"name":change.name,"change_snapshot":visible_snapshot_id(repo,change.workspace_base_snapshot_id(),&actor)?,"materialized_snapshot":visible_snapshot_id(repo,workspace.mode_snapshot.as_deref(),&actor)?}),
+            );
             println!("current change: {} ({})", change.name, change.id);
             println!("domains: {}", change.policy.domains.join(","));
             println!(
@@ -1934,6 +2058,7 @@ fn workspace_info(repo: &Repo, actor_name: &str) -> Result<()> {
             );
         }
         None => {
+            output::record("workspace", serde_json::json!({"change_id":null}));
             println!("current change: none");
         }
     }
@@ -1948,6 +2073,10 @@ fn op_log(repo: &Repo, actor_name: &str) -> Result<()> {
 
     for operation in operations {
         if can_access(&actor, &operation.policy) {
+            output::record(
+                "operation",
+                serde_json::json!({"id":operation.id,"kind":operation_kind(&operation.kind),"message":operation.private_message}),
+            );
             println!(
                 "{} {} {}",
                 operation.id,
@@ -1955,6 +2084,10 @@ fn op_log(repo: &Repo, actor_name: &str) -> Result<()> {
                 operation.private_message
             );
         } else if let Some(public_message) = operation.public_message {
+            output::record(
+                "public_operation",
+                serde_json::json!({"message":public_message}),
+            );
             println!("{}", public_message);
         }
     }

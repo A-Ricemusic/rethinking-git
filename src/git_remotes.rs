@@ -229,6 +229,10 @@ pub(super) fn pull(repo: &Repo, args: &GitPullArgs) -> Result<()> {
     // must compare against the actual pre-command workspace, not that overlay.
     write_json(repo, &repo.path(&["workspace.json"]), &before)?;
     if previous.head_snapshot == updated.head_snapshot && before.current_change.is_some() {
+        output::record(
+            "git_pull",
+            serde_json::json!({"line":args.line,"snapshot_id":tip,"changed":false}),
+        );
         println!("remote tip unchanged; workspace preserved");
         return Ok(());
     }
@@ -250,6 +254,10 @@ pub(super) fn pull(repo: &Repo, args: &GitPullArgs) -> Result<()> {
         &args.line,
         snapshot.policy,
     )?;
+    output::record(
+        "git_pull",
+        serde_json::json!({"line":args.line,"snapshot_id":tip,"changed":true}),
+    );
     println!(
         "pulled {} into {}; new change is ready",
         args.branch, args.line
@@ -287,6 +295,10 @@ pub(super) fn push(repo: &Repo, args: &GitPushArgs) -> Result<()> {
             &format!("refs/heads/{}:refs/heads/{}", args.line, args.branch),
         ],
     )?;
+    output::record(
+        "git_push",
+        serde_json::json!({"line":args.line,"branch":args.branch,"snapshot_id":read_line(repo,&args.line)?.head_snapshot}),
+    );
     println!("published {} to remote branch {}", args.line, args.branch);
     Ok(())
 }
@@ -314,6 +326,10 @@ pub(super) fn retarget(repo: &Repo, target: &str, actor_name: &str) -> Result<()
         format!("retargeted change `{id}` to `{target}`"),
         None,
     )?;
+    output::record(
+        "change_retargeted",
+        serde_json::json!({"id":id,"target_line":target}),
+    );
     println!("retargeted {id} to {target}");
     Ok(())
 }
@@ -387,6 +403,10 @@ pub(super) fn clone_repository(args: &GitCloneArgs) -> Result<()> {
             repo.root.display()
         )
     })?;
+    output::record(
+        "git_clone",
+        serde_json::json!({"destination":repo.root,"branch":args.branch,"snapshot_id":read_line(&repo,DEFAULT_LINE)?.head_snapshot}),
+    );
     println!(
         "cloned Git branch {} into {}",
         args.branch,

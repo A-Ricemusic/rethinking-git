@@ -59,6 +59,10 @@ pub(super) fn start(repo: &Repo, name: &str, line_name: &str, actor_name: &str) 
         format!("started change at line `{line_name}`"),
         None,
     )?;
+    output::record(
+        "workspace",
+        serde_json::json!({"change_id":read_workspace(repo)?.current_change,"materialized_snapshot":read_workspace(repo)?.mode_snapshot}),
+    );
     println!("checked out {line_name}; new change is ready");
     Ok(())
 }
@@ -90,6 +94,10 @@ pub(super) fn switch(repo: &Repo, id: &str, actor_name: &str) -> Result<()> {
         format!("switched workspace to `{id}`"),
         None,
     )?;
+    output::record(
+        "workspace",
+        serde_json::json!({"change_id":id,"materialized_snapshot":after.as_ref().map(|s| &s.id)}),
+    );
     println!("switched workspace to {id}");
     Ok(())
 }
@@ -126,6 +134,10 @@ pub(super) fn restore(
         "restored working files".to_string(),
         None,
     )?;
+    output::record(
+        "workspace",
+        serde_json::json!({"change_id":workspace.current_change,"materialized_snapshot":workspace.mode_snapshot}),
+    );
     println!("restored working files; snapshot to record these contents");
     Ok(())
 }

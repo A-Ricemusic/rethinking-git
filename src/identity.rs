@@ -24,12 +24,15 @@ pub(super) fn set(repo: &Repo, name: &str, email: &str) -> Result<()> {
         format!("configured author `{author}` for future snapshots"),
         None,
     )?;
+    output::record("identity", serde_json::json!({"author":author}));
     println!("configured author: {author}");
     Ok(())
 }
 
 pub(super) fn show(repo: &Repo) -> Result<()> {
-    match configured(repo)? {
+    let author = configured(repo)?;
+    output::record("identity", serde_json::json!({"author":author}));
+    match author {
         Some(author) => println!("author: {author}"),
         None => println!("no author configured; use identity set NAME EMAIL"),
     }

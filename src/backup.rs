@@ -78,6 +78,7 @@ pub(super) fn backup(repo: &Repo, destination: &Path, actor_name: &str) -> Resul
         let _ = fs::remove_dir(&destination);
     }
     result?;
+    output::record("backup", serde_json::json!({"destination":destination}));
     println!("saved-history backup created at {}", destination.display());
     println!("to materialize its current snapshot: run workspace restore --discard-changes --as {actor_name} inside the backup");
     Ok(())

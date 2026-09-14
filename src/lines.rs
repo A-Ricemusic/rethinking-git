@@ -40,6 +40,7 @@ pub(super) fn create(repo: &Repo, name: &str, from: &str, actor_name: &str) -> R
         format!("created line `{name}` from `{from}`"),
         None,
     )?;
+    output::record("line_created", serde_json::json!({"name":name}));
     println!("created line {name}; working files are unchanged");
     Ok(())
 }
@@ -66,6 +67,10 @@ pub(super) fn reset(
         bail!("line head changed; inspect the current head before retrying reset");
     }
     if expected == to {
+        output::record(
+            "line_reset",
+            serde_json::json!({"name":name,"snapshot_id":to,"changed":false}),
+        );
         println!("line already points to the requested snapshot");
         return Ok(());
     }
@@ -86,6 +91,10 @@ pub(super) fn reset(
         format!("reset line `{name}` from `{expected}` to `{to}`"),
         None,
     )?;
+    output::record(
+        "line_reset",
+        serde_json::json!({"name":name,"snapshot_id":to,"previous_snapshot":expected,"changed":true}),
+    );
     println!("reset line {name}; working files are unchanged");
     println!("previous head: {expected}");
     Ok(())
