@@ -20,7 +20,7 @@ cd demo
 rgit init
 rgit identity set "Example Developer" "dev@example.com"
 printf 'hello\n' > README.md
-rgit change new first-change
+rgit workspace start first-change
 rgit status
 rgit diff workspace --patch
 rgit snapshot --message "Add README"
@@ -48,6 +48,21 @@ types fail instead of being silently omitted. On Windows, symlinks materialize a
 regular files containing their target text, with logical type preserved in metadata.
 
 ## Switch, restore and resolve
+
+Use `rgit workspace start NAME --target main --as admin` to create a change and
+check out its target line in one recoverable transaction. The target line's policy
+is inherited. Dirty tracked files, restored-but-unsaved changes and untracked
+collisions refuse the operation without creating a change or changing files.
+
+Two baselines serve different purposes. Status/diff compare against the current
+change's saved tip (or its inherited line head). Checkout path ownership comes
+from the last captured/materialized snapshot. Restoring another snapshot changes
+the latter without rewriting change ancestry. Consequently, restored contents may
+still appear modified in status; snapshot them to save them on the current change.
+Explicit `restore --discard-changes` can move between saved file/directory shapes
+without intermediate snapshots. Ordinary switching continues to protect restored
+changes. `status --json` exposes both references.
+
 
 `rgit change list --as admin` prints change IDs. `rgit workspace switch CHANGE_ID
 --as admin` materializes an existing change and refuses unsaved tracked changes or
@@ -77,8 +92,9 @@ The available choices are `base`, `line`, `incoming`, and `delete`. For a manual
 merge, edit the file and use `--from-working` instead of `--take`. This captures
 those bytes immediately. Retry `line integrate` after resolving all conflicts.
 Decisions are tied to the exact source snapshots; changed inputs require a fresh
-resolution. Integration does not insert conflict markers or run an automatic text
-merge. Restore the resulting saved line head deliberately when ready to use it.
+resolution. Integration does not insert conflict markers. It automatically merges supported
+non-overlapping UTF-8 text edits; overlapping edits, incompatible modes/policies
+and unsupported content remain explicit conflicts. Restore the resulting saved line head deliberately when ready to use it.
 
 ## Back up and recover saved work
 
@@ -161,8 +177,8 @@ with the same command plus `--resume`. See the [clone recovery details](prototyp
 
 The Git bridge preserves supported selected-branch history and commit identities,
 including imported signatures. It does not migrate every ref, tags, submodules or
-non-UTF-8 paths. File/directory checkout transitions and ambiguous criss-cross merge
-bases remain unsupported. Native authenticated synchronization, canonical-store CLI
+non-UTF-8 paths. File/directory checkout transitions are supported with untracked-file protection.
+Case-only transitions and ambiguous criss-cross merge bases remain unsupported. Native authenticated synchronization, canonical-store CLI
 migration, complete operation undo, large-repository qualification and release
 security/durability reviews remain open. The [readiness audit](production-readiness.md)
 tracks these gaps; passing this guide is a workflow check, not release approval.

@@ -12,7 +12,8 @@ It implements the first source-control primitives:
 - `actor`: a person or tool with domain grants
 - `path policy`: file-level access control
 
-There are no branches, tags, remotes, real encryption, or hosting yet.
+Named lines and Git-backed clone/fetch/pull/push are implemented. Native linked
+worktrees, tags, encrypted storage and native authenticated hosting remain open.
 
 ## Install Rust
 
@@ -231,7 +232,8 @@ cargo run -- diff snapshot snap_old snap_new --as bob
 cargo run -- diff line main --as admin
 ```
 
-Diffs currently show file-level added, modified, deleted, and hidden restricted counts. They do not show line-level text patches yet.
+Diffs show file-level added, modified, deleted and hidden restricted counts. Add
+`--patch` for unified text hunks, modes and explicit binary/large-file notices.
 
 ## Merge And Conflict Flow
 
@@ -254,7 +256,9 @@ If the target line changed since the change started, integration runs a three-sn
 base snapshot + current line snapshot + incoming change snapshot
 ```
 
-If the same path changed on both sides, integration stores a conflict and refuses to update the line:
+Compatible non-overlapping text edits on the same path can merge automatically.
+Unresolved overlapping edits, incompatible metadata and structural collisions
+produce explicit conflicts and leave the line unchanged:
 
 ```sh
 cargo run -- conflict list --as alice

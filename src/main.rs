@@ -473,6 +473,14 @@ enum ConflictCommand {
 
 #[derive(Subcommand)]
 enum WorkspaceCommand {
+    /// Atomically create a change and check out its target line, preserving dirty work.
+    Start {
+        name: String,
+        #[arg(long, default_value = DEFAULT_LINE)]
+        target: String,
+        #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
+        as_actor: String,
+    },
     /// Check out an existing change, preserving untracked files and refusing dirty tracked files.
     Switch {
         change_id: String,
@@ -964,6 +972,11 @@ fn main() -> Result<()> {
             } => show_conflict(&repo, &conflict_id, &as_actor),
         },
         Command::Workspace { command } => match command {
+            WorkspaceCommand::Start {
+                name,
+                target,
+                as_actor,
+            } => checkout::start(&repo, &name, &target, &as_actor),
             WorkspaceCommand::Switch {
                 change_id,
                 as_actor,
@@ -2393,13 +2406,13 @@ fn scan_working_tree(repo: &Repo, store_blobs: bool) -> Result<Vec<FileEntry>> {
         .map(|change| read_optional_snapshot(repo, change.workspace_base_snapshot_id()))
         .transpose()?
         .flatten();
-    let mut rules = ignore_rules::Rules::new(
-        &repo.root,
-        baseline
-            .as_ref()
-            .map(|s| s.files.iter().map(|f| f.path.clone()).collect())
-            .unwrap_or_default(),
-    );
+    let materialized = read_optional_snapshot(repo, workspace.mode_snapshot.as_deref())?;
+    let tracked = baseline
+        .iter()
+        .chain(materialized.iter())
+        .flat_map(|s| s.files.iter().map(|f| f.path.clone()))
+        .collect();
+    let mut rules = ignore_rules::Rules::new(&repo.root, tracked);
     #[cfg(not(unix))]
     let inherited_modes: BTreeMap<String, transaction::WorkingFlags> =
         read_optional_snapshot(repo, workspace.mode_snapshot.as_deref())?
