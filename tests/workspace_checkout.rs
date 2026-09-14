@@ -482,3 +482,89 @@ fn symlink_and_directory_transitions_preserve_external_referents() {
     assert_eq!(fs::read(repo.0.join("shape/inside")).unwrap(), b"child");
     assert_eq!(fs::read(repo.0.join("outside")).unwrap(), b"referent");
 }
+
+#[test]
+fn repeated_shape_restore_uses_materialized_paths_without_extra_snapshots() {
+    let repo = Repo::new();
+    repo.change();
+    fs::write(repo.0.join("shape"), "flat").unwrap();
+    repo.ok(&["snapshot"]);
+    let flat = current_snapshot_id(&repo);
+    repo.ok(&["line", "integrate"]);
+    fs::remove_file(repo.0.join("shape")).unwrap();
+    fs::create_dir(repo.0.join("shape")).unwrap();
+    fs::write(repo.0.join("shape/nested.txt"), "nested").unwrap();
+    repo.ok(&["snapshot"]);
+    let nested = current_snapshot_id(&repo);
+    let snapshot_count = fs::read_dir(repo.0.join(".rgit/snapshots"))
+        .unwrap()
+        .count();
+    for target in [&flat, &nested, &flat, &nested] {
+        repo.ok(&[
+            "workspace",
+            "restore",
+            "--from",
+            target,
+            "--discard-changes",
+        ]);
+    }
+    assert_eq!(
+        fs::read_to_string(repo.0.join("shape/nested.txt")).unwrap(),
+        "nested"
+    );
+    assert_eq!(
+        fs::read_dir(repo.0.join(".rgit/snapshots"))
+            .unwrap()
+            .count(),
+        snapshot_count
+    );
+    // A metadata-only change creation must not forget which paths were materialized.
+    repo.ok(&["change", "new", "flat-base"]);
+    repo.ok(&["workspace", "restore", "--discard-changes"]);
+    assert_eq!(fs::read_to_string(repo.0.join("shape")).unwrap(), "flat");
+    assert_eq!(
+        fs::read_dir(repo.0.join(".rgit/snapshots"))
+            .unwrap()
+            .count(),
+        snapshot_count
+    );
+    repo.ok(&["repo", "verify", "--as", "admin"]);
+}
+
+fn current_snapshot_id(repo: &Repo) -> String {
+    let change: Value = serde_json::from_slice(
+        &fs::read(
+            repo.0
+                .join(format!(".rgit/changes/{}.json", repo.current())),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    change["current_snapshot"].as_str().unwrap().to_string()
+}
+
+#[test]
+fn start_checks_out_line_atomically_and_refuses_dirty_work() {
+    let repo = Repo::new();
+    let (first, _) = repo.branches();
+    repo.ok(&["workspace", "start", "fresh"]);
+    assert_eq!(fs::read(repo.0.join("file.txt")).unwrap(), b"first");
+    assert!(!repo.0.join("nested/new.txt").exists());
+    assert_ne!(repo.current(), first);
+    let before = fs::read(repo.0.join(".rgit/workspace.json")).unwrap();
+    let count = fs::read_dir(repo.0.join(".rgit/changes")).unwrap().count();
+    fs::write(repo.0.join("file.txt"), "unsaved").unwrap();
+    assert!(!repo
+        .run(&["workspace", "start", "must-not-exist"])
+        .status
+        .success());
+    assert_eq!(
+        fs::read(repo.0.join(".rgit/workspace.json")).unwrap(),
+        before
+    );
+    assert_eq!(
+        fs::read_dir(repo.0.join(".rgit/changes")).unwrap().count(),
+        count
+    );
+    assert_eq!(fs::read(repo.0.join("file.txt")).unwrap(), b"unsaved");
+}

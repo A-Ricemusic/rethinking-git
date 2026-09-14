@@ -1,6 +1,6 @@
 use super::*;
 
-fn current_snapshot(repo: &Repo, actor: &Actor) -> Result<Option<Snapshot>> {
+fn change_snapshot(repo: &Repo, actor: &Actor) -> Result<Option<Snapshot>> {
     let workspace = read_workspace(repo)?;
     let Some(id) = workspace.current_change else {
         return Ok(None);
@@ -12,12 +12,64 @@ fn current_snapshot(repo: &Repo, actor: &Actor) -> Result<Option<Snapshot>> {
     read_optional_snapshot(repo, change.workspace_base_snapshot_id())
 }
 
+// Ownership of materialized paths is independent of the change's ancestry.
+// mode_snapshot already records every successful capture/checkout on all platforms.
+fn current_snapshot(repo: &Repo, actor: &Actor) -> Result<Option<Snapshot>> {
+    let logical = change_snapshot(repo, actor)?;
+    match read_workspace(repo)?.mode_snapshot {
+        Some(id) => Ok(Some(read_snapshot(repo, &id)?)),
+        None => Ok(logical), // legacy repositories without a materialization record
+    }
+}
+
+fn guard_restored_changes(repo: &Repo, actor: &Actor) -> Result<()> {
+    let logical = change_snapshot(repo, actor)?;
+    let materialized = current_snapshot(repo, actor)?;
+    if logical.as_ref().map(|s| &s.id) == materialized.as_ref().map(|s| &s.id) {
+        return Ok(());
+    }
+    let logical = verified_files(repo, actor, &logical)?;
+    let materialized = verified_files(repo, actor, &materialized)?;
+    if logical != materialized {
+        bail!("workspace contains restored changes; snapshot them or use workspace restore --discard-changes before switching");
+    }
+    Ok(())
+}
+
+pub(super) fn start(repo: &Repo, name: &str, line_name: &str, actor_name: &str) -> Result<()> {
+    let actor = read_actor(repo, actor_name)?;
+    let line = read_line(repo, line_name)?;
+    if !can_access(&actor, &line.policy) {
+        return Err(CliFailure::OperationUnavailable.into());
+    }
+    guard_restored_changes(repo, &actor)?;
+    let before = current_snapshot(repo, &actor)?;
+    let after = read_optional_snapshot(repo, line.head_snapshot.as_deref())?;
+    stage_checkout(repo, &actor, &before, &after, false)?;
+    create_change(repo, name, line_name, line.policy)?;
+    let mut workspace = read_workspace(repo)?;
+    workspace.mode_snapshot = after.map(|s| s.id);
+    write_json(repo, &repo.path(&["workspace.json"]), &workspace)?;
+    record_operation(
+        repo,
+        OperationKind::SwitchWorkspace {
+            change_id: workspace.current_change.context("new change is missing")?,
+        },
+        admin_policy(),
+        format!("started change at line `{line_name}`"),
+        None,
+    )?;
+    println!("checked out {line_name}; new change is ready");
+    Ok(())
+}
+
 pub(super) fn switch(repo: &Repo, id: &str, actor_name: &str) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
     let change = read_change(repo, id)?;
     if !can_access(&actor, &change.policy) {
         return Err(CliFailure::OperationUnavailable.into());
     }
+    guard_restored_changes(repo, &actor)?;
     let before = current_snapshot(repo, &actor)?;
     let after = read_optional_snapshot(repo, change.workspace_base_snapshot_id())?;
     stage_checkout(repo, &actor, &before, &after, false)?;
@@ -49,11 +101,14 @@ pub(super) fn restore(
     actor_name: &str,
 ) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
+    if !discard {
+        guard_restored_changes(repo, &actor)?;
+    }
     let before = current_snapshot(repo, &actor)?;
     let after = if let Some(id) = from {
         Some(read_snapshot(repo, id)?)
     } else {
-        before.clone()
+        change_snapshot(repo, &actor)?
     };
     if after.is_none() {
         bail!("workspace has no snapshot to restore");

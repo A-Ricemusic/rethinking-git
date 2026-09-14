@@ -8,6 +8,7 @@ struct Report<'a> {
     actor: &'a str,
     change: Option<ChangeInfo<'a>>,
     base_snapshot: SnapshotReference,
+    materialized_snapshot: SnapshotReference,
     changes: Option<&'a FileDiff>,
 }
 
@@ -42,6 +43,17 @@ pub(super) fn print(
             }
         }
     };
+    let materialized_snapshot = match read_workspace(repo)?.mode_snapshot {
+        None => SnapshotReference::Absent,
+        Some(id) => {
+            let snapshot = read_snapshot(repo, &id)?;
+            if can_access(actor, &snapshot.policy) {
+                SnapshotReference::Visible { id }
+            } else {
+                SnapshotReference::Restricted
+            }
+        }
+    };
     let report = Report {
         schema_version: 1,
         command: "status",
@@ -51,6 +63,7 @@ pub(super) fn print(
             name: &change.name,
         }),
         base_snapshot,
+        materialized_snapshot,
         changes,
     };
     println!("{}", serde_json::to_string(&report)?);

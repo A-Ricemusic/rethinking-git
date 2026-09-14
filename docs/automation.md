@@ -15,6 +15,7 @@ A status document has `schema_version: 1` and `command: "status"`:
   "actor": "public",
   "change": {"id": "chg_0123456789abcdef0123456789abcdef", "name": "example"},
   "base_snapshot": {"state": "restricted"},
+  "materialized_snapshot": {"state": "restricted"},
   "changes": {
     "added": ["new file.txt"],
     "modified": ["src/main.rs"],
@@ -42,3 +43,14 @@ Clients should reject unsupported schema versions and ignore unknown additive
 fields within version 1. Breaking field or meaning changes require a new schema
 version. The default text output is intended for people and is not a parsing API.
 Selecting an actor remains a local view choice, not authenticated authorization.
+
+## Checkout baseline
+
+Status version 1 also includes `materialized_snapshot`, using the same
+`absent`/`restricted`/`visible` reference representation as `base_snapshot`.
+`base_snapshot` retains its original comparison meaning. `materialized_snapshot`
+identifies the last capture or checkout used to decide ownership of working paths;
+it can differ after an explicit restore or metadata-only `change new`. An absent
+materialization reference also covers legacy workspaces that did not record one;
+it is not proof that the directory is empty. Neither field exposes a restricted ID.
+Use `workspace start NAME --target LINE` for an atomic fresh-change checkout.

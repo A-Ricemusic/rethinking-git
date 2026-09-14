@@ -241,7 +241,7 @@ fn json_status_has_versioned_empty_and_permission_filtered_states() {
         empty,
         serde_json::json!({
             "schema_version": 1, "command": "status", "actor": "public",
-            "change": null, "base_snapshot": {"state": "absent"}, "changes": null,
+            "change": null, "base_snapshot": {"state": "absent"}, "materialized_snapshot": {"state": "absent"}, "changes": null,
         })
     );
     let change = repo.change();
@@ -276,6 +276,7 @@ fn json_status_has_versioned_empty_and_permission_filtered_states() {
             "schema_version": 1, "command": "status", "actor": "public",
             "change": {"id": change, "name": "test"},
             "base_snapshot": {"state": "restricted"},
+            "materialized_snapshot": {"state": "restricted"},
             "changes": {"added": ["added with spaces.txt"], "modified": ["visible.txt"], "deleted": ["deleted.txt"], "hidden_count": 1},
         })
     );
