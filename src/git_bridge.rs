@@ -68,6 +68,13 @@ fn ordered_history(repo: &Repo, head: &str) -> Result<Vec<Snapshot>> {
     Ok(order)
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum ExportMode {
+    Report,
+    Transport,
+    Preview,
+}
+
 pub(super) fn export(
     repo: &Repo,
     destination: &Path,
@@ -75,7 +82,7 @@ pub(super) fn export(
     author: Option<&str>,
     actor: &str,
     allow_restricted: bool,
-    quiet: bool,
+    mode: ExportMode,
 ) -> Result<()> {
     verify::check(repo, actor)?;
     if let Some(author) = author {
@@ -164,7 +171,7 @@ pub(super) fn export(
         )?;
         run(&destination, &["symbolic-ref", "HEAD", &reference])?;
         run(&destination, &["fsck", "--full", "--strict"])?;
-        for snapshot in bindings {
+        for snapshot in bindings.into_iter().filter(|_| mode != ExportMode::Preview) {
             write_json(repo, &snapshot_path(repo, &snapshot.id)?, &snapshot)?;
             record_operation(
                 repo,
@@ -189,7 +196,7 @@ pub(super) fn export(
         let _ = fs::remove_dir_all(&destination);
     }
     result?;
-    if !quiet {
+    if mode == ExportMode::Report {
         output::record(
             "git_export",
             serde_json::json!({"destination":destination.to_str(),"destination_display":destination.display().to_string(),"snapshots":history.len()}),

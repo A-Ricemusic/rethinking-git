@@ -173,6 +173,9 @@ makes this demonstration's imported history visible in the default view. Clone
 requires a new destination; failed clones with a recorded request can be retried
 with the same command plus `--resume`. See the [clone recovery details](prototype.md#cloning-a-git-branch-into-a-native-working-directory).
 
+For saved remotes, upstream tracking, and `push --dry-run`, see the
+[Git collaboration guide](git-collaboration.md).
+
 ## Evaluation limits
 
 The Git bridge preserves supported selected-branch history and commit identities,

@@ -22,7 +22,7 @@ impl Drop for Scratch {
     }
 }
 
-fn validate_remote(remote: &str) -> Result<()> {
+pub(super) fn validate_remote(remote: &str) -> Result<()> {
     if remote.is_empty() || remote.starts_with('-') || remote.chars().any(char::is_control) {
         bail!("invalid Git remote");
     }
@@ -45,7 +45,7 @@ fn validate_remote(remote: &str) -> Result<()> {
     Ok(())
 }
 
-fn resolve_remote(remote: &str) -> Result<String> {
+pub(super) fn resolve_remote(remote: &str) -> Result<String> {
     validate_remote(remote)?;
     // Git runs in private scratch directories. Resolve local paths at the caller,
     // while preserving URL and scp-style SSH syntax for Git's transport parser.
@@ -173,7 +173,7 @@ fn fetch_history(
     policy: AccessPolicy,
 ) -> Result<usize> {
     verify::check(repo, actor)?;
-    let remote = resolve_remote(remote)?;
+    let remote = git_tracking::resolve_named(repo, remote)?;
     validate_named_key(into)?;
     let scratch = Scratch::new()?;
     run(
@@ -209,6 +209,12 @@ fn fetch_history(
 
 pub(super) fn pull(repo: &Repo, args: &GitPullArgs) -> Result<()> {
     verify::check(repo, &args.as_actor)?;
+    let (line, remote, branch) = git_tracking::target(
+        repo,
+        args.line.as_deref(),
+        args.remote.as_deref(),
+        args.branch.as_deref(),
+    )?;
     let before = read_workspace(repo)?;
     let current = before
         .current_change
@@ -217,11 +223,11 @@ pub(super) fn pull(repo: &Repo, args: &GitPullArgs) -> Result<()> {
         .transpose()?;
     if current
         .as_ref()
-        .is_some_and(|change| change.target_line != args.line)
+        .is_some_and(|change| change.target_line != line)
     {
         bail!("current change targets another line; switch or retarget before pulling");
     }
-    let previous = read_line(repo, &args.line)?;
+    let previous = read_line(repo, &line)?;
     if previous.head_snapshot.is_none() {
         bail!("pull requires a populated line; use git clone or git fetch for initial history");
     }
@@ -230,15 +236,8 @@ pub(super) fn pull(repo: &Repo, args: &GitPullArgs) -> Result<()> {
     } else {
         policy_from_domains(args.domains.clone())
     };
-    fetch_history(
-        repo,
-        &args.remote,
-        &args.branch,
-        &args.line,
-        &args.as_actor,
-        policy,
-    )?;
-    let updated = read_line(repo, &args.line)?;
+    fetch_history(repo, &remote, &branch, &line, &args.as_actor, policy)?;
+    let updated = read_line(repo, &line)?;
     let tip = updated
         .head_snapshot
         .as_deref()
@@ -249,7 +248,7 @@ pub(super) fn pull(repo: &Repo, args: &GitPullArgs) -> Result<()> {
     if previous.head_snapshot == updated.head_snapshot && before.current_change.is_some() {
         output::record(
             "git_pull",
-            serde_json::json!({"line":args.line,"snapshot_id":tip,"changed":false}),
+            serde_json::json!({"line":line,"snapshot_id":tip,"changed":false}),
         );
         println!("remote tip unchanged; workspace preserved");
         return Ok(());
@@ -266,42 +265,60 @@ pub(super) fn pull(repo: &Repo, args: &GitPullArgs) -> Result<()> {
     }
     let snapshot = read_snapshot(repo, tip)?;
     checkout::restore(repo, Some(tip), false, &args.as_actor)?;
-    create_change(
-        repo,
-        &format!("pull {}", args.line),
-        &args.line,
-        snapshot.policy,
-    )?;
+    create_change(repo, &format!("pull {}", line), &line, snapshot.policy)?;
     output::record(
         "git_pull",
-        serde_json::json!({"line":args.line,"snapshot_id":tip,"changed":true}),
+        serde_json::json!({"line":line,"snapshot_id":tip,"changed":true}),
     );
-    println!(
-        "pulled {} into {}; new change is ready",
-        args.branch, args.line
-    );
+    println!("pulled {} into {}; new change is ready", branch, line);
     Ok(())
 }
 
 pub(super) fn push(repo: &Repo, args: &GitPushArgs) -> Result<()> {
     verify::check(repo, &args.as_actor)?;
-    let remote = resolve_remote(&args.remote)?;
+    let (line, remote, branch) = git_tracking::target(
+        repo,
+        args.line.as_deref(),
+        args.remote.as_deref(),
+        args.branch.as_deref(),
+    )?;
+    if let Some(expected) = &args.expect_snapshot {
+        validate_object_id(expected, "snap_")?;
+        if read_line(repo, &line)?.head_snapshot.as_ref() != Some(expected) {
+            return Err(CliFailure::StaleSnapshot.into());
+        }
+    }
     let scratch = Scratch::new()?;
     run(
         &scratch.0,
         &scratch,
-        &["check-ref-format", &format!("refs/heads/{}", args.branch)],
+        &["check-ref-format", &format!("refs/heads/{}", branch)],
     )?;
     let exported = scratch.0.join("repository.git");
     git_bridge::export(
         repo,
         &exported,
-        &args.line,
+        &line,
         args.author.as_deref(),
         &args.as_actor,
         args.allow_restricted,
-        true,
+        if args.dry_run {
+            git_bridge::ExportMode::Preview
+        } else {
+            git_bridge::ExportMode::Transport
+        },
     )?;
+    if args.dry_run {
+        return preview(
+            repo,
+            &exported,
+            &scratch,
+            &remote,
+            &line,
+            &branch,
+            args.max_commits.unwrap_or(50),
+        );
+    }
     run(
         &exported,
         &scratch,
@@ -310,14 +327,132 @@ pub(super) fn push(repo: &Repo, args: &GitPushArgs) -> Result<()> {
             "--porcelain",
             "--",
             &remote,
-            &format!("refs/heads/{}:refs/heads/{}", args.line, args.branch),
+            &format!("refs/heads/{}:refs/heads/{}", line, branch),
         ],
     )?;
     output::record(
         "git_push",
-        serde_json::json!({"line":args.line,"branch":args.branch,"snapshot_id":read_line(repo,&args.line)?.head_snapshot}),
+        serde_json::json!({"line":line,"branch":branch,"snapshot_id":read_line(repo,&line)?.head_snapshot}),
     );
-    println!("published {} to remote branch {}", args.line, args.branch);
+    println!("published {} to remote branch {}", line, branch);
+    Ok(())
+}
+
+fn capture_git(root: &Path, scratch: &Scratch, args: &[&str]) -> Result<String> {
+    let output = transport(root, &scratch.0.join("no-hooks"))
+        .env("GIT_NO_REPLACE_OBJECTS", "1")
+        .env("GIT_NO_LAZY_FETCH", "1")
+        .args(args)
+        .output()
+        .context("failed to run Git preview")?;
+    if !output.status.success() {
+        bail!("Git preview failed; check remote access and branch availability");
+    }
+    String::from_utf8(output.stdout).context("Git preview output was not UTF-8")
+}
+
+fn preview(
+    repo: &Repo,
+    exported: &Path,
+    scratch: &Scratch,
+    remote: &str,
+    line: &str,
+    branch: &str,
+    max_commits: u32,
+) -> Result<()> {
+    let reference = format!("refs/heads/{branch}");
+    let local = capture_git(
+        exported,
+        scratch,
+        &["rev-parse", &format!("refs/heads/{line}")],
+    )?
+    .trim()
+    .to_string();
+    let advertised = capture_git(
+        exported,
+        scratch,
+        &["ls-remote", "--refs", "--", remote, &reference],
+    )?;
+    let remote_tip = if advertised.trim().is_empty() {
+        None
+    } else {
+        // Fetch into scratch only. Compare the actually fetched tip, since the
+        // remote can advance between discovery and transfer.
+        run(
+            exported,
+            scratch,
+            &["fetch", "--no-tags", "--", remote, &reference],
+        )?;
+        Some(
+            capture_git(exported, scratch, &["rev-parse", "FETCH_HEAD"])?
+                .trim()
+                .to_string(),
+        )
+    };
+    let (ahead, behind) = if let Some(tip) = &remote_tip {
+        let counts = capture_git(
+            exported,
+            scratch,
+            &[
+                "rev-list",
+                "--left-right",
+                "--count",
+                &format!("{local}...{tip}"),
+            ],
+        )?;
+        let mut counts = counts.split_whitespace();
+        let ahead: usize = counts.next().context("missing ahead count")?.parse()?;
+        let behind: usize = counts.next().context("missing behind count")?.parse()?;
+        (ahead, behind)
+    } else {
+        (
+            capture_git(exported, scratch, &["rev-list", "--count", &local])?
+                .trim()
+                .parse()?,
+            0,
+        )
+    };
+    let state = match (remote_tip.is_some(), ahead, behind) {
+        (false, _, _) => "new_branch",
+        (true, 0, 0) => "up_to_date",
+        (true, _, 0) => "fast_forward",
+        (true, 0, _) => "behind",
+        _ => "diverged",
+    };
+    let limit = format!("--max-count={max_commits}");
+    let mut arguments = vec!["log", "--reverse", &limit, "--format=%H%x09%s", &local];
+    if let Some(tip) = &remote_tip {
+        arguments.extend(["--not", tip]);
+    }
+    let log = capture_git(exported, scratch, &arguments)?;
+    let commits: Vec<_> = log
+        .lines()
+        .map(|entry| {
+            let (id, subject) = entry.split_once('\t').unwrap_or((entry, ""));
+            serde_json::json!({"git_commit":id,"subject":subject})
+        })
+        .collect();
+    output::record(
+        "git_push_preview",
+        serde_json::json!({
+            "line":line, "branch":branch, "remote":remote,
+            "snapshot_id":read_line(repo,line)?.head_snapshot,
+            "local_commit":local, "remote_commit":remote_tip,
+            "state":state, "ahead":ahead, "behind":behind,
+            "fast_forward_allowed":behind == 0, "commits":commits,
+            "commits_total":ahead, "commits_truncated":commits.len() < ahead,
+        }),
+    );
+    println!("{line} -> {remote} ({branch}): {state}; {ahead} outgoing, {behind} incoming commits");
+    println!("showing {} of {ahead} outgoing commits", commits.len());
+    for commit in &commits {
+        println!(
+            "{} {}",
+            commit["git_commit"].as_str().unwrap_or(""),
+            commit["subject"].as_str().unwrap_or("")
+        );
+    }
+    println!("Preview only: publishes saved line ancestry, excluding unsaved files and unintegrated changes. Remote state and server permissions are checked again on push.");
     Ok(())
 }
 
@@ -408,6 +543,7 @@ pub(super) fn clone_repository(args: &GitCloneArgs) -> Result<()> {
         // against the actual pre-fetch baseline so new/untracked files are safe.
         write_json(&repo, &repo.path(&["workspace.json"]), &before)?;
         checkout::switch(&repo, &change, ADMIN_DOMAIN)?;
+        git_tracking::configure_clone(&repo, &request.remote, &request.branch)?;
         verify::check(&repo, ADMIN_DOMAIN)?;
         repo.transaction.commit()?;
         fs::remove_file(repo.path(&["clone-request.json"]))?;

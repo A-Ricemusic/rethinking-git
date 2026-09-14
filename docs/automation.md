@@ -121,3 +121,26 @@ outcome document. Text mode retains Git's usual stdout behavior. An `integration
 record includes `changed: true` when a new line snapshot was created, or
 `changed: false` when the change was already integrated. Both return the current
 line `snapshot_id`; a successful retry does not require parsing terminal text.
+
+## Git destinations and push previews
+
+`remote set/list/remove`, `upstream set/show/unset`, `push`, and `pull` support the
+same global `--output json` envelope. Configuration inspection requires the admin
+view. Records are `git_remote`, `git_remotes`, `git_remote_removed`, and
+`git_upstream`; an unset upstream is `null`. Push/pull retain `git_push`/`git_pull`.
+
+`push --dry-run` emits `git_push_preview`, including `state`, `ahead`, `behind`,
+`fast_forward_allowed`, and the outgoing `commits` array. A successful comparison
+exits zero even for divergence; transport failures exit nonzero. It contacts the
+remote but does not publish or bind local identities. See the
+[complete workflow and comparison states](git-collaboration.md#preview-before-publishing).
+
+`status --workflow` adds an offline workflow assessment without changing ordinary
+status. See [agent workflow checks](git-collaboration.md#agent-workflow-checks) for
+states, nullable fields, permission behavior, and advisory actions.
+
+Push previews default to 50 outgoing commit details; `--max-commits 0` returns only
+counts. `commits_total` and `commits_truncated` make omissions explicit. A subsequent
+push can pass `--expect-snapshot` with the preview's `snapshot_id`; a changed local
+line refuses with `error.kind: "stale_snapshot"`, exit 1 and empty records. Pin the
+explicit destination from the preview as well when settings may change concurrently.

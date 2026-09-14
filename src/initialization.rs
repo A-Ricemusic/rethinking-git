@@ -167,6 +167,7 @@ fn initialize_with(
         config
     } else {
         let config = RepoConfig {
+            git: Default::default(),
             author: None,
             format_version: FORMAT_VERSION,
             repo_id: format!("repo_{}", new_id_suffix()),

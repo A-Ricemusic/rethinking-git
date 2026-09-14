@@ -9,6 +9,7 @@ use std::{error::Error, fmt};
 pub(crate) enum CliFailure {
     OperationUnavailable,
     IntegrationConflicted,
+    StaleSnapshot,
 }
 
 impl fmt::Display for CliFailure {
@@ -16,6 +17,9 @@ impl fmt::Display for CliFailure {
         let message = match self {
             Self::OperationUnavailable => "operation unavailable",
             Self::IntegrationConflicted => "integration blocked by conflicts",
+            Self::StaleSnapshot => {
+                "line no longer matches the reviewed snapshot; preview again before publishing"
+            }
         };
         formatter.write_str(message)
     }

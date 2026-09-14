@@ -121,6 +121,7 @@ fn restricted_metadata_is_redacted_in_the_entire_envelope() {
         vec!["snapshot-info", "list"],
         vec!["workspace", "info"],
         vec!["status"],
+        vec!["status", "--workflow"],
     ] {
         let value = repo.call(&args, true).to_string();
         assert!(!value.contains(snapshot), "{args:?}: {value}");
@@ -289,4 +290,98 @@ fn git_push_success_retry_and_rejection_each_emit_exactly_one_json_outcome() {
         .unwrap();
     assert!(text.status.success());
     assert!(String::from_utf8_lossy(&text.stdout).contains("refs/heads/main"));
+}
+
+#[test]
+fn workflow_status_distinguishes_clean_files_from_integrated_saved_work() {
+    let repo = Repo::new();
+    assert_eq!(
+        data(&repo.call(&["status", "--workflow"], true), "status")["workflow"]["saved_work"],
+        "no_change"
+    );
+    repo.start("feature");
+    repo.write("saved feature\n");
+    repo.call(&["snapshot"], true);
+    let pending = repo.call(&["status", "--workflow"], true);
+    let workflow = &data(&pending, "status")["workflow"];
+    assert_eq!(workflow["workspace_has_changes"], false);
+    assert_eq!(workflow["saved_work"], "unintegrated");
+    assert!(workflow["next_actions"]
+        .as_array()
+        .unwrap()
+        .contains(&serde_json::json!("integrate")));
+    repo.call(&["line", "integrate"], true);
+    let integrated = repo.call(&["status", "--workflow"], true);
+    let workflow = &data(&integrated, "status")["workflow"];
+    assert_eq!(workflow["saved_work"], "integrated");
+    assert_eq!(workflow["materialized_matches_line"], true);
+    repo.write("unsaved follow-up\n");
+    assert_eq!(
+        data(&repo.call(&["status", "--workflow"], true), "status")["workflow"]
+            ["workspace_has_changes"],
+        true
+    );
+    // Ordinary status remains lightweight and retains its previous schema.
+    assert!(data(&repo.call(&["status"], true), "status")
+        .get("workflow")
+        .is_none());
+}
+
+#[test]
+fn workflow_status_explains_divergence_without_changing_history() {
+    let repo = Repo::new();
+    repo.start("base");
+    repo.write("base\n");
+    repo.call(&["snapshot"], true);
+    repo.call(&["line", "integrate"], true);
+    let left = repo.start("left");
+    repo.write("left\n");
+    repo.call(&["snapshot"], true);
+    repo.start("right");
+    repo.write("right\n");
+    repo.call(&["snapshot"], true);
+    repo.call(&["line", "integrate"], true);
+    repo.call(&["workspace", "switch", &left], true);
+    let before = repo.call(&["op", "log"], true);
+    let status = repo.call(&["status", "--workflow"], true);
+    let workflow = &data(&status, "status")["workflow"];
+    assert_eq!(workflow["saved_work"], "diverged");
+    assert_eq!(workflow["workspace_has_changes"], false);
+    assert_eq!(workflow["materialized_matches_line"], false);
+    assert_eq!(
+        workflow["next_actions"],
+        serde_json::json!(["review_integration", "inspect_line"])
+    );
+    assert_eq!(before, repo.call(&["op", "log"], true));
+}
+
+#[test]
+fn workflow_never_labels_restricted_history_as_ready() {
+    let repo = Repo::new();
+    repo.start("public");
+    repo.write("private file\n");
+    let saved = repo.call(
+        &[
+            "snapshot",
+            "--domain",
+            "admin",
+            "--message",
+            "private snapshot",
+        ],
+        true,
+    );
+    let id = data(&saved, "snapshot_created")["id"].as_str().unwrap();
+    let report = repo.call(&["status", "--workflow"], true);
+    assert!(!report.to_string().contains(id));
+    assert!(!report.to_string().contains("private snapshot"));
+    let workflow = &data(&report, "status")["workflow"];
+    assert_eq!(workflow["saved_work"], "restricted");
+    assert_eq!(
+        workflow["materialized_matches_line"],
+        serde_json::Value::Null
+    );
+    assert!(!workflow["next_actions"]
+        .as_array()
+        .unwrap()
+        .contains(&serde_json::json!("preview_push")));
 }
