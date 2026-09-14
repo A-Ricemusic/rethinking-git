@@ -50,6 +50,7 @@ fn verify_with_output(repo: &Repo, actor_name: &str, report: bool) -> Result<()>
     }
     let config: RepoConfig = read_json(repo, &repo.path(&["repo.json"]))?;
     validate_object_id(&config.repo_id, "repo_")?;
+    config.git.validate()?;
     if let Some(author) = &config.author {
         git_bridge::validate_author(author)?;
     }

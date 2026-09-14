@@ -7,6 +7,10 @@ Snapshots are captured explicitly with `rgit snapshot`; there is no background w
 The CLI now supports a local edit/snapshot/integrate workflow, workspace restore and
 switch, native linked worktrees, conflict resolution, verified backups, and selected-branch Git import,
 export, clone, fetch, pull and push. Git interoperability and transport require installed Git.
+[Git collaboration](docs/git-collaboration.md) supports saved remotes/upstreams,
+`rgit push` / `rgit pull`, and bounded previews with `push --dry-run`.
+Agents can inspect local integration state with `status --workflow` and guard
+publication against concurrent line changes with `push --expect-snapshot`.
 
 **This remains experimental and is not qualified as a production Git replacement.**
 Local actor filtering is not authentication or encryption. The executable uses its

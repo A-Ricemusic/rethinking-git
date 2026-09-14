@@ -29,6 +29,7 @@ mod cli_failure;
 mod git_bridge;
 mod git_objects;
 mod git_remotes;
+mod git_tracking;
 mod identity;
 mod ignore_rules;
 mod initialization;
@@ -36,6 +37,7 @@ mod lines;
 mod output;
 mod resolution;
 mod status_json;
+mod status_workflow;
 mod text_diff;
 mod text_merge;
 mod transaction;
@@ -70,6 +72,20 @@ enum OutputFormat {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Configure named Git remotes shared by native worktrees.
+    Remote {
+        #[command(subcommand)]
+        command: git_tracking::RemoteCommand,
+    },
+    /// Configure the Git upstream for a native line.
+    Upstream {
+        #[command(subcommand)]
+        command: git_tracking::UpstreamCommand,
+    },
+    /// Publish saved line history to its Git upstream.
+    Push(GitPushArgs),
+    /// Pull a fast-forward update from the line's Git upstream.
+    Pull(GitPullArgs),
     /// Manage native linked working directories sharing history and lines.
     Worktree {
         #[command(subcommand)]
@@ -104,6 +120,9 @@ enum Command {
         /// Emit one versioned JSON status document for automation.
         #[arg(long)]
         json: bool,
+        /// Explain saved-work integration and materialization using local history only.
+        #[arg(long)]
+        workflow: bool,
     },
     /// Capture the current files as a snapshot on the current change.
     Snapshot {
@@ -174,17 +193,26 @@ enum IdentityCommand {
 
 #[derive(clap::Args)]
 struct GitPushArgs {
-    remote: String,
-    #[arg(long, default_value = DEFAULT_LINE)]
-    line: String,
-    #[arg(long, default_value = DEFAULT_LINE)]
-    branch: String,
+    remote: Option<String>,
+    #[arg(long)]
+    line: Option<String>,
+    #[arg(long)]
+    branch: Option<String>,
     #[arg(long)]
     author: Option<String>,
     #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
     as_actor: String,
     #[arg(long)]
     allow_restricted: bool,
+    /// Compare against the remote and list outgoing commits without publishing.
+    #[arg(long)]
+    dry_run: bool,
+    /// Refuse if the selected line no longer has the snapshot reviewed by the caller.
+    #[arg(long)]
+    expect_snapshot: Option<String>,
+    /// Maximum outgoing commits shown by preview (default 50; 0 returns counts only).
+    #[arg(long, requires = "dry_run", value_parser = clap::value_parser!(u32).range(0..=1000))]
+    max_commits: Option<u32>,
 }
 
 #[derive(clap::Args)]
@@ -202,11 +230,11 @@ struct GitCloneArgs {
 
 #[derive(clap::Args)]
 struct GitPullArgs {
-    remote: String,
-    #[arg(long, default_value = DEFAULT_LINE)]
-    branch: String,
-    #[arg(long, default_value = DEFAULT_LINE)]
-    line: String,
+    remote: Option<String>,
+    #[arg(long)]
+    branch: Option<String>,
+    #[arg(long)]
+    line: Option<String>,
     #[arg(long = "as", default_value = PUBLIC_DOMAIN)]
     as_actor: String,
     /// Policies for newly imported commits; defaults to the existing line policy.
@@ -553,6 +581,8 @@ enum Redaction {
 
 #[derive(Serialize, Deserialize)]
 struct RepoConfig {
+    #[serde(default, skip_serializing_if = "git_tracking::Config::is_empty")]
+    git: git_tracking::Config,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     author: Option<String>,
     format_version: u32,
@@ -851,6 +881,10 @@ fn run(cli: Cli) -> Result<()> {
     }
     let repo = Repo::discover()?;
     let result = match cli.command {
+        Command::Remote { command } => git_tracking::remote(&repo, &command),
+        Command::Upstream { command } => git_tracking::upstream(&repo, &command),
+        Command::Push(args) => git_remotes::push(&repo, &args),
+        Command::Pull(args) => git_remotes::pull(&repo, &args),
         Command::Identity {
             command: IdentityCommand::Set { name, email },
         } => identity::set(&repo, &name, &email),
@@ -918,7 +952,7 @@ fn run(cli: Cli) -> Result<()> {
             author.as_deref(),
             &as_actor,
             allow_restricted,
-            false,
+            git_bridge::ExportMode::Report,
         ),
         Command::Repo {
             command:
@@ -930,7 +964,11 @@ fn run(cli: Cli) -> Result<()> {
         Command::Repo {
             command: RepoCommand::Verify { as_actor },
         } => verify::verify(&repo, &as_actor),
-        Command::Status { as_actor, json } => status(&repo, &as_actor, json),
+        Command::Status {
+            as_actor,
+            json,
+            workflow,
+        } => status(&repo, &as_actor, json, workflow),
         Command::Snapshot { message, domains } => {
             create_snapshot(&repo, &message, policy_from_domains(domains))
         }
@@ -1452,16 +1490,19 @@ fn show_snapshot(repo: &Repo, snapshot_id: &str, actor_name: &str) -> Result<()>
     Ok(())
 }
 
-fn status(repo: &Repo, actor_name: &str, json: bool) -> Result<()> {
+fn status(repo: &Repo, actor_name: &str, json: bool, workflow: bool) -> Result<()> {
     let json = json || output::enabled();
     let actor = read_actor(repo, actor_name)?;
     let workspace = read_workspace(repo)?;
     let Some(change_id) = workspace.current_change else {
         if json {
-            return status_json::print(repo, &actor, None, None);
+            return status_json::print(repo, &actor, None, None, workflow);
         }
         println!("workspace has no current change");
         println!("next: rgit change new <name>");
+        if workflow {
+            status_json::print_workflow(repo, &actor, None, None)?;
+        }
         return Ok(());
     };
 
@@ -1475,7 +1516,7 @@ fn status(repo: &Repo, actor_name: &str, json: bool) -> Result<()> {
     let current = scan_working_tree(repo, false)?;
     let diff = permissioned_diff(previous, current, &actor);
     if json {
-        return status_json::print(repo, &actor, Some(&change), Some(&diff));
+        return status_json::print(repo, &actor, Some(&change), Some(&diff), workflow);
     }
 
     println!("actor: {}", actor.name);
@@ -1485,6 +1526,9 @@ fn status(repo: &Repo, actor_name: &str, json: bool) -> Result<()> {
         visible_snapshot_id(repo, change.current_snapshot.as_deref(), &actor)?
     );
     diff.print();
+    if workflow {
+        status_json::print_workflow(repo, &actor, Some(&change), Some(&diff))?;
+    }
 
     Ok(())
 }

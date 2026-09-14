@@ -10,6 +10,8 @@ struct Report<'a> {
     base_snapshot: SnapshotReference,
     materialized_snapshot: SnapshotReference,
     changes: Option<&'a FileDiff>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    workflow: Option<serde_json::Value>,
 }
 
 #[derive(Serialize)]
@@ -31,6 +33,7 @@ pub(super) fn print(
     actor: &Actor,
     change: Option<&Change>,
     changes: Option<&FileDiff>,
+    workflow: bool,
 ) -> Result<()> {
     let base_snapshot = match change.and_then(Change::workspace_base_snapshot_id) {
         None => SnapshotReference::Absent,
@@ -65,8 +68,22 @@ pub(super) fn print(
         base_snapshot,
         materialized_snapshot,
         changes,
+        workflow: workflow
+            .then(|| status_workflow::report(repo, actor, change, changes))
+            .transpose()?,
     };
     output::record("status", serde_json::to_value(&report)?);
     println!("{}", serde_json::to_string(&report)?);
+    Ok(())
+}
+
+pub(super) fn print_workflow(
+    repo: &Repo,
+    actor: &Actor,
+    change: Option<&Change>,
+    changes: Option<&FileDiff>,
+) -> Result<()> {
+    let report = status_workflow::report(repo, actor, change, changes)?;
+    println!("workflow: {}", serde_json::to_string(&report)?);
     Ok(())
 }

@@ -59,7 +59,7 @@ pub(super) fn finish(command: &str, result: &Result<()>) -> Result<()> {
         buffer = Buffer::default();
     }
     let error = result.as_ref().err().map(|error| serde_json::json!({
-        "kind": if conflict { "conflicts" } else if error.downcast_ref::<CliFailure>() == Some(&CliFailure::OperationUnavailable) { "unavailable" } else { "command_failed" },
+        "kind": if conflict { "conflicts" } else if error.downcast_ref::<CliFailure>() == Some(&CliFailure::OperationUnavailable) { "unavailable" } else if error.downcast_ref::<CliFailure>() == Some(&CliFailure::StaleSnapshot) { "stale_snapshot" } else { "command_failed" },
         "message": format!("{error:#}"),
     }));
     let value = serde_json::json!({

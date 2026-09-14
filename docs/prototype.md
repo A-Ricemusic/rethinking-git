@@ -536,9 +536,10 @@ identity publication against real local Git repositories. Network credential-pro
 and server deployments still require qualification. This transport delegates
 repository authentication to Git; it does not authenticate `--as`, encrypt the local
 compatibility store, implement native per-object authorization, or replace Git itself.
-Each fetch currently uses a fresh temporary bare clone; transfer resumption, named
-remote configuration, tags, all-ref synchronization and native remote services remain
-open.
+Each fetch currently uses a fresh temporary bare clone; transfer resumption,
+tags, all-ref synchronization and native remote services remain open.
+Named remotes, per-line upstreams, and push previews are described in the
+[Git collaboration guide](git-collaboration.md).
 
 
 ### Symbolic links

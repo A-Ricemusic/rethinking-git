@@ -54,3 +54,10 @@ metadata without retaining the app.
 [Workflow improvements](workflow-improvements.md) records the implemented fixes and
 regression evidence following the React trial, including structured outcomes and
 native linked worktrees.
+
+## Agent/Git collaboration trial
+
+The [September 14 agent/Git trial](agent-git-collaboration.md) evaluates saved
+upstreams with a disposable React application and a Git-based contributor. It
+records the shared-line preview race and the resulting guarded publication,
+bounded previews, and offline workflow assessment.
