@@ -14,6 +14,7 @@ A status document has `schema_version: 1` and `command: "status"`:
   "actor": "public",
   "change": {"id": "chg_0123456789abcdef0123456789abcdef", "name": "example"},
   "base_snapshot": {"state": "restricted"},
+  "materialized_snapshot": {"state": "restricted"},
   "changes": {
     "added": ["new file.txt"],
     "modified": ["src/main.rs"],
