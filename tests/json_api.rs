@@ -385,3 +385,43 @@ fn workflow_never_labels_restricted_history_as_ready() {
         .unwrap()
         .contains(&serde_json::json!("preview_push")));
 }
+
+#[test]
+fn workflow_checks_restricted_files_in_otherwise_public_ancestry() {
+    let repo = Repo::new();
+    repo.start("public change");
+    repo.call(
+        &["access", "path", "ancestor-only.txt", "--domain", "admin"],
+        true,
+    );
+    fs::write(
+        repo.0.join("ancestor-only.txt"),
+        "historical private content",
+    )
+    .unwrap();
+    repo.call(&["snapshot"], true);
+    fs::remove_file(repo.0.join("ancestor-only.txt")).unwrap();
+    repo.write("public descendant\n");
+    repo.call(&["snapshot"], true);
+    repo.call(&["line", "integrate", "--as", "admin"], true);
+    let restricted = repo.call(&["status", "--workflow"], true);
+    let workflow = &data(&restricted, "status")["workflow"];
+    assert_eq!(workflow["saved_work"], "restricted");
+    assert_eq!(
+        workflow["materialized_matches_line"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        workflow["next_actions"],
+        serde_json::json!(["inspect_permissions"])
+    );
+    assert!(!restricted.to_string().contains("ancestor-only.txt"));
+    assert!(!restricted
+        .to_string()
+        .contains("historical private content"));
+    let admin = repo.call(&["status", "--workflow", "--as", "admin"], true);
+    assert_eq!(
+        data(&admin, "status")["workflow"]["saved_work"],
+        "integrated"
+    );
+}

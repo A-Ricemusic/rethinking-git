@@ -14,7 +14,13 @@ fn history(
         }
         let snapshot = read_snapshot(repo, &id)?;
         let change = read_change(repo, &snapshot.change_id)?;
-        if !can_access(actor, &snapshot.policy) || !can_access(actor, &change.policy) {
+        if !can_access(actor, &snapshot.policy)
+            || !can_access(actor, &change.policy)
+            || snapshot
+                .files
+                .iter()
+                .any(|file| !can_access(actor, &file.policy))
+        {
             return Ok(None);
         }
         pending.extend(ancestry::parents(&snapshot).cloned());
