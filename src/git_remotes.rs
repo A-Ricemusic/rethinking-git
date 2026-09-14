@@ -123,10 +123,28 @@ fn transport(root: &Path, hooks: &Path) -> ProcessCommand {
 }
 
 fn run(root: &Path, scratch: &Scratch, args: &[&str]) -> Result<()> {
-    let status = transport(root, &scratch.0.join("no-hooks"))
-        .args(args)
-        .status()
-        .context("failed to run Git transport")?;
+    let mut command = transport(root, &scratch.0.join("no-hooks"));
+    command.args(args);
+    let status = if output::enabled() {
+        // Git's --porcelain push report uses stdout. Keep the JSON channel
+        // exclusive to our outcome, while streaming transport diagnostics.
+        let mut child = command
+            .stdout(Stdio::piped())
+            .spawn()
+            .context("failed to run Git transport")?;
+        let forwarded = {
+            let mut stdout = child
+                .stdout
+                .take()
+                .context("Git transport stdout is missing")?;
+            std::io::copy(&mut stdout, &mut std::io::stderr().lock())
+        };
+        let status = child.wait().context("failed to wait for Git transport")?;
+        forwarded.context("failed to forward Git transport diagnostics")?;
+        status
+    } else {
+        command.status().context("failed to run Git transport")?
+    };
     if !status.success() {
         bail!("Git transport failed; remote authorization or fast-forward checks may have rejected the operation");
     }

@@ -214,3 +214,79 @@ fn backup_outcome_handles_non_utf8_destination_without_panicking_after_publicati
     assert!(data(&outcome, "backup")["destination"].is_null());
     assert!(destination.0.join(".rgit/repo.json").is_file());
 }
+
+#[test]
+fn integration_retry_returns_the_existing_head_without_creating_another_snapshot() {
+    let repo = Repo::new();
+    let change = repo.start("retry");
+    repo.write("saved\n");
+    repo.call(&["snapshot"], true);
+    let integrated = repo.call(&["line", "integrate"], true);
+    let result = data(&integrated, "integration");
+    assert_eq!(result["changed"], true);
+    let before = repo.call(&["snapshot-info", "list"], true);
+    let repeated = repo.call(&["line", "integrate"], true);
+    let retry = data(&repeated, "integration");
+    assert_eq!(retry["changed"], false);
+    assert_eq!(retry["change_id"], change);
+    assert_eq!(retry["snapshot_id"], result["snapshot_id"]);
+    assert_eq!(repo.call(&["snapshot-info", "list"], true), before);
+}
+
+#[test]
+fn git_push_success_retry_and_rejection_each_emit_exactly_one_json_outcome() {
+    let repo = Repo::new();
+    repo.call(
+        &["identity", "set", "JSON Agent", "agent@example.test"],
+        true,
+    );
+    repo.start("base");
+    repo.write("base\n");
+    repo.call(&["snapshot"], true);
+    repo.call(&["line", "integrate"], true);
+    let remote = Repo(repo.0.with_extension("remote.git"));
+    let peer = Repo(repo.0.with_extension("peer"));
+    let remote_path = remote.0.to_str().unwrap();
+    repo.call(&["git", "export", remote_path, "--as", "admin"], true);
+    repo.call(
+        &[
+            "git",
+            "clone",
+            remote_path,
+            peer.0.to_str().unwrap(),
+            "--domain",
+            "public",
+        ],
+        true,
+    );
+    peer.call(
+        &["identity", "set", "Peer Agent", "peer@example.test"],
+        true,
+    );
+    peer.start("peer");
+    peer.write("peer\n");
+    peer.call(&["snapshot"], true);
+    peer.call(&["line", "integrate"], true);
+    data(
+        &peer.call(&["git", "push", remote_path, "--as", "admin"], true),
+        "git_push",
+    );
+    data(
+        &peer.call(&["git", "push", remote_path, "--as", "admin"], true),
+        "git_push",
+    );
+    repo.start("local");
+    repo.write("local\n");
+    repo.call(&["snapshot"], true);
+    repo.call(&["line", "integrate"], true);
+    let rejected = repo.call(&["git", "push", remote_path, "--as", "admin"], false);
+    assert_eq!(rejected["error"]["kind"], "command_failed");
+    assert_eq!(rejected["records"], serde_json::json!([]));
+    let text = Command::new(env!("CARGO_BIN_EXE_rgit"))
+        .current_dir(&peer.0)
+        .args(["git", "push", remote_path, "--as", "admin"])
+        .output()
+        .unwrap();
+    assert!(text.status.success());
+    assert!(String::from_utf8_lossy(&text.stdout).contains("refs/heads/main"));
+}
