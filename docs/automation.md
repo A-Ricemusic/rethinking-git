@@ -114,3 +114,10 @@ system path cannot be represented as UTF-8. Companion `destination_display` (or
 `path_display` for worktrees) is for display only and may replace invalid bytes.
 Do not use a display value as a filesystem identifier. Native linked registrations
 require UTF-8 roots and refuse unsupported paths before creating the destination.
+
+Git transport progress and porcelain reports go to stderr in `--output json`
+mode, including push success, rejection and retries. Stdout remains exactly one
+outcome document. Text mode retains Git's usual stdout behavior. An `integration`
+record includes `changed: true` when a new line snapshot was created, or
+`changed: false` when the change was already integrated. Both return the current
+line `snapshot_id`; a successful retry does not require parsing terminal text.

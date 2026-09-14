@@ -1823,6 +1823,13 @@ fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> 
         .as_ref()
         .is_some_and(|base| base.id == incoming.id)
     {
+        output::record(
+            "integration",
+            serde_json::json!({
+                "line":line.name, "change_id":change.id,
+                "snapshot_id":line.head_snapshot, "changed":false,
+            }),
+        );
         println!("change is already integrated into {}", line.name);
         return Ok(());
     }
@@ -1899,7 +1906,7 @@ fn integrate_line(repo: &Repo, line_name: &str, actor_name: &str) -> Result<()> 
 
     output::record(
         "integration",
-        serde_json::json!({"line":line.name,"change_id":change.id,"snapshot_id":integrated_snapshot.id}),
+        serde_json::json!({"line":line.name,"change_id":change.id,"snapshot_id":integrated_snapshot.id,"changed":true}),
     );
     println!("integrated {} into {}", change.id, line.name);
     println!("line head: {}", integrated_snapshot.id);
