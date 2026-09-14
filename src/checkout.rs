@@ -37,8 +37,21 @@ fn guard_restored_changes(repo: &Repo, actor: &Actor) -> Result<()> {
 }
 
 pub(super) fn start(repo: &Repo, name: &str, line_name: &str, actor_name: &str) -> Result<()> {
+    start_at(repo, name, line_name, actor_name, None)
+}
+
+pub(super) fn start_at(
+    repo: &Repo,
+    name: &str,
+    line_name: &str,
+    actor_name: &str,
+    pinned: Option<Option<String>>,
+) -> Result<()> {
     let actor = read_actor(repo, actor_name)?;
-    let line = read_line(repo, line_name)?;
+    let mut line = read_line(repo, line_name)?;
+    if let Some(snapshot) = pinned {
+        line.head_snapshot = snapshot;
+    }
     if !can_access(&actor, &line.policy) {
         return Err(CliFailure::OperationUnavailable.into());
     }
@@ -48,6 +61,19 @@ pub(super) fn start(repo: &Repo, name: &str, line_name: &str, actor_name: &str) 
     stage_checkout(repo, &actor, &before, &after, false)?;
     create_change(repo, name, line_name, line.policy)?;
     let mut workspace = read_workspace(repo)?;
+    let mut change = read_change(
+        repo,
+        workspace
+            .current_change
+            .as_deref()
+            .context("new change is missing")?,
+    )?;
+    change.base_snapshot = line.head_snapshot;
+    write_json(
+        repo,
+        &repo.path(&["changes", &format!("{}.json", change.id)]),
+        &change,
+    )?;
     workspace.mode_snapshot = after.map(|s| s.id);
     write_json(repo, &repo.path(&["workspace.json"]), &workspace)?;
     record_operation(
@@ -73,6 +99,7 @@ pub(super) fn switch(repo: &Repo, id: &str, actor_name: &str) -> Result<()> {
     if !can_access(&actor, &change.policy) {
         return Err(CliFailure::OperationUnavailable.into());
     }
+    worktrees::ensure_change_available(repo, id)?;
     guard_restored_changes(repo, &actor)?;
     let before = current_snapshot(repo, &actor)?;
     let after = read_optional_snapshot(repo, change.workspace_base_snapshot_id())?;

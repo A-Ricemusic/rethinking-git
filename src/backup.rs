@@ -60,6 +60,7 @@ pub(super) fn backup(repo: &Repo, destination: &Path, actor_name: &str) -> Resul
         {
             let transaction = transaction::CommandTransaction::open(&staging)?;
             let copy = Repo {
+                workspace_id: None,
                 root: destination.clone(),
                 meta: staging.clone(),
                 transaction,

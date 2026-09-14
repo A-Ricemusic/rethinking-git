@@ -104,10 +104,18 @@ fn verify_with_output(repo: &Repo, actor_name: &str, report: bool) -> Result<()>
     for line in lines.values() {
         snapshot_reference(line.head_snapshot.as_deref(), &snapshots)?;
     }
-    let workspace = read_workspace(repo)?;
-    snapshot_reference(workspace.mode_snapshot.as_deref(), &snapshots)?;
-    if let Some(id) = workspace.current_change {
-        require(changes.contains_key(&id), "workspace change")?;
+    let mut active_changes = BTreeSet::new();
+    for (workspace, active) in worktrees::saved_workspaces(repo)? {
+        snapshot_reference(workspace.mode_snapshot.as_deref(), &snapshots)?;
+        if let Some(id) = workspace.current_change {
+            require(changes.contains_key(&id), "workspace change")?;
+            if active {
+                require(
+                    active_changes.insert(id),
+                    "change active in multiple worktrees",
+                )?;
+            }
+        }
     }
     ancestry::validate_graph(&snapshots)?;
     for snapshot in snapshots.values() {

@@ -141,6 +141,7 @@ fn initialize_with(
     phase(Phase::Directories)?;
     let transaction = transaction::CommandTransaction::open(&meta)?;
     let repo = Repo {
+        workspace_id: None,
         root,
         meta,
         transaction,
