@@ -102,6 +102,10 @@ pub(super) fn resolve_conflict(
         format!("resolved conflict `{id}`"),
         None,
     )?;
+    output::record(
+        "conflict_resolved",
+        serde_json::json!({"id":id,"resolution":conflict.resolution}),
+    );
     println!("resolved {id}; run line integrate to publish the merge");
     Ok(())
 }

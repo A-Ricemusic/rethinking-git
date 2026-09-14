@@ -190,6 +190,10 @@ pub(super) fn export(
     }
     result?;
     if !quiet {
+        output::record(
+            "git_export",
+            serde_json::json!({"destination":destination,"snapshots":history.len()}),
+        );
         println!(
             "exported {} snapshots to Git at {}",
             history.len(),
@@ -557,6 +561,10 @@ pub(super) fn import_history(
 }
 
 pub(super) fn report_import(imported: usize, into: &str, actor_name: &str) {
+    output::record(
+        "git_import",
+        serde_json::json!({"line":into,"imported_commits":imported}),
+    );
     println!("imported {imported} Git commits into {into}; working files are unchanged");
     println!("use workspace switch or workspace restore --discard-changes --as {actor_name} to materialize saved files");
 }

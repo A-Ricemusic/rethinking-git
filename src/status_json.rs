@@ -66,6 +66,7 @@ pub(super) fn print(
         materialized_snapshot,
         changes,
     };
+    output::record("status", serde_json::to_value(&report)?);
     println!("{}", serde_json::to_string(&report)?);
     Ok(())
 }

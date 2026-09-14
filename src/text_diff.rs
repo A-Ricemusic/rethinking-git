@@ -90,6 +90,12 @@ pub(super) fn print(
     current: Vec<FileEntry>,
     working: bool,
 ) -> Result<()> {
+    if output::enabled() {
+        output::record(
+            "diff",
+            serde_json::json!(permissioned_diff(previous.clone(), current.clone(), actor)),
+        );
+    }
     let previous = diff_input(previous, actor);
     let current = diff_input(current, actor);
     let hidden = hidden_changed_paths(&previous.hidden_by_path, &current.hidden_by_path);
