@@ -23,8 +23,8 @@ measured claim that commands outperform Git.
 There are still costs. Agents must distinguish saved change ancestry from the
 materialized files and remember that integrating a line does not check it out.
 Native worktrees share one command lock, so writes serialize. They require the
-primary control store and fixed paths; relocation, pruning, and reusable detached
-paths are not implemented. Text inside JSON is bounded, so clients must use typed
+primary control store and fixed paths; relocation is not implemented. Explicit pruning now retires detached or missing
+registrations and enables path reuse without deleting history. Text inside JSON is bounded, so clients must use typed
 records and respect truncation when handling patches. JSON syntax errors and
 process interruption require ordinary process-level error handling.
 

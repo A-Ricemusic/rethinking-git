@@ -19,6 +19,8 @@ pub(super) enum WorktreeCommand {
     List,
     /// Detach a linked directory, preserving every working file and its saved history.
     Detach { path: PathBuf },
+    /// Retire a detached or missing worktree registration without deleting files or history.
+    Prune { id: String },
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -232,6 +234,7 @@ pub(super) fn run(command: &WorktreeCommand) -> Result<()> {
             Ok(())
         }
         WorktreeCommand::Detach { path } => detach(path),
+        WorktreeCommand::Prune { id } => prune(id),
     }
 }
 
@@ -413,4 +416,44 @@ pub(super) fn saved_workspaces(repo: &Repo) -> Result<Vec<(Workspace, bool)>> {
         ));
     }
     Ok(result)
+}
+
+/// Opening the shared transaction first recovers pending writes; an unavailable
+/// worktree needed by recovery prevents pruning before registration can change.
+fn prune(id: &str) -> Result<()> {
+    let repo = Repo::discover()?;
+    admin(&repo)?;
+    validate_object_id(id, "wt_")?;
+    let mut entries = registry(&repo.meta)?;
+    let retired_path = repo.meta.join("worktrees").join(id).join("pruned.json");
+    let (entry, changed) = if let Some(index) = entries.iter().position(|entry| entry.id == id) {
+        let entry = &entries[index];
+        if !entry.detached {
+            match fs::symlink_metadata(&entry.root) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error).context("cannot inspect worktree before pruning"),
+                Ok(_) => bail!("worktree still exists; detach it before pruning its registration"),
+            }
+        }
+        let entry = entries.remove(index);
+        // Keep the retirement receipt and saved workspace metadata for audit and
+        // idempotent retries; shared changes, snapshots and blobs are untouched.
+        write_json(&repo, &retired_path, &entry)?;
+        write_json(&repo, &repo.meta.join("worktrees.json"), &entries)?;
+        repo.transaction.commit()?;
+        (entry, true)
+    } else {
+        let entry: Entry = read_json(&repo, &retired_path)
+            .context("worktree is not registered or previously pruned")?;
+        if entry.id != id {
+            bail!("pruned worktree receipt has a mismatched identity");
+        }
+        (entry, false)
+    };
+    output::record(
+        "worktree_pruned",
+        serde_json::json!({"id":id,"path":entry.root.to_str(),"changed":changed}),
+    );
+    println!("pruned worktree {id}; working files and saved history are preserved");
+    Ok(())
 }
