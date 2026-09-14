@@ -340,3 +340,110 @@ fn unavailable_worktrees_without_pending_writes_do_not_block_other_commands() {
         false,
     );
 }
+
+#[test]
+fn pruning_a_detached_worktree_preserves_files_history_and_allows_path_reuse() {
+    let trial = Trial::new();
+    let (linked, info) = trial.add("linked");
+    let id = info["id"].as_str().unwrap();
+    let refused = call(&trial.primary, &["worktree", "prune", id], false);
+    assert!(refused["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("detach"));
+    fs::write(linked.join("unsaved.txt"), "keep").unwrap();
+    call(
+        &trial.primary,
+        &["worktree", "detach", linked.to_str().unwrap()],
+        true,
+    );
+    let before = call(
+        &trial.primary,
+        &["snapshot-info", "list", "--as", "admin"],
+        true,
+    );
+    let pruned = call(&trial.primary, &["worktree", "prune", id], true);
+    assert_eq!(record(&pruned, "worktree_pruned")["changed"], true);
+    assert_eq!(
+        fs::read_to_string(linked.join("unsaved.txt")).unwrap(),
+        "keep"
+    );
+    let repeated = call(&trial.primary, &["worktree", "prune", id], true);
+    assert_eq!(record(&repeated, "worktree_pruned")["changed"], false);
+    assert_eq!(
+        call(
+            &trial.primary,
+            &["snapshot-info", "list", "--as", "admin"],
+            true
+        ),
+        before
+    );
+    call(
+        &trial.primary,
+        &[
+            "change",
+            "show",
+            info["change_id"].as_str().unwrap(),
+            "--as",
+            "admin",
+        ],
+        true,
+    );
+    fs::remove_dir_all(&linked).unwrap();
+    let (_, replacement) = trial.add("linked");
+    assert_ne!(replacement["id"], info["id"]);
+    let again = call(&trial.primary, &["worktree", "prune", id], true);
+    assert_eq!(record(&again, "worktree_pruned")["changed"], false);
+    let listed = call(&trial.primary, &["worktree", "list"], true);
+    assert!(listed["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|entry| entry["data"]["id"] == replacement["id"]));
+    call(&trial.primary, &["repo", "verify", "--as", "admin"], true);
+}
+
+#[test]
+fn pruning_a_missing_worktree_releases_its_change_but_pending_recovery_blocks_pruning() {
+    let trial = Trial::new();
+    let (linked, info) = trial.add("missing");
+    let id = info["id"].as_str().unwrap();
+    let offline = trial.root.join("offline");
+    fs::rename(&linked, &offline).unwrap();
+    let journal =
+        rusqlite::Connection::open(trial.primary.join(".rgit/command-journal.sqlite3")).unwrap();
+    journal
+        .execute("INSERT INTO workspace_context VALUES (1, ?1)", [id])
+        .unwrap();
+    journal
+        .execute(
+            "INSERT INTO working VALUES ('file.txt', ?1, ?2, 0, 0, 0, 0)",
+            rusqlite::params![b"saved\n".as_slice(), b"recovered\n".as_slice()],
+        )
+        .unwrap();
+    drop(journal);
+    let registry = trial.primary.join(".rgit/worktrees.json");
+    let before = fs::read(&registry).unwrap();
+    call(&trial.primary, &["worktree", "prune", id], false);
+    assert_eq!(fs::read(&registry).unwrap(), before);
+    fs::rename(&offline, &linked).unwrap();
+    call(&trial.primary, &["status"], true);
+    assert_eq!(
+        fs::read_to_string(linked.join("file.txt")).unwrap(),
+        "recovered\n"
+    );
+    fs::remove_dir_all(linked).unwrap();
+    call(&trial.primary, &["worktree", "prune", id], true);
+    call(
+        &trial.primary,
+        &[
+            "workspace",
+            "switch",
+            info["change_id"].as_str().unwrap(),
+            "--as",
+            "admin",
+        ],
+        true,
+    );
+    call(&trial.primary, &["repo", "verify", "--as", "admin"], true);
+}

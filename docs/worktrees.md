@@ -74,15 +74,37 @@ and ignored files. Saved changes and snapshots stay in shared history, and the
 change becomes available to another workspace. Detach is idempotent; rerun it if
 interrupted. It removes only its own marker and an empty control directory. Delete
 the remaining ordinary folder separately when its contents are no longer needed.
-Detached registrations remain visible for audit; reusing their exact paths,
-pruning, relocation, and automatic stale-worktree cleanup are not yet supported.
+Detached registrations remain visible until explicitly pruned. Relocation and
+automatic stale-worktree cleanup are not yet supported.
 
 Management uses the local admin view; `add --as ACTOR` additionally selects the
 checkout view. This is not authenticated multi-user isolation. Separate working
 directories help agents avoid file collisions, but shared policies and line updates
 still require coordination.
 
-All three commands support `--output json`; `worktree` records include `id` (null
+All worktree commands support `--output json`; `worktree` records include `id` (null
 for the primary directory), `path`, `change_id`, `available`, and `detached`.
 Creation also returns the usual `change_created` and `workspace` records when a
 new change is created. See [automation](automation.md) for outcome handling.
+
+## Retire a registration and reuse its path
+
+After detaching a worktree, use its ID from `worktree list`:
+
+```sh
+rgit worktree prune wt_EXACT_ID_FROM_LIST
+```
+
+Prune accepts a detached registration or one whose directory no longer exists.
+It refuses an existing active directory, including a damaged marker: detach first.
+The shared recovery journal is processed before pruning; pending working-file
+publication that needs an unavailable directory blocks the operation. Restore that
+directory and complete recovery before retiring it. A moved or temporarily offline
+worktree should be restored rather than pruned.
+
+Prune does not delete files, changes, snapshots, or blobs. It retires the active
+registration, retains an internal receipt and saved workspace metadata, releases
+its change, and allows the old path to be registered again after you remove the
+remaining ordinary directory. It is not garbage collection. Retrying the same ID
+returns `changed: false`; unknown IDs are refused. `--output json` returns a
+`worktree_pruned` record containing `id`, `path`, and `changed`.
