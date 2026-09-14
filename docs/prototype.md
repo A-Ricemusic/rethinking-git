@@ -12,8 +12,8 @@ It implements the first source-control primitives:
 - `actor`: a person or tool with domain grants
 - `path policy`: file-level access control
 
-Named lines and Git-backed clone/fetch/pull/push are implemented. Native linked
-tags, encrypted storage and native authenticated hosting remain open. Native linked
+Named lines and Git-backed clone/fetch/pull/push are implemented. Tags, encrypted
+storage and native authenticated hosting remain open. Native linked
 worktrees now share history with independent workspace pointers; see [the guide](worktrees.md).
 
 ## Install Rust
