@@ -108,3 +108,9 @@ This applies to unified patches too: never apply a truncated patch. Typed record
 are retained independently of this cap. Clients must check `schema_version`,
 ignore unknown additive fields/record kinds, and handle nonzero exits before
 using success records.
+
+Filesystem destination fields are exact UTF-8 strings, or `null` when an operating
+system path cannot be represented as UTF-8. Companion `destination_display` (or
+`path_display` for worktrees) is for display only and may replace invalid bytes.
+Do not use a display value as a filesystem identifier. Native linked registrations
+require UTF-8 roots and refuse unsupported paths before creating the destination.

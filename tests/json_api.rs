@@ -183,3 +183,34 @@ fn git_export_returns_a_single_json_document() {
     );
     data(&outcome, "git_export");
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn backup_outcome_handles_non_utf8_destination_without_panicking_after_publication() {
+    use std::os::unix::ffi::OsStringExt;
+    let repo = Repo::new();
+    let destination = Repo(
+        repo.0.with_file_name(std::ffi::OsString::from_vec(
+            format!("rgit-backup-{}-", Uuid::new_v4())
+                .into_bytes()
+                .into_iter()
+                .chain([0xff])
+                .collect(),
+        )),
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_rgit"))
+        .current_dir(&repo.0)
+        .args(["--output", "json", "repo", "backup"])
+        .arg(&destination.0)
+        .args(["--as", "admin"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let outcome: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(data(&outcome, "backup")["destination"].is_null());
+    assert!(destination.0.join(".rgit/repo.json").is_file());
+}

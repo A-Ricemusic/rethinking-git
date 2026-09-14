@@ -192,7 +192,7 @@ pub(super) fn export(
     if !quiet {
         output::record(
             "git_export",
-            serde_json::json!({"destination":destination,"snapshots":history.len()}),
+            serde_json::json!({"destination":destination.to_str(),"destination_display":destination.display().to_string(),"snapshots":history.len()}),
         );
         println!(
             "exported {} snapshots to Git at {}",

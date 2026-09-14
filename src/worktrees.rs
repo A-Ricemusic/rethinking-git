@@ -195,7 +195,7 @@ fn report(repo: &Repo, entry: Option<&Entry>) -> Result<()> {
         };
     output::record(
         "worktree",
-        serde_json::json!({"id":id,"path":root,"change_id":workspace.current_change,"available":available,"detached":detached}),
+        serde_json::json!({"id":id,"path":root.to_str(),"path_display":root.display().to_string(),"change_id":workspace.current_change,"available":available,"detached":detached}),
     );
     println!(
         "{} {} change:{}{}",
@@ -243,6 +243,9 @@ fn add(path: &Path, name: &str, from: &str, resume: bool, actor_name: &str) -> R
     if !can_access(&actor, &line.policy) {
         return Err(CliFailure::OperationUnavailable.into());
     }
+    repo.meta
+        .to_str()
+        .context("linked worktrees require UTF-8 repository paths")?;
     let config: RepoConfig = read_json(&repo, &repo.meta.join("repo.json"))?;
     let mut entries = registry(&repo.meta)?;
     let request = if resume {
@@ -268,6 +271,8 @@ fn add(path: &Path, name: &str, from: &str, resume: bool, actor_name: &str) -> R
             path.file_name()
                 .context("worktree path needs a directory name")?,
         );
+        root.to_str()
+            .context("linked worktrees require UTF-8 destination paths")?;
         let primary = repo.meta.parent().context("missing primary root")?;
         for existing in std::iter::once(primary).chain(
             entries
